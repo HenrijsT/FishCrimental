@@ -7,31 +7,31 @@ export enum SmallFishes {
 	Platy = 'Platy',
 	Swordtail = 'Swordtail',
 	Danio = 'Danio',
-	WhiteCloudMountainMinnow = 'WhiteCloudMountainMinnow',
+	WhiteCloudMountainMinnow = 'White Cloud Mountain Minnow',
 	Rasbora = 'Rasbora',
-	EndlersLivebearer = 'EndlersLivebearer',
-	BettaFish = 'BettaFish',
-	CorydorasCatfish = 'CorydorasCatfish',
-	KuhliLoach = 'KuhliLoach',
+	EndlersLivebearer = 'Endlers Livebearer',
+	BettaFish = 'Betta Fish',
+	CorydorasCatfish = 'Corydoras Catfish',
+	KuhliLoach = 'Kuhli Loach',
 	Gourami = 'Gourami',
-	CherryBarb = 'CherryBarb',
-	ZebraBarb = 'ZebraBarb',
-	RosyBarb = 'RosyBarb'
+	CherryBarb = 'Cherry Barb',
+	ZebraBarb = 'Zebra Barb',
+	RosyBarb = 'Rosy Barb'
 }
 
 export enum MediumFishes {
-	AngelFish = 'AngelFish',
-	DiscusFish = 'DiscusFish',
-	RainbowFish = 'RainbowFish',
-	BoesemaniRainbowfish = 'BoesemaniRainbowfish',
+	AngelFish = 'Angel Fish',
+	DiscusFish = 'Discus Fish',
+	RainbowFish = 'Rainbow Fish',
+	BoesemaniRainbowfish = 'Boesemani Rainbowfish',
 	Gouramis = 'Gouramis',
-	PearlGourami = 'PearlGourami',
-	KilliFish = 'KilliFish',
-	KribensisCichlid = 'KribensisCichlid',
-	DwarfCichlids = 'DwarfCichlids',
-	SilverDollarFish = 'SilverDollarFish',
-	TigerBarb = 'TigerBarb',
-	BristlenosePleco = 'BristlenosePleco'
+	PearlGourami = 'Pearl Gourami',
+	KilliFish = 'Killi Fish',
+	KribensisCichlid = 'Kribensis Cichlid',
+	DwarfCichlids = 'Dwarf Cichlids',
+	SilverDollarFish = 'Silver Dollar Fish',
+	TigerBarb = 'Tiger Barb',
+	BristlenosePleco = 'Bristlenose Pleco'
 }
 
 export enum LargeFishes {
