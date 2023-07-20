@@ -1,21 +1,30 @@
-import { get, writable } from "svelte/store";
-import Big from "big.js";
-import { smallFishCount, mediumFishCount, largeFishCount, fishBaseValue, FishType} from '$lib/fishes';
+import { get, writable } from 'svelte/store';
+import Big from 'big.js';
+import { fishTypeBaseValue, FishType, fishTypeCurrentCount } from '$lib/fish_types';
 
-export const marketCoinCount = writable(new Big("0"));
+export const marketCoinCount = writable(new Big('0'));
 
 export function sellFish() {
-    let smallFishToSell = get(smallFishCount);
-    let mediumFishToSell = get(mediumFishCount);
-    let largeFishToSell = get(largeFishCount);
+	let profit = new Big(0);
+	const currentMarketcoinCount = get(marketCoinCount);
 
-    marketCoinCount.set(get(marketCoinCount)
-    .plus(smallFishToSell.times(fishBaseValue[FishType.Small]))
-    .plus(mediumFishToSell.times(fishBaseValue[FishType.Medium]))
-    .plus(largeFishToSell.times(fishBaseValue[FishType.Large]))
-    );
+	// TODO: REMOVE
+	console.log('');
 
-    smallFishCount.set(new Big(0));
-    mediumFishCount.set(new Big(0));
-    largeFishCount.set(new Big(0));
+	fishTypeCurrentCount.forEach((value, key) => {
+		marketCoinCount.set(get(marketCoinCount).plus(get(value).times(fishTypeBaseValue[key])));
+		value.set(new Big(0));
+		console.log('Total', FishType[key], 'count:', get(value).toFixed(0));
+	});
+
+	profit = get(marketCoinCount).minus(currentMarketcoinCount);
+
+	console.log('Fishes sold! Total profit:', profit.toFixed(0));
 }
+
+// data.forEach(([key, val]) => {
+//     for (let i = total; i < val + total; i++) {
+//       this.map[i] = key;
+//     }
+//     total += val;
+//   });
