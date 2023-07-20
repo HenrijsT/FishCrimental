@@ -28,12 +28,16 @@
 		{/if}
 	{/each}
 
+	- market Coins: {$marketCoinCount.toFixed(0)} -
+
 	<button on:click={sellFish}> Sell </button>
-
-	market Coins: {$marketCoinCount.toFixed(0)}
-
+<div>
 	<button on:click={() => marketCoinCount.set($marketCoinCount.plus(10000))}> Add Coins </button>
+</div>
+<div>
 	<button on:click={fishAction}> testFishing </button>
+</div>
+
 </body>
 
 <!-- EXAMPLES. TODO: REMOVE -->
