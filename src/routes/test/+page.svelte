@@ -5,9 +5,6 @@
 	import { marketCoinCount, sellFish } from '$lib/market_coins';
 	import '$lib/random_picker';
 	import '$lib/fishes';
-
-	let smallFishCount = fishTypeCurrentCount.get(FishType.Small);
-	let testCheck = false;
 </script>
 
 <body>
@@ -31,10 +28,9 @@
 	- market Coins: {$marketCoinCount.toFixed(0)} -
 
 	<button on:click={sellFish}> Sell </button>
-<div>
+<div id="foo">
 	<button on:click={() => marketCoinCount.set($marketCoinCount.plus(10000))}> Add Coins </button>
-</div>
-<div>
+	<br>
 	<button on:click={fishAction}> testFishing </button>
 </div>
 
