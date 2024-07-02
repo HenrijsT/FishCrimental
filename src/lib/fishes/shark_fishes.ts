@@ -1,6 +1,6 @@
-import { FishType } from "$lib/fish_types";
-import type { Fish } from "./fish";
-import { FishingSources } from "$lib/fishing_sources";
+import { FishType } from '$lib/fish_types';
+import type { Fish } from './fish';
+import { FishingSources } from '$lib/fishing_sources';
 
 export enum SharkFishes {
 	GreatWhiteShark = 'Great White Shark',
@@ -18,7 +18,7 @@ export const sharkFishes = {
 		name: SharkFishes.GreatWhiteShark,
 		category: FishType.Shark,
 		sources: [FishingSources.Offshore, FishingSources.Sea, FishingSources.Ocean],
-        baseChance: 10,
+		baseChance: 10,
 		description:
 			'The Great White Shark is a large and powerful predatory shark known for its immense size and iconic appearance. It is one of the most well-known shark species and is found in various ocean habitats around the world.'
 	},
@@ -26,7 +26,7 @@ export const sharkFishes = {
 		name: SharkFishes.HammerheadShark,
 		category: FishType.Shark,
 		sources: [FishingSources.Offshore, FishingSources.Sea, FishingSources.Ocean],
-        baseChance: 10,
+		baseChance: 10,
 		description:
 			'Hammerhead Sharks are unique shark species characterized by their hammer-shaped heads. They are known for their excellent vision and unique hunting behaviors. Hammerhead Sharks inhabit tropical and temperate waters worldwide.'
 	},
@@ -35,7 +35,7 @@ export const sharkFishes = {
 		category: FishType.Shark,
 		sources: [FishingSources.Offshore, FishingSources.Sea, FishingSources.Ocean],
 		baseChance: 10,
-        description:
+		description:
 			'Tiger Sharks are large and powerful predators with unique vertical stripes on their bodies. They are known for their voracious appetite and are often found in warm ocean waters. Tiger Sharks are considered one of the most dangerous shark species to humans.'
 	},
 	[SharkFishes.BullShark]: {

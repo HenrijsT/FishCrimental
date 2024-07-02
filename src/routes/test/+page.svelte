@@ -1,10 +1,13 @@
 <script lang="ts">
 	import FishCount from '$lib/components/FishCount.svelte';
-	import { FishType, fishAction, fishTypeCurrentCount } from '$lib/fish_types';
-	import { handleMouseDown, handleMouseUp, progressBar } from '$lib/functions_generic';
+	import { FishType, fishTypeCurrentCount } from '$lib/fish_types';
+	import { fishAction, handleMouseDown, handleMouseUp, progressBar } from '$lib/functions_generic';
 	import { marketCoinCount, sellFish } from '$lib/market_coins';
 	import '$lib/random_picker';
 	import '$lib/fishes';
+	import { FishingSources } from '$lib/fishing_sources';
+
+	const pondSource = FishingSources.Pond;
 </script>
 
 <body>
@@ -28,16 +31,15 @@
 	- market Coins: {$marketCoinCount.toFixed(0)} -
 
 	<button on:click={sellFish}> Sell </button>
-<div id="foo">
-	<button on:click={() => marketCoinCount.set($marketCoinCount.plus(10000))}> Add Coins </button>
-	<br>
-	<button on:click={fishAction}> testFishing </button>
-</div>
-
+	<div id="foo">
+		<button on:click={() => marketCoinCount.set($marketCoinCount.plus(10000))}> Add Coins </button>
+		<br />
+		<button on:click={() => fishAction(pondSource)}>Test Fishing</button>
+	</div>
 </body>
 
 <!-- EXAMPLES. TODO: REMOVE -->
-<!--   {#each [...fishTypeCurrentCount.entries()] as [key, val]} 
+<!--   {#each [...fishTypeCurrentCount.entries()] as [key, val]}
     {#if key != FishType.Erotic}
       <FishCount count={val}>{FishType[key]}:</FishCount>
     {:else if key == 3 && testCheck }

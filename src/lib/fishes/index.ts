@@ -1,11 +1,11 @@
 import { largeFishes } from './large_fishes';
 import { mediumFishes } from './medium_fishes';
 import { sharkFishes } from './shark_fishes';
-import { sources, FishingSources } from '../fishing_sources';
+import { FishingSources, sources } from '../fishing_sources';
 import type { Fish } from './fish';
 import { RandomIndex } from '$lib/random_picker';
-import { fishTypeBaseChance, type FishType } from '$lib/fish_types';
 import { smallFishes } from './small_fishes';
+import { type FishType, fishTypeBaseChance } from '$lib/fish_types';
 
 export const fishes = {
 	...smallFishes,
@@ -25,31 +25,53 @@ export const sourcesToFish = (Object.keys(sources) as Array<keyof typeof sources
 	{} as Record<FishingSources, Fish[]>
 );
 
-console.log(sourcesToFish);
-
 // Map sources to the fish types they can catch
 export const sourcesToFishTypes = (Object.keys(sources) as Array<keyof typeof sources>).reduce(
 	(final, source) => {
 		final[source] = Object.values(sourcesToFish[source]).reduce(
-			(list, fish) => list.indexOf(fish.category) >= 0 ? list : [...list, fish.category], [] as FishType[]
+			(list, fish) => (list.indexOf(fish.category) >= 0 ? list : [...list, fish.category]),
+			[] as FishType[]
 		);
 		return final;
 	},
 	{} as Record<FishingSources, FishType[]>
 );
 
-console.log(sourcesToFishTypes);
-
 // Construct a random index for fish types per source
-const sourceToFishTypeChanceIndex = (Object.keys(sources) as Array<keyof typeof sources>).reduce(
+export const sourceToFishTypeChanceIndex = (
+	Object.keys(sources) as Array<keyof typeof sources>
+).reduce(
 	(final, source) => {
-		final[source] = new RandomIndex([...fishTypeBaseChance.entries()].filter(([k]) => sourcesToFishTypes[source].indexOf(k) >= 0));
+		final[source] = new RandomIndex(
+			[...fishTypeBaseChance.entries()].filter(([k]) => sourcesToFishTypes[source].indexOf(k) >= 0)
+		);
 		return final;
 	},
 	{} as Record<FishingSources, RandomIndex<FishType>>
 );
 
-console.log(sourceToFishTypeChanceIndex);
+// Construct a random index for fish per type per source
+export const sourceToFishChanceIndex: Record<
+	FishingSources,
+	Record<FishType, RandomIndex<Fish>>
+> = {} as Record<FishingSources, Record<FishType, RandomIndex<Fish>>>;
+
+(Object.keys(sources) as Array<keyof typeof sources>).forEach((source) => {
+	// Initialize the nested object for each source
+	sourceToFishChanceIndex[source] = {} as Record<FishType, RandomIndex<Fish>>;
+
+	const availableFishTypes = sourcesToFishTypes[source];
+
+	availableFishTypes.forEach((type) => {
+		const fishesForTypeAndSource = sourcesToFish[source].filter((fish) => fish.category === type);
+
+		if (fishesForTypeAndSource.length > 0) {
+			sourceToFishChanceIndex[source][type] = new RandomIndex(
+				fishesForTypeAndSource.map((fish) => [fish, fish.baseChance])
+			);
+		}
+	});
+});
 
 // Simulate 100 catches per source
 for (const [k, v] of Object.entries(sourceToFishTypeChanceIndex)) {
@@ -61,11 +83,5 @@ for (const [k, v] of Object.entries(sourceToFishTypeChanceIndex)) {
 		}
 		caught[chosen]++;
 	}
-	console.log(k, caught);
+	console.log('Caught: ', k, caught);
 }
-
-// Construct a random index for fish per type per source
-
-// const sourceToFishChanceIndex: Record<FishingSources, Record<FishType, RandomIndex<Fish>>> = {};
-
-// now you need to figure out how to make and fill this object ^^^^^^
