@@ -1,6 +1,6 @@
-import { FishType } from "$lib/fish_types";
-import type { Fish } from "./fish";
-import { FishingSources } from "$lib/fishing_sources";
+import { FishType } from '$lib/fish_types';
+import type { Fish } from './fish';
+import { FishingSources } from '$lib/fishing_sources';
 
 export enum MediumFishes {
 	AngelFish = 'Angel Fish',
