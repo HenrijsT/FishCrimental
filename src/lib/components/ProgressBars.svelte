@@ -17,7 +17,7 @@ import { progressBar } from '$lib/functions_generic.js';
     }
     /* Customize outer bar*/
     .outer {
-        width: 95vw;
+        width: 90vw;
         margin: 20px auto;
         background-color: transparent;
         border: 1px solid darkblue;
@@ -26,7 +26,7 @@ import { progressBar } from '$lib/functions_generic.js';
     /* Customize inner bar*/
     .inner {
         width: 0;
-				max-width: 90vw;
-        background-color: cyan;
+				max-width: 100vw;
+        background-color: blue;
     }
 </style>
