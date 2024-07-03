@@ -1,17 +1,21 @@
 <script lang="ts">
 	import FishCount from '$lib/components/FishCount.svelte';
 	import { FishType, fishTypeCurrentCount } from '$lib/fish_types';
-	import { fishAction, handleMouseDown, handleMouseUp, progressBar } from '$lib/functions_generic';
+	import { fishAction, handleMouseDown, handleMouseUp } from '$lib/functions_generic';
 	import { marketCoinCount, sellFish } from '$lib/market_coins';
 	import '$lib/random_picker';
 	import '$lib/fishes';
 	import { FishingSources } from '$lib/fishing_sources';
+	import ProgressBars from '$lib/components/ProgressBars.svelte';
 
 	const pondSource = FishingSources.Pond;
 </script>
 
 <body>
-	<progress value={$progressBar} max="1000" />
+
+<!--	<progress value={$progressBar} max="100" />-->
+
+<ProgressBars />
 
 	<button
 		on:mousedown={handleMouseDown}

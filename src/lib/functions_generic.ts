@@ -7,7 +7,7 @@ import { FishingSources } from '$lib/fishing_sources';
 import { RandomIndex } from './random_picker';
 import type { Fish } from '$lib/fishes/fish';
 
-export const progressBar = tweened(1000, {
+export const progressBar = tweened(0, {
 	duration: 5000,
 	easing: linear
 });
@@ -15,10 +15,10 @@ let timer: number;
 
 export const handleMouseDown = () => {
 	progressBar.set(0, { duration: 0 });
-	progressBar.set(1000);
+	progressBar.set(100);
 	timer = setInterval(() => {
 		progressBar.set(0, { duration: 0 });
-		progressBar.set(1000);
+		progressBar.set(100);
 		fishAction(FishingSources.Ocean);
 	}, 5000);
 };
