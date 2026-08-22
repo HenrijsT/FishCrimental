@@ -1,5 +1,43 @@
 /* FishCrimental — global styles. Plain CSS, processed by PostCSS/autoprefixer. */
 
+/* ---------------------------------------------------------------------------
+   Type.
+
+   Self-hosted, latin subset, OFL. Nothing is fetched at runtime: the game is a
+   static bundle that has to work with no network, so a CDN link would be a
+   dependency it cannot honour. See THIRD-PARTY-NOTICES.md.
+
+   The pairing is chosen for what this screen *is* — a ship's instrument panel.
+   Barlow Condensed carries the labels the way stencilled lettering does on real
+   marine gear: narrow, upright, set uppercase and widely tracked so it reads as
+   engraved rather than typed. IBM Plex Mono carries every figure, because the
+   whole game is numbers changing and they must never reflow as they climb.
+   --------------------------------------------------------------------------- */
+
+@font-face {
+	font-family: 'Barlow Condensed';
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url('/fonts/barlow-condensed-600.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Plex Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/plex-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Plex Mono';
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url('/fonts/plex-mono-600.woff2') format('woff2');
+}
+
 :root {
 	--deep: #06131f;
 	--hull: #0d2135;
@@ -28,13 +66,13 @@
 	--gap: 0.75rem;
 
 	--font: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
-	--mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
-}
+	--display: 'Barlow Condensed', 'Segoe UI', system-ui, sans-serif;
+	--mono: 'Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
 
-*,
-*::before,
-*::after {
-	box-sizing: border-box;
+	/* One accent does one job. Brass was carrying "important", "selected",
+	   "warning" and "currency" at once, which is why nothing on the panel read
+	   as more urgent than anything else. */
+	--stencil-track: 0.08em;
 }
 
 html {
@@ -42,11 +80,7 @@ html {
 }
 
 body {
-	margin: 0;
-	min-height: 100vh;
 	font-family: var(--font);
-	font-size: 16px;
-	line-height: 1.5;
 	color: var(--ink);
 	background:
 		radial-gradient(120% 80% at 50% 0%, #10314e 0%, rgba(16, 49, 78, 0) 60%),
@@ -54,27 +88,64 @@ body {
 	background-attachment: fixed;
 }
 
+/*
+ * Grain.
+ *
+ * The panels were flat fills over a flat gradient, which is what made the
+ * screen read as a diagram rather than an object. A single fixed noise layer
+ * at very low opacity gives every surface the same faint tooth, the way a
+ * painted metal panel catches light. Fixed rather than scrolling so it behaves
+ * like the surface of the screen and not like content.
+ *
+ * `pointer-events: none` matters: it covers the whole viewport.
+ */
+body::after {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: 1;
+	pointer-events: none;
+	opacity: 0.035;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/*
+ * Headings are stencilled, not typed. Condensed, uppercase and widely tracked
+ * so they read as engraved on the panel rather than as prose sitting on top
+ * of it — and the narrowness buys back the width the tracking spends.
+ */
 h1,
 h2,
 h3 {
 	margin: 0;
+	font-family: var(--display);
 	font-weight: 600;
-	letter-spacing: 0.01em;
+	text-transform: uppercase;
+	letter-spacing: var(--stencil-track);
+	line-height: 1.15;
 }
 
 h1 {
-	font-size: 1.35rem;
+	font-size: 1.7rem;
+	letter-spacing: 0.11em;
 }
 
 h2 {
-	font-size: 1rem;
+	font-size: 1.15rem;
+	color: var(--ink);
 }
 
 h3 {
-	font-size: 0.85rem;
+	font-size: 0.92rem;
 	color: var(--ink-dim);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
+	letter-spacing: 0.1em;
+}
+
+/* Every figure is tabular, so a rising number never shifts the layout. */
+.num,
+[class*='level'],
+dd {
+	font-variant-numeric: tabular-nums;
 }
 
 p {
@@ -87,17 +158,32 @@ ul {
 	list-style: none;
 }
 
+/*
+ * Controls read as machined parts: a hairline top highlight and a dark base,
+ * so a button looks like something milled and set into the panel rather than a
+ * rectangle drawn on it.
+ */
 button {
 	font: inherit;
+	font-family: var(--display);
+	font-weight: 600;
+	font-size: 0.95rem;
+	letter-spacing: 0.05em;
 	color: inherit;
 	cursor: pointer;
 	border: 1px solid var(--edge);
-	background: var(--hull-raised);
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 45%),
+		var(--hull-raised);
 	border-radius: var(--radius-sm);
-	padding: 0.45rem 0.8rem;
+	padding: 0.42rem 0.85rem;
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.08),
+		0 1px 2px rgba(0, 0, 0, 0.35);
 	transition:
 		background 120ms ease,
 		border-color 120ms ease,
+		box-shadow 120ms ease,
 		transform 80ms ease;
 }
 
@@ -108,6 +194,7 @@ button:hover:not(:disabled) {
 
 button:active:not(:disabled) {
 	transform: translateY(1px);
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
 button:disabled {
@@ -138,10 +225,16 @@ code,
 }
 
 .panel {
+	position: relative;
 	background: linear-gradient(180deg, rgba(20, 50, 79, 0.75), rgba(13, 33, 53, 0.75));
 	border: 1px solid var(--edge);
 	border-radius: var(--radius);
 	padding: var(--gap);
+	/* A lit top edge and a cast shadow: the panel sits above the hull rather
+	   than being painted onto it. */
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.06),
+		0 2px 10px rgba(0, 0, 0, 0.25);
 }
 
 .muted {
@@ -188,4 +281,74 @@ code,
 	animation-duration: 0.001ms !important;
 	animation-iteration-count: 1 !important;
 	transition-duration: 0.001ms !important;
+}
+
+/* ---------------------------------------------------------------------------
+   One orchestrated arrival.
+
+   A single staggered reveal on load does more than a dozen scattered hover
+   tricks. Panels rise a few pixels in sequence, which reads as the instrument
+   powering up. Strictly decorative, so both reduced-motion routes remove it
+   outright rather than shortening it.
+   --------------------------------------------------------------------------- */
+
+@keyframes panel-rise {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.shell > *,
+.rig > *,
+.content > * {
+	animation: panel-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.shell > *:nth-child(1) {
+	animation-delay: 0ms;
+}
+.shell > *:nth-child(2) {
+	animation-delay: 45ms;
+}
+.shell > *:nth-child(3) {
+	animation-delay: 90ms;
+}
+.shell > *:nth-child(4) {
+	animation-delay: 135ms;
+}
+
+.rig > *:nth-child(1) {
+	animation-delay: 120ms;
+}
+.rig > *:nth-child(2) {
+	animation-delay: 175ms;
+}
+.rig > *:nth-child(3) {
+	animation-delay: 230ms;
+}
+
+.content > *:nth-child(1) {
+	animation-delay: 150ms;
+}
+.content > *:nth-child(2) {
+	animation-delay: 205ms;
+}
+
+.reduce-motion .shell > *,
+.reduce-motion .rig > *,
+.reduce-motion .content > * {
+	animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shell > *,
+	.rig > *,
+	.content > * {
+		animation: none;
+	}
 }

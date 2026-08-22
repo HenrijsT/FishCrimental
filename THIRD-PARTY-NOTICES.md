@@ -40,6 +40,29 @@ Svelte compiles to plain JavaScript, so a small amount of Svelte's own runtime
 is included in the build. Svelte is © the Svelte contributors, under the MIT
 licence: https://github.com/sveltejs/svelte/blob/main/LICENSE.md
 
+### Fonts — SIL Open Font License 1.1
+
+Self-hosted in `static/fonts/`, latin subset, and served from the game's own
+origin. Nothing is fetched at runtime: the game is a static bundle that has to
+work with no network, so a webfont CDN would be a dependency it could not
+honour.
+
+| Font             | Used by                        | Copyright                         |
+| ---------------- | ------------------------------ | --------------------------------- |
+| Barlow Condensed | the instrument panel, headings | © The Barlow Project Authors      |
+| IBM Plex Mono    | both front-ends, all figures   | © IBM Corp.                       |
+| Young Serif      | the Logbook, masthead          | © The Young Serif Project Authors |
+| Spectral         | the Logbook, body text         | © Productype Foundry              |
+| Courier Prime    | the Logbook, figures           | © Quote-Unquote Apps              |
+
+All five are licensed under the **SIL Open Font License, Version 1.1**. The OFL
+permits bundling and redistribution with a work, including a commercial one,
+provided the fonts are not sold on their own and any modified version is not
+released under the reserved font name. **They are shipped unmodified.** Full
+licence text: <https://openfontlicense.org>
+
+A Steam or desktop build must ship this notice alongside the fonts.
+
 ## Build and development tooling only
 
 These do not ship in the game. They are listed for completeness, because a

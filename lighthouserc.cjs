@@ -9,7 +9,9 @@ module.exports = {
 		collect: {
 			startServerCommand: 'pnpm preview --port 4173',
 			startServerReadyPattern: 'Local:',
-			url: ['http://localhost:4173/'],
+			// Both front-ends are gated. They are separate documents with separate
+			// CSS and separate fonts, so a score on one says nothing about the other.
+			url: ['http://localhost:4173/', 'http://localhost:4173/logbook'],
 			numberOfRuns: 3,
 			settings: {
 				preset: 'desktop',

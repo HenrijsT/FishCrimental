@@ -2491,3 +2491,123 @@ itself — the first three things the brief nominated for cutting — all shippe
    you actually want.
 4. **`Goals/ANSWERS.md`** — every answered item now carries a short note saying
    what was built, under your own words, which were left untouched.
+
+---
+
+## Addendum — a design pass, and a second front-end
+
+Asked afterwards whether I had used the `frontend-design` skill for this pass.
+**I had not** — three new components and ~716 lines of UI went in without it.
+This addendum is the correction: the skill was loaded, applied to the existing
+screen, and used to build a second front-end from scratch.
+
+Branch `feat/frontend-design`.
+
+### Typography is now real, and self-hosted
+
+Five OFL fonts in `static/fonts/`, latin subset, **152 KB total**. Nothing is
+fetched at runtime: the game is a static bundle that has to work with no
+network, so a webfont CDN would be a dependency it cannot honour. Recorded in
+`THIRD-PARTY-NOTICES.md`, which a desktop build must ship.
+
+### 1. The instrument panel, refined
+
+Kept its identity — a dark marine instrument — and made it read like one.
+
+- **Barlow Condensed** for headings, uppercase and widely tracked, so they read
+  as stencilled onto the panel rather than typed on top of it. **IBM Plex Mono**
+  for every figure, because the whole game is numbers changing and they must not
+  reflow as they climb.
+- **Grain.** A single fixed noise layer at 3.5% over the viewport. The panels
+  were flat fills over a flat gradient, which is what made the screen read as a
+  diagram rather than an object.
+- **Machined controls.** A hairline top highlight and a cast shadow on buttons
+  and panels, so they sit _in_ the hull instead of being painted on it.
+- **One orchestrated arrival** — panels rise in sequence on load, ~45 ms apart.
+  Both reduced-motion routes remove it outright rather than shortening it.
+
+### 2. The Logbook — a second front-end at `/logbook`
+
+Not a reskin. A different aesthetic, a different information architecture, and
+a different set of type.
+
+**The concept: a fisherman's ledger.** Warm paper, deep ink, one red rubber
+stamp doing all the shouting. Young Serif for the masthead, Spectral for prose,
+Courier Prime for every figure. Ruled paper drawn as a repeating gradient so
+every baseline lands on a line, dotted leaders between label and value, roman
+numerals hanging in the margin, and a paper-fibre texture multiplied into the
+stock.
+
+**A single scrolling ledger instead of tabs** — six numbered entries: the line,
+the bucket, the shore, the water, gear, crew. That is a real IA difference, not
+a coat of paint.
+
+It drives the same `game` singleton, so there is no second copy of the rules.
+
+**Why the CSS had to be split.** `app.css` was imported by the shared layout, so
+the instrument theme leaked into the ledger — blue-grey headings, brass currency
+marks. Fixed at the root: a new `base.css` holds the genuinely universal rules
+and is the only thing the layout loads; each route imports its own theme.
+
+### Verified by driving it, not by looking at it
+
+Screenshots prove layout. They do not prove a front-end works, so the ledger was
+driven in headless Chrome over CDP:
+
+- 8 seconds of holding the rod → **8 fish in the bucket**, 6 entries in the
+  catch list, hold worth ¤4.3.
+- Then a full wait for a real trader: countdown 33 → 27 → 21 → 15 → 9 → 3, and
+  at **t+46s the bucket emptied 10 → 0 and coins went ¤0 → ¤3.**
+- Zero JavaScript errors.
+
+Two false alarms along the way, recorded because they cost time: a run where the
+fonts 404'd and the rod did nothing turned out to be **stale preview servers from
+earlier runs colliding on ports**, so the browser was loading an old build. I
+briefly concluded that every Lighthouse score in this project had been measured
+against an un-hydrated page. **That was wrong** — `vite preview` serves the
+bundle correctly, and the scores stand.
+
+### Contrast, measured again — and Lighthouse was wrong again
+
+The ledger scored **100 on accessibility while failing AA**:
+
+| Token                                                 |     Before |      After |
+| ----------------------------------------------------- | ---------: | ---------: |
+| `--ink-faded` (margin notes, table notes, level tags) | **4.23:1** | **5.08:1** |
+
+Same blind spot as the panel: axe cannot resolve the backgrounds and returns
+colour-contrast as _incomplete_, so a perfect score is not evidence. Measured
+directly against all three paper tones. The rest of the palette passes with room
+— ink 11.05:1, ink-soft 6.61:1, stamp 4.80:1.
+
+**`lighthouserc.cjs` now gates both routes.** They are separate documents with
+separate CSS and separate fonts, so a score on one said nothing about the other.
+
+### Where the map got fixed
+
+Building the ledger sent me back to the chart three times, all found by looking
+at rendered output rather than code:
+
+1. **"Home" was clipped** off the bottom of the viewBox.
+2. **Place labels overflowed the left edge** — they are centred on their marker,
+   and a place near the frame had its name cut in half. The viewBox now carries
+   10 units of bleed on each side.
+3. **"Home" rendered centred on its own roof**, because `.place text` is (0,1,1)
+   and out-specified the `.home-label` rule meant to left-anchor it.
+
+The empty half of the chart also now reads as deliberate rather than unfinished:
+depth contours across the paper, and diagonal hatching over the unsurveyed
+region.
+
+### What the Logbook does not do
+
+It covers the core loop — casting, the bucket, the shore, the water, gear and
+crew — and links back to the panel. **It has no Fishdex, no achievements, no
+Pearls panel and no settings.** It is a genuine alternative front-end for
+playing, not a replacement for the whole application, and the panel remains the
+complete one.
+
+### Gates
+
+`pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok · `pnpm test`
+**406 passing** · `pnpm audit:ui` **100/100/100 on both routes**.
