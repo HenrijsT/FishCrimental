@@ -451,7 +451,7 @@ Pass 3 drove the production build in headless Chrome over the DevTools Protocol.
 ### Confirmed bugs
 
 **B1 — one cast wrote every species in the source into the ticker, the hold and the
-Fishdex.** *(the user's reported bugs 1, 2 and 5, all one defect)*
+Fishdex.** _(the user's reported bugs 1, 2 and 5, all one defect)_
 
 Reproduced in a unit probe: with `net` at level 1 (`fishPerCast` 1.19), a single Pond
 cast produced **31 entries** — one rolled fish plus a fractional sliver of all 30 other
@@ -462,7 +462,7 @@ live in the browser: the catch ticker read `Betta Fish ×1.06 9.55 | Zebra Barb 
 Large 0.02 | Erotic 0 !`, which is the reported Erotic bug in the same screenshot.
 
 Cause: `performCast` rolled up to 16 fish and then filled the fractional remainder from
-the expected distribution across *every* species, and `accumulate` did the same for
+the expected distribution across _every_ species, and `accumulate` did the same for
 deckhands. Fractional fish were the root of all three complaints.
 
 Fixed by replacing the catch model outright — see **Stage 3**, which owns that decision.
@@ -481,11 +481,11 @@ that would round to `"0"` is caught and rendered the same way. A real zero still
 "New in the Fishdex" toast left the active tab on Water. Toasts now have two targets —
 the body navigates (`selectTab(tab, focusTarget)`), and a separate `×` dismisses. The
 Fishdex opens and scrolls to the species; the Records panel scrolls to and outlines the
-achievement. Verified live: tapping the toast switched to Fishdex, expanded *Giant
-Gourami*, and set `location.hash` to `#dex`.
+achievement. Verified live: tapping the toast switched to Fishdex, expanded _Giant
+Gourami_, and set `location.hash` to `#dex`.
 
 **B4 — every source stocked almost every species, all at identical rarity.**
-*(the user's "verify if it's a bug" item — it was one.)* Reproduced: the Pond catch
+_(the user's "verify if it's a bug" item — it was one.)_ Reproduced: the Pond catch
 table held **31 species**, including all 12 Medium fish, and every species inside a
 category had `baseChance: 10`, giving a flat 7.08e-2 each. There was no reason to fish
 anywhere else and nothing to hunt for.
@@ -548,7 +548,7 @@ data.
 - **Timer leak on unmount.** `stop()` clears all three handles and `onMount` returns it.
 - **Duplicate keys in the toast `{#each}` crashing the renderer.** Guarded on both paths.
 - **`parseDecimal` rejecting a legitimate value.** It rejects non-canonical forms like
-  `1e1e300`, which break_eternity accepts as *input* but never *emits*. Saves only ever
+  `1e1e300`, which break_eternity accepts as _input_ but never _emits_. Saves only ever
   contain `toJSON()` output, and `decimal.test.ts` round-trips 40 escalating magnitudes.
   Only reachable by hand-writing a save in a form the game never produces.
 
@@ -557,9 +557,83 @@ data.
 Full playthrough on the production build over CDP: fresh save → manual fishing →
 mid-cast source switch (cast correctly cancelled) → refresh mid-cast → toasts →
 seeded mid-game → prestige → offline settlement at 3 hours, at one year (correctly
-capped at 8h with the explanatory line) and with the clock set 90 days *forward*
+capped at 8h with the explanatory line) and with the clock set 90 days _forward_
 (no modal, no negative earnings) → layer-2 Decimals through every panel → 1,000
 spam clicks. **No console errors or warnings at any point, before or after the fixes.**
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 163 passing · `pnpm audit:ui` 1.00 / 1.00 / 1.00 / 1.00.
+
+## Stage 1 — making the game understandable
+
+### Per-source visual identity
+
+`src/lib/game/scenes.ts` holds a palette and a feature list per source;
+`WaterScene.svelte` renders them through one SVG skeleton. That gets eight scenes
+that read as different places without eight hand-drawn files:
+
+| | |
+|---|---|
+| Pond | warm green, reeds, lily pads, sun, you can see the bottom |
+| Stream | pale blue-green, boulders, pebbles, current streaks, trees |
+| River | wider, tree line, current, boulders, more depth |
+| Lake | still, distant hills, a jetty, light rays |
+| Lagoon | turquoise over a white sandbar, coral, bright sun |
+| Sea | open blue, gulls, real swell |
+| Offshore | grey, heavy swell, a marker buoy, kelp |
+| Ocean | near-black under starlight, the heaviest swell, deep kelp |
+
+Depth and swell both increase monotonically down the list, and a test asserts it.
+`SourceThumb.svelte` renders the same palette at 48×32 so the picker list is
+recognisable at a glance. **Everything is inline SVG plus CSS keyframes — no image
+files, no external hosts.** `static/` still contains only `favicon.png`. A test
+asserts every scene colour is a literal hex value, so an asset path cannot creep in.
+
+### The act of fishing
+
+Three states, visibly different: **idle** (water only), **casting** (rod, line arcing
+out, float landing, spreading ripple; the bar reads "Casting…" then "Waiting for a
+bite…") and **landing** (a splash burst over the float). Verified live: mid-cast the
+`.tackle` group is in the DOM and the bar label changes.
+
+### Legible catches
+
+A flash card rises over the water naming the fish, the count and what it made, styled
+by **rarity computed from its actual probability in that water** — `common`, `uncommon`,
+`rare`, `exotic`, `mythic`. A mythic catch gets a gold border, a glow and larger type;
+a guppy gets none of that. The ticker carries the same rarity as a coloured pip with a
+legend, so a Lovestruck Lipfish cannot scroll past looking like a guppy. The flash names
+the **rarest** fish of a multi-fish cast, not the last one.
+
+### Explaining the systems
+
+Short, concrete copy where the decision is made rather than in a guide tab: the source
+picker says what a source costs, how long a cast takes there and what a fish is worth;
+the gear panel says upgrades multiply together; the hold says where you caught it
+matters more than what it is; the crew panel already stated the deckhand rate and the
+handover. Locked sources say the price and whether you can afford it.
+
+### Onboarding
+
+**Staged tabs.** A new player sees one tab — Water — and one button. Gear appears after
+the first sale, Crew when a deckhand comes within reach, Fishdex at two species, Pearls
+at the Sea or 1e9 lifetime, Records at the first achievement, Settings after twelve
+casts. Each new tab carries a `new` badge and shows a one-line blurb with a "Got it".
+
+**One next action, never a list.** `nextStep()` returns a single sentence and optionally
+a tab to jump to. It walks: hold the rod → sell the hold → buy the first upgrade → hire
+the first deckhand → open the next source → reach the Ocean → prestige. Tested to always
+point at a tab that exists.
+
+**Decision: staged reveal over a tutorial modal.** A modal is read once and forgotten,
+and it competes with the thing it is describing. Tabs that arrive when they become
+relevant teach the same thing by being there, cost nothing to skip, and survive a
+reload because they are derived from game state rather than a "seen tutorial" flag.
+
+### Motion
+
+Every animation is CSS on an SVG group. Both the OS `prefers-reduced-motion` query and
+the in-game Reduce Motion setting stop all of it, verified live. **Lighthouse still
+scores 1.00 / 1.00 / 1.00 / 1.00** with the animation running, so nothing had to be cut.
+
+Responsive re-checked at 360 / 768 / 1440 px: no horizontal overflow. No console errors.

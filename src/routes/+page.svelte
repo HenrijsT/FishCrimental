@@ -1,31 +1,48 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { game } from '$lib/game/state.svelte';
+	import { TABS, availableTabs } from '$lib/game/guide';
 	import AchievementsPanel from '$lib/components/AchievementsPanel.svelte';
 	import CastPanel from '$lib/components/CastPanel.svelte';
+	import CatchTicker from '$lib/components/CatchTicker.svelte';
 	import CrewPanel from '$lib/components/CrewPanel.svelte';
 	import Fishdex from '$lib/components/Fishdex.svelte';
+	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import LipfishModal from '$lib/components/LipfishModal.svelte';
+	import NextStep from '$lib/components/NextStep.svelte';
+	import OfflineModal from '$lib/components/OfflineModal.svelte';
 	import PrestigeModal from '$lib/components/PrestigeModal.svelte';
 	import PrestigePanel from '$lib/components/PrestigePanel.svelte';
-	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
-	import Toasts from '$lib/components/Toasts.svelte';
-	import CatchTicker from '$lib/components/CatchTicker.svelte';
-	import HoldPanel from '$lib/components/HoldPanel.svelte';
-	import OfflineModal from '$lib/components/OfflineModal.svelte';
 	import SaveProblemBanner from '$lib/components/SaveProblemBanner.svelte';
+	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import SourcePicker from '$lib/components/SourcePicker.svelte';
 	import Tabs from '$lib/components/Tabs.svelte';
+	import Toasts from '$lib/components/Toasts.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import UpgradePanel from '$lib/components/UpgradePanel.svelte';
-
-	const TAB_IDS = ['water', 'gear', 'crew', 'dex', 'pearls', 'records', 'settings'];
 
 	let active = $state('water');
 	/** Set when a toast is tapped, so the panel can open and scroll to the thing. */
 	let focus = $state<string | null>(null);
+	/** Tabs the player has already seen, so a new one can announce itself once. */
+	let seen = $state<string[]>(['water']);
 
-	/** Tabs are addressable so a refresh (or a shared link) lands where you were. */
+	const tabs = $derived(
+		availableTabs(game.state).map((tab) => ({
+			id: tab.id,
+			label: tab.label,
+			badge:
+				tab.id === 'pearls' && game.prestigeReady ? '!' : seen.includes(tab.id) ? undefined : 'new'
+		}))
+	);
+	const current = $derived(TABS.find((tab) => tab.id === active));
+	const isNew = $derived(current !== undefined && !seen.includes(current.id));
+
+	// A tab can disappear again after a prestige; never strand the player on it.
+	$effect(() => {
+		if (!tabs.some((tab) => tab.id === active)) active = 'water';
+	});
+
 	function selectTab(id: string, target: string | null = null) {
 		active = id;
 		focus = target;
@@ -34,19 +51,13 @@
 		}
 	}
 
-	const tabs = $derived([
-		{ id: 'water', label: 'Water' },
-		{ id: 'gear', label: 'Gear' },
-		{ id: 'crew', label: 'Crew' },
-		{ id: 'dex', label: 'Fishdex' },
-		{ id: 'pearls', label: 'Pearls', badge: game.prestigeReady ? '!' : undefined },
-		{ id: 'records', label: 'Records' },
-		{ id: 'settings', label: 'Settings' }
-	]);
+	function markSeen() {
+		if (current && !seen.includes(current.id)) seen = [...seen, current.id];
+	}
 
 	onMount(() => {
 		const fromHash = location.hash.replace('#', '');
-		if (TAB_IDS.includes(fromHash)) active = fromHash;
+		if (TABS.some((tab) => tab.id === fromHash)) active = fromHash;
 
 		game.init();
 
@@ -76,6 +87,7 @@
 <div class="shell" class:reduce-motion={game.state.settings.reduceMotion}>
 	<TopBar />
 	<SaveProblemBanner />
+	<NextStep onnavigate={(tab) => selectTab(tab)} />
 
 	<div class="grid">
 		<aside class="rig">
@@ -85,9 +97,16 @@
 		</aside>
 
 		<main class="content">
-			<Tabs {tabs} {active} onselect={selectTab} />
+			<Tabs {tabs} {active} onselect={(id) => selectTab(id)} />
 
 			<div id="panel-{active}" role="tabpanel" aria-labelledby="tab-{active}" tabindex="-1">
+				{#if isNew && current}
+					<p class="blurb">
+						{current.blurb}
+						<button class="got-it" onclick={markSeen}>Got it</button>
+					</p>
+				{/if}
+
 				{#if active === 'water'}
 					<SourcePicker />
 				{:else if active === 'gear'}
@@ -119,7 +138,7 @@
 		margin: 0 auto;
 		padding: 1rem 1rem 3rem;
 		display: grid;
-		gap: 1rem;
+		gap: 0.85rem;
 	}
 
 	.grid {
@@ -136,13 +155,35 @@
 		min-width: 0;
 	}
 
+	[role='tabpanel'] {
+		display: grid;
+		gap: 0.75rem;
+	}
+
 	[role='tabpanel']:focus {
 		outline: none;
 	}
 
+	.blurb {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		font-size: 0.8rem;
+		color: var(--ink-dim);
+		padding: 0.5rem 0.7rem;
+		border: 1px dashed var(--edge);
+		border-radius: var(--radius-sm);
+	}
+
+	.got-it {
+		font-size: 0.7rem;
+		padding: 0.15rem 0.5rem;
+	}
+
 	@media (min-width: 54rem) {
 		.grid {
-			grid-template-columns: minmax(15rem, 1fr) minmax(0, 1.6fr);
+			grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.55fr);
 		}
 
 		.rig {

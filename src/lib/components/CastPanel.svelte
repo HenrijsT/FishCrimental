@@ -1,21 +1,55 @@
 <script lang="ts">
 	import { game } from '$lib/game/state.svelte';
 	import { sources } from '$lib/fishing_sources';
+	import { RARITY_LABEL } from '$lib/game/engine';
+	import { SCENES } from '$lib/game/scenes';
 	import CastBar from './CastBar.svelte';
+	import Num from './Num.svelte';
+	import WaterScene from './WaterScene.svelte';
 
-	const state = $derived(game.state);
+	const g = $derived(game.state);
+	const scene = $derived(SCENES[g.activeSource]);
+
+	let landing = $state(false);
+	let flash = $state<typeof game.lastCatch>(null);
+	let landingTimer: ReturnType<typeof setTimeout> | undefined;
+	let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+	// A cast reads as three states: the line going out, the line in the water,
+	// and the moment something comes up. The bar alone showed only the middle one.
+	$effect(() => {
+		const pulse = game.catchPulse;
+		if (pulse === 0) return;
+
+		flash = game.lastCatch;
+		landing = true;
+
+		clearTimeout(landingTimer);
+		clearTimeout(flashTimer);
+		landingTimer = setTimeout(() => (landing = false), 430);
+		flashTimer = setTimeout(() => (flash = null), 1700);
+
+		return () => {
+			clearTimeout(landingTimer);
+			clearTimeout(flashTimer);
+		};
+	});
+
+	const phase = $derived<'idle' | 'casting' | 'landing'>(
+		landing ? 'landing' : game.casting ? 'casting' : 'idle'
+	);
+
 	const label = $derived(
 		game.casting
-			? `Casting into the ${sources[state.activeSource].name}…`
+			? game.castProgress < 0.3
+				? 'Casting…'
+				: 'Waiting for a bite…'
 			: `${game.activeCastSeconds.toFixed(2)}s per cast`
 	);
 
 	let captured: { element: HTMLElement; pointerId: number } | null = null;
 
 	function hold(event: PointerEvent) {
-		// Capture keeps the cast alive if the finger slides off the button. It
-		// throws when there is no live pointer behind the event (synthetic events,
-		// some assistive tech), and a throw here would abort the cast entirely.
 		const element = event.currentTarget as HTMLElement;
 		try {
 			element.setPointerCapture(event.pointerId);
@@ -23,7 +57,6 @@
 		} catch {
 			captured = null;
 		}
-
 		game.beginCast();
 	}
 
@@ -32,11 +65,10 @@
 			try {
 				captured.element.releasePointerCapture(captured.pointerId);
 			} catch {
-				// Already released — nothing to do.
+				// Already released.
 			}
 			captured = null;
 		}
-
 		game.endCast();
 	}
 
@@ -54,6 +86,30 @@
 </script>
 
 <section class="panel cast">
+	<div class="stage">
+		<WaterScene
+			source={g.activeSource}
+			{phase}
+			progress={game.castProgress}
+			still={g.settings.reduceMotion}
+		/>
+
+		<div class="overlay">
+			<span class="where">{sources[g.activeSource].name}</span>
+			{#if flash}
+				<div class="flash rarity-{flash.rarity}" class:still={g.settings.reduceMotion}>
+					<span class="tier">{RARITY_LABEL[flash.rarity]}</span>
+					<span class="fish">
+						{flash.fish.name}{#if flash.count.gt(1)}&nbsp;×<Num value={flash.count} />{/if}
+					</span>
+					<span class="worth"><Num value={flash.value} tone="coin" /></span>
+				</div>
+			{/if}
+		</div>
+	</div>
+
+	<p class="mood faint">{scene.mood}</p>
+
 	<CastBar progress={game.castProgress} {label} active={game.casting} />
 
 	<button
@@ -75,7 +131,127 @@
 <style>
 	.cast {
 		display: grid;
-		gap: 0.7rem;
+		gap: 0.6rem;
+	}
+
+	.stage {
+		position: relative;
+	}
+
+	.overlay {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		padding: 0.5rem 0.6rem;
+	}
+
+	.where {
+		align-self: flex-start;
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		padding: 0.15rem 0.45rem;
+		border-radius: 999px;
+		background: rgba(4, 16, 27, 0.55);
+		color: var(--ink);
+	}
+
+	.flash {
+		align-self: center;
+		margin-top: auto;
+		display: grid;
+		justify-items: center;
+		gap: 0.05rem;
+		padding: 0.35rem 0.85rem;
+		border-radius: var(--radius-sm);
+		background: rgba(4, 16, 27, 0.82);
+		border: 1px solid var(--edge);
+		animation: rise 1.7s ease-out forwards;
+	}
+
+	.flash.still {
+		animation: none;
+	}
+
+	.tier {
+		font-size: 0.58rem;
+		text-transform: uppercase;
+		letter-spacing: 0.14em;
+		color: var(--ink-faint);
+	}
+
+	.fish {
+		font-size: 0.95rem;
+		font-weight: 700;
+	}
+
+	.worth {
+		font-size: 0.74rem;
+	}
+
+	/* Rarity has to be visible at a glance, not read. */
+	.rarity-uncommon {
+		border-color: #6fb3d8;
+	}
+	.rarity-uncommon .fish {
+		color: #a8d8f0;
+	}
+
+	.rarity-rare {
+		border-color: var(--foam);
+		box-shadow: 0 0 0.9rem rgba(79, 209, 197, 0.35);
+	}
+	.rarity-rare .fish {
+		color: var(--foam);
+	}
+
+	.rarity-exotic {
+		border-color: var(--pearl);
+		box-shadow: 0 0 1.2rem rgba(216, 199, 238, 0.45);
+	}
+	.rarity-exotic .fish {
+		color: var(--pearl);
+	}
+
+	.rarity-mythic {
+		border-color: var(--brass);
+		box-shadow:
+			0 0 1.6rem rgba(242, 181, 68, 0.6),
+			inset 0 0 1rem rgba(242, 181, 68, 0.2);
+	}
+	.rarity-mythic .fish {
+		color: var(--brass);
+		font-size: 1.1rem;
+		letter-spacing: 0.01em;
+	}
+	.rarity-mythic .tier {
+		color: var(--brass);
+	}
+
+	@keyframes rise {
+		0% {
+			opacity: 0;
+			transform: translateY(10px) scale(0.94);
+		}
+		14% {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+		}
+		74% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+			transform: translateY(-12px);
+		}
+	}
+
+	.mood {
+		font-size: 0.75rem;
+		margin-top: -0.15rem;
 	}
 
 	.rod {

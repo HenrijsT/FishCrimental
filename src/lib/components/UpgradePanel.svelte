@@ -14,6 +14,12 @@
 		<BuyAmountPicker />
 	</div>
 
+	<p class="muted intro">
+		Every upgrade multiplies, and they all multiply together — a faster rod makes the wider net pay
+		more often, and the market marks up whatever comes back. Costs climb steeply, so buy the
+		cheapest thing on the board and keep moving.
+	</p>
+
 	<ul class="list">
 		{#each UPGRADE_IDS as id (id)}
 			{@const config = UPGRADES[id]}
@@ -65,6 +71,12 @@
 		gap: var(--gap);
 		flex-wrap: wrap;
 		margin-bottom: 0.6rem;
+	}
+
+	.intro {
+		font-size: 0.78rem;
+		margin: 0 0 0.7rem;
+		max-width: 62ch;
 	}
 
 	.list {
