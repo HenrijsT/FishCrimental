@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      break_eternity.js:
+        specifier: ^2.1.3
+        version: 2.1.3
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -20,15 +24,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.3.0
         version: 7.3.0(svelte@5.56.10(@typescript-eslint/types@8.67.0))(vite@8.2.2)
-      '@types/big.js':
-        specifier: ^7.0.0
-        version: 7.0.0
       autoprefixer:
         specifier: ^10.5.4
         version: 10.5.4(postcss@8.5.26)
-      big.js:
-        specifier: ^7.0.1
-        version: 7.0.1
       eslint:
         specifier: ^10.9.0
         version: 10.9.0
@@ -296,9 +294,6 @@ packages:
       svelte: ^5.46.4
       vite: ^8.0.0-beta.7 || ^8.0.0
 
-  '@types/big.js@7.0.0':
-    resolution: {integrity: sha512-WfAGp7IbJvyB8EmWK4tJD24rJRAL6uVbw3LV/hJntFNam+os9KWKj0PzXo8rRRpjupYK8U0M8FoBB8dBhWF2dg==}
-
   '@types/cookie@0.6.0':
     resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
 
@@ -418,12 +413,12 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  big.js@7.0.1:
-    resolution: {integrity: sha512-iFgV784tD8kq4ccF1xtNMZnXeZzVuXWWM+ERFzKQjv+A5G9HC8CY3DuV45vgzFFcW+u2tIvmF95+AzWgs6BjCg==}
-
   brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
     engines: {node: 20 || >=22}
+
+  break_eternity.js@2.1.3:
+    resolution: {integrity: sha512-4tg4j0wc0lhaYAnOHubN5mAyHbhMfUI7adQLO8l/loKqtylZ/kHWp8WYqG2EC0TinSesKvpCi3XeVFcKRUBJsQ==}
 
   browserslist@4.28.8:
     resolution: {integrity: sha512-V2NpofLblG64mfOtSgDhOJESZEGogzDMBv/q+W6oc4LXWP/q75eOXoOaaOu1EOadB9U4Bwx/e0yzbvwKH8zalA==}
@@ -1253,8 +1248,6 @@ snapshots:
       vite: 8.2.2
       vitefu: 1.1.3(vite@8.2.2)
 
-  '@types/big.js@7.0.0': {}
-
   '@types/cookie@0.6.0': {}
 
   '@types/esrecurse@4.3.1': {}
@@ -1394,11 +1387,11 @@ snapshots:
 
   baseline-browser-mapping@2.11.17: {}
 
-  big.js@7.0.1: {}
-
   brace-expansion@5.0.9:
     dependencies:
       balanced-match: 4.0.4
+
+  break_eternity.js@2.1.3: {}
 
   browserslist@4.28.8:
     dependencies:

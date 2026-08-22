@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type Big from 'big.js';
+	import type Decimal from 'break_eternity.js';
 	import type { Writable } from 'svelte/store';
 
-	export let count: Writable<Big>;
+	export let count: Writable<Decimal>;
 </script>
 
 <slot />
