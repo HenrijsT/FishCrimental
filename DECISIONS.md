@@ -752,7 +752,7 @@ bank lives in `state.carry`, keyed by `source#thing`, and is saved.
 **Keep fractions and show them honestly.** This is what the first build did, and it is
 what produced three of the five bugs the user reported. A cast wrote 0.51 of a Guppy,
 0.34 of a Tetra and a two-hundred-thousandth of a Lipfish into the hold, the ticker and
-the Fishdex *simultaneously*, because the only honest way to hand out 1.19 fish drawn
+the Fishdex _simultaneously_, because the only honest way to hand out 1.19 fish drawn
 from a 31-species distribution is to hand out a slice of all 31. The result: the catch
 ticker showed the same list every cast, the hold displayed `Erotic 0 !`, and a player
 with three deckhands had "caught" every species in the pond within seconds. Fractional
@@ -761,7 +761,7 @@ fish are not a display problem. They are a modelling problem that surfaces every
 **Resolve stochastically — 1.19 means 2 fish 19% of the time, by coin flip.** Correct
 in expectation, and it was the strong contender. Rejected for three reasons:
 
-1. It is only unbiased *in expectation*. Remainder banking is unbiased **exactly**: at
+1. It is only unbiased _in expectation_. Remainder banking is unbiased **exactly**: at
    any moment, everything the player is owed has either been paid out or is sitting in
    the bank. A test asserts `paid + banked === rate × draws` to three decimal places
    over 100,000 draws at seven different rates.
@@ -790,7 +790,7 @@ quietly drift apart.
 **The one seam, and where it sits.** Inside `distributeCatch`, hauls of **24 fish or
 fewer are rolled one fish at a time** against the weighted table; larger hauls are split
 across species by expected share with the same banking applied per species. The seam is
-on *haul size*, not on *who is fishing* — a player with a huge net gets the bulk path
+on _haul size_, not on _who is fishing_ — a player with a huge net gets the bulk path
 too, and a one-deckhand crew gets rolled fish. This is deliberate: a small haul is a
 moment the player is watching, and it should be a real draw with real surprise; a
 haul of ten billion is a number, and rolling it is not possible. Both are unbiased.
@@ -800,8 +800,8 @@ source a billion deckhands, runs eight hours, and asserts it returns in under 25
 it completes in single-digit milliseconds. A second test checks one eight-hour call
 against 480 one-minute calls and gets the same answer within 1%.
 
-**Legible.** The cast panel now says, in words: *"1.19 fish a cast — 1 most casts, 2
-about 19% of the time"*. Above 1,000 it drops the explanation and just shows the number.
+**Legible.** The cast panel now says, in words: _"1.19 fish a cast — 1 most casts, 2
+about 19% of the time"_. Above 1,000 it drops the explanation and just shows the number.
 No screen anywhere can be asked to display a fraction of a fish — a test asserts every
 hold entry is either exactly zero or at least one.
 
@@ -818,3 +818,83 @@ loader throws away any carry entry outside `[0, 1)`.
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 236 passing · `pnpm audit:ui` 1.00 / 1.00 / 1.00 / 1.00.
+
+## Stage 4 — final triple verification
+
+Three passes again, over the whole game including everything Stages 1–3 added.
+
+### Confirmed bugs, all found in this pass
+
+**F1 — the Standing Charter handed out water the player had no licence for.**
+Found by the logic pass and immediately confirmed by the balance suite: the six-run
+prestige chain completed only five runs. `createInitialState` reset licences to all
+false but `pearl_headstart` still unlocked sources, so a run started standing over
+unlicensed water, earned nothing there, and stalled. Fixed: licences still reset with
+the run — they belonged to the operation you sold — but anything the Charter opens comes
+with the paperwork already done. Four regression tests, including one that walks every
+headstart level 0–7.
+
+**F2 — a headstart run could start standing over water with no boat under it.**
+Same root: `activeSource` picked the deepest unlocked source, which at headstart 6+ is
+Offshore, and a fresh run has no boat. Now it picks the deepest unlocked source that is
+not boat-only. Tested at every headstart level.
+
+**F3 — unlicensed water still paid out.** `accumulate` and `autoCastsPerSecond` checked
+`unlocked` but not the licence, so they disagreed with `reachableSource` about where the
+crew were allowed to work. Reproduced with a hand-edited save: 28 fish an hour out of
+water the player had no permit for. Both now check the licence.
+
+**F4 — a NaN boat condition blanked every cast time.** `boatEfficiency` divides into
+`castSeconds`, so a non-finite condition propagated NaN into every source in the game.
+Not reachable from a save — `readBoat` clamps — but reachable from any future code path
+that writes the dial. `boatEfficiency` now treats anything non-finite as a wrecked boat.
+
+**F5 — the offline summary subtracted the fuel bill twice.** The report's `coins` was
+net of fuel, and the modal then showed the fuel bill as a separate line underneath, so a
+reader taking both at face value undercounted. `coins` is now gross, and the modal shows
+earnings, the fuel bill and the net as three lines.
+
+### Verified live, end to end
+
+A real playthrough on the production build: fresh save → six rounds of hold-and-sell →
+tabs staging in as they were earned → buy the Graphite Rod (cast time 1.15s → 0.97s) →
+earn through to a licence → licence stamped → Stream unlocks → switch to it and watch
+**the scene and its description change** → every unlocked tab renders → reduce motion →
+scientific notation → responsive sweep. **No console errors or warnings at any point.**
+
+The two-tab guard was verified directly. A CDP-created second tab is backgrounded and
+its autosave timer is throttled, so it never wrote and the guard never fired — a harness
+limitation, not a game one. Driving the exact `StorageEvent` Chrome delivers instead:
+the banner appears, the tab stops saving (a sentinel written into `localStorage`
+survived a full 12-second autosave window untouched), Reload and Dismiss are both
+offered, and an unrelated storage key is correctly ignored.
+
+Responsive re-checked across **all eight tabs at 360 / 768 / 1440 px**: zero horizontal
+overflow at every combination.
+
+### Hypotheses that could not be reproduced
+
+- **`fuelPerCast` reaching zero and dividing by zero in `runBoat`.** At maximum Engine
+  it is 0.0061 L, and the curve is multiplicative so it can never reach zero.
+- **`takeWhole` poisoned by a non-finite amount.** Probed with NaN and with 1e1200:
+  NaN returns 0 and never enters the bank; a large finite Decimal is floored and
+  returned. No path was found that produces an actual `Infinity` there.
+- **A 1e300 crew breaking the save.** Probed end to end — accumulate, sell, serialise,
+  reload — and the coins came back bit-identical, with every hold entry still integral.
+
+### Final numbers
+
+| | |
+|---|---|
+| First prestige | **2 h 25 m** at 1.00e15 lifetime |
+| Sources open at | 6 / 14 / 21 / 30 / 39 / 53 / 71 min |
+| Licences taken at | 3 / 14 / 23 / 33 min |
+| Boat bought at | 40 min |
+| Crew out-earn the player at | 11 min |
+| Mostly-idle player (15% uptime) | 3 h 30 m |
+| Runs 2 / 3 / 4 / 5 / 6 | 1 h 03 m / 24 m / 57 s / 13 s / 4 s |
+| Run 6 lifetime in a fixed 3 h | 1.79e55 |
+| Pearls after six runs | 8.05e16 |
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` **260 passing** across 17 files · `pnpm audit:ui` **1.00 / 1.00 / 1.00 / 1.00**.

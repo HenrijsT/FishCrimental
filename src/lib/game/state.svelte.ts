@@ -302,7 +302,9 @@ class Game {
 			cappedSeconds: capped,
 			fish,
 			value,
-			coins: state.coins.minus(coinsBefore),
+			// Gross, so the modal can show earnings and the fuel bill as two
+			// separate lines without the reader subtracting twice.
+			coins: state.coins.minus(coinsBefore).plus(fuelSpent),
 			autoSold: true,
 			fuelSpent,
 			fellBack

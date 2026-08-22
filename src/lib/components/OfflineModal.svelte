@@ -21,7 +21,12 @@
 			<li><span>Fish landed</span><Num value={report.fish} /></li>
 			<li><span>Sold on the dock</span><Num value={report.coins} tone="coin" /></li>
 			{#if report.fuelSpent.gt(0)}
-				<li><span>Fuel, billed by the yard</span><Num value={report.fuelSpent} tone="coin" /></li>
+				<li class="expense">
+					<span>Fuel, billed by the yard</span>−<Num value={report.fuelSpent} tone="coin" />
+				</li>
+				<li class="net">
+					<span>Net</span><Num value={report.coins.minus(report.fuelSpent)} tone="coin" />
+				</li>
 			{/if}
 		</ul>
 
@@ -57,6 +62,15 @@
 
 	.small {
 		font-size: 0.78rem;
+	}
+
+	.expense {
+		color: var(--ink-dim);
+	}
+
+	.net {
+		font-weight: 600;
+		border: 1px solid var(--edge);
 	}
 
 	.fell-back {
