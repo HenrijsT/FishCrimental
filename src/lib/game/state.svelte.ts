@@ -1,9 +1,14 @@
 import type Decimal from 'break_eternity.js';
-import { d0 } from '$lib/decimal';
-import { FISH_TYPES } from '$lib/fish_types';
+import { FISH_TYPES, fishTypeBaseValue } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
 import type { Fish } from '$lib/fishes/fish';
-import { AUTOSAVE_MS, MAX_OFFLINE_SECONDS, OFFLINE_EFFICIENCY, TICK_MS } from './config';
+import {
+	AUTOSAVE_MS,
+	MAX_OFFLINE_SECONDS,
+	OFFLINE_EFFICIENCY,
+	SOURCE_CONFIG,
+	TICK_MS
+} from './config';
 import {
 	accumulate,
 	buyDeckhand,
@@ -196,11 +201,16 @@ class Game {
 	castOnce(): void {
 		const source = this.state.activeSource;
 		const before = this.discovered;
+		const valueMultiplier = SOURCE_CONFIG[source].valueMultiplier;
 		const { caught } = performCast(this.state, source, this.modifiers);
 
 		const feedback: CastFeedback[] = [];
 		for (const [fish, count] of caught) {
-			feedback.push({ id: this.#feedbackId++, fish, count, value: d0() });
+			const value = count
+				.times(fishTypeBaseValue[fish.category])
+				.times(valueMultiplier)
+				.times(this.modifiers.sellMultiplier);
+			feedback.push({ id: this.#feedbackId++, fish, count, value });
 		}
 
 		if (feedback.length) {

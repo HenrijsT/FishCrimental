@@ -11,10 +11,12 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test": "vitest run",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"audit:ui": "vite build && lhci autorun --config=./lighthouserc.cjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
+		"@lhci/cli": "^0.15.1",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.70.3",
 		"@sveltejs/vite-plugin-svelte": "^7.3.0",
