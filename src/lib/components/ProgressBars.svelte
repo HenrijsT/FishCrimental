@@ -1,6 +1,5 @@
 <script lang="ts">
-import { progressBar } from '$lib/functions_generic.js';
-
+	import { progressBar } from '$lib/functions_generic.js';
 </script>
 
 <!--	New progress bar-->
@@ -10,23 +9,24 @@ import { progressBar } from '$lib/functions_generic.js';
 </div>
 
 <style>
-    .inner, .outer{
-        width: 40px;
-        height: 20px;
-        border-radius: 10px;
-    }
-    /* Customize outer bar*/
-    .outer {
-        width: 90vw;
-        margin: 20px auto;
-        background-color: transparent;
-        border: 1px solid darkblue;
-    }
+	.inner,
+	.outer {
+		width: 40px;
+		height: 20px;
+		border-radius: 10px;
+	}
+	/* Customize outer bar*/
+	.outer {
+		width: 90vw;
+		margin: 20px auto;
+		background-color: transparent;
+		border: 1px solid darkblue;
+	}
 
-    /* Customize inner bar*/
-    .inner {
-        width: 0;
-				max-width: 100vw;
-        background-color: blue;
-    }
+	/* Customize inner bar*/
+	.inner {
+		width: 0;
+		max-width: 100vw;
+		background-color: blue;
+	}
 </style>
