@@ -29,6 +29,8 @@ import {
 	buyAutoFisherOffline,
 	buyBicycle,
 	buyBucket,
+	buyMapUpgrade,
+	mapCost,
 	holdRoom,
 	inTown,
 	runTrader,
@@ -620,6 +622,12 @@ export class Game {
 		return bought;
 	}
 
+	buyMap(): boolean {
+		const bought = buyMapUpgrade(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
 	upgradeBucket(): boolean {
 		const bought = buyBucket(this.state);
 		if (bought) this.#checkAchievements();
@@ -710,6 +718,8 @@ export class Game {
 	buyPearlUpgrade(id: Parameters<typeof buyPrestigeUpgrade>[1]): boolean {
 		return buyPrestigeUpgrade(this.state, id);
 	}
+
+	mapPrice = $derived(mapCost(this.state.mapLevel));
 
 	/** Highest level of each track anyone the player can reach will sell. */
 	ceilings = $derived(

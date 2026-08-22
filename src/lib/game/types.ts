@@ -72,6 +72,8 @@ export interface GameState {
 	/** How many traders have been past. Rotates what they carry. */
 	traderVisits: number;
 
+	/** How good the chart is. Level 0 is the one that came with the property. */
+	mapLevel: Decimal;
 	/** How big the bucket is. Level 0 is the one you started with. */
 	bucketLevel: Decimal;
 	/** Bought or fished up. Unlocks riding to town for the full price. */

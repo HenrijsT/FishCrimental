@@ -11,6 +11,7 @@
 	import Fishdex from '$lib/components/Fishdex.svelte';
 	import HarbourPanel from '$lib/components/HarbourPanel.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
+	import MapPanel from '$lib/components/MapPanel.svelte';
 	import ModalHost from '$lib/components/ModalHost.svelte';
 	import NextStep from '$lib/components/NextStep.svelte';
 	import PrestigePanel from '$lib/components/PrestigePanel.svelte';
@@ -124,6 +125,12 @@
 				{/if}
 
 				{#if active === 'water'}
+					<!-- The chart is the navigation; the list underneath is the detail.
+					     Two surfaces on purpose: the map gives the water a shape and a
+					     place, and the list carries the blocker reasons, cast times and
+					     values that an SVG cannot say well — and guarantees every source
+					     stays reachable by keyboard and by screen reader. -->
+					<MapPanel />
 					<SourcePicker />
 				{:else if active === 'shore'}
 					<ShorePanel />
