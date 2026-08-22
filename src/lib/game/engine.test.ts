@@ -271,6 +271,7 @@ describe('sources', () => {
 	it('unlock strictly in order', () => {
 		const state = fresh();
 		state.coins = D('1e30');
+		state.licences.inland = true;
 		expect(unlockSource(state, FishingSources.River)).toBe(false);
 		expect(unlockSource(state, FishingSources.Stream)).toBe(true);
 		expect(unlockSource(state, FishingSources.River)).toBe(true);

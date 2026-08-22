@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { game } from '$lib/game/state.svelte';
 	import { SOURCE_CONFIG, SOURCE_ORDER } from '$lib/game/config';
-	import { catchTable, nextLockedSource } from '$lib/game/engine';
+	import { catchTable, missingLicence, nextLockedSource, sourceBlocker } from '$lib/game/engine';
+	import { LICENCES, needsBoat } from '$lib/game/config';
 	import { sources } from '$lib/fishing_sources';
 	import { SCENES } from '$lib/game/scenes';
 	import Num from './Num.svelte';
@@ -25,13 +26,19 @@
 			{@const isNext = next === source}
 			{#if open || isNext}
 				{@const affordable = g.coins.gte(config.unlockCost)}
+				{@const licence = missingLicence(g, source)}
+				{@const blocker = sourceBlocker(g, source, game.modifiers)}
+				{@const usable = open && !blocker}
 				<li>
 					<button
 						class="source"
 						class:active={g.activeSource === source}
 						class:locked={!open}
-						aria-pressed={open ? g.activeSource === source : undefined}
-						disabled={!open && !affordable}
+						class:blocked={open && !!blocker}
+						aria-pressed={usable ? g.activeSource === source : undefined}
+						disabled={open
+							? !!blocker
+							: !affordable || !!licence || (needsBoat(source) && !g.boat.owned)}
 						onclick={() => (open ? game.setSource(source) : game.unlock(source))}
 					>
 						<SourceThumb {source} dimmed={!open} />
@@ -40,7 +47,11 @@
 								{sources[source].name}
 								{#if !open}<span class="tag">locked</span>{/if}
 							</span>
-							{#if open}
+							{#if open && blocker === 'fuel'}
+								<span class="stats warn">Tank empty — fuel up at the harbour</span>
+							{:else if open && blocker === 'boat'}
+								<span class="stats warn">Needs a boat</span>
+							{:else if open}
 								<span class="stats faint">
 									{game.modifiers.castSeconds[source].toFixed(2)}s a cast ·
 									<Num
@@ -48,6 +59,10 @@
 										tone="coin"
 									/> a fish
 								</span>
+							{:else if licence}
+								<span class="stats warn">Needs the {LICENCES[licence].name}</span>
+							{:else if needsBoat(source) && !g.boat.owned}
+								<span class="stats warn">Needs a boat</span>
 							{:else}
 								<span class="stats faint">
 									Opens for <Num value={config.unlockCost} tone="coin" /> ·
@@ -97,6 +112,15 @@
 
 	.source.locked {
 		border-style: dashed;
+	}
+
+	.source.blocked {
+		border-color: rgba(242, 105, 92, 0.5);
+	}
+
+	.warn {
+		font-size: 0.72rem;
+		color: var(--coral);
 	}
 
 	.text {

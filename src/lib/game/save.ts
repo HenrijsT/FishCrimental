@@ -4,6 +4,11 @@ import { FishingSources } from '$lib/fishing_sources';
 import { fishes } from '$lib/fishes';
 import Decimal from 'break_eternity.js';
 import {
+	BOAT_SOURCES,
+	BOAT_UPGRADES,
+	BOAT_UPGRADE_IDS,
+	LICENCES,
+	LICENCE_IDS,
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
 	SAVE_KEY,
@@ -11,11 +16,13 @@ import {
 	SOURCE_ORDER,
 	UPGRADES,
 	UPGRADE_IDS,
+	type BoatUpgradeId,
+	type LicenceId,
 	type PrestigeUpgradeId,
 	type UpgradeId
 } from './config';
 import { createInitialState } from './engine';
-import type { GameState } from './types';
+import type { BoatState, GameState } from './types';
 
 const EXPORT_PREFIX = 'FISHC';
 
@@ -68,8 +75,33 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 		hold: floorHold(data.hold),
 		dex: floorDex(data.dex),
 		version: 2
+	}),
+	// 2 → 3: licences and the boat. A run already in progress keeps the water it
+	// opened — the licences covering it are granted retroactively rather than
+	// taken away from a player mid-run, and a boat is handed over free if they
+	// had already unlocked open water.
+	2: (data) => ({
+		...data,
+		licences: grandfatherLicences(data.unlocked),
+		boat: grandfatherBoat(data.unlocked),
+		version: 3
 	})
 };
+
+function grandfatherLicences(unlocked: unknown): Raw {
+	const open = isRecord(unlocked) ? unlocked : {};
+	const granted: Raw = {};
+	for (const id of LICENCE_IDS) {
+		granted[id] = LICENCES[id].covers.some((source) => open[source] === true);
+	}
+	return granted;
+}
+
+function grandfatherBoat(unlocked: unknown): Raw {
+	const open = isRecord(unlocked) ? unlocked : {};
+	const hadOpenWater = BOAT_SOURCES.some((source) => open[source] === true);
+	return hadOpenWater ? { owned: true, fuel: '0', condition: 100, upgrades: {} } : {};
+}
 
 function floorHold(raw: unknown): Raw {
 	const source = isRecord(raw) ? raw : {};
@@ -219,6 +251,36 @@ function readUnlocked(raw: unknown, fallback: Record<FishingSources, boolean>) {
 	return unlocked;
 }
 
+function readLicences(raw: unknown): Record<LicenceId, boolean> {
+	const source = isRecord(raw) ? raw : {};
+	return LICENCE_IDS.reduce(
+		(acc, id) => {
+			acc[id] = bool(source[id], false);
+			return acc;
+		},
+		{} as Record<LicenceId, boolean>
+	);
+}
+
+function readBoat(raw: unknown): BoatState {
+	const source = isRecord(raw) ? raw : {};
+	const upgrades = isRecord(source.upgrades) ? source.upgrades : {};
+
+	return {
+		owned: bool(source.owned, false),
+		fuel: positive(source.fuel),
+		// Condition is a bounded dial; anything outside 0-100 is corruption.
+		condition: Math.max(0, Math.min(100, num(source.condition, 100))),
+		upgrades: BOAT_UPGRADE_IDS.reduce(
+			(acc, id) => {
+				acc[id] = level(upgrades[id], BOAT_UPGRADES[id].maxLevel);
+				return acc;
+			},
+			{} as Record<BoatUpgradeId, Decimal>
+		)
+	};
+}
+
 function readAchievements(raw: unknown): string[] {
 	if (!Array.isArray(raw)) return [];
 	return raw.filter((entry): entry is string => typeof entry === 'string');
@@ -262,6 +324,9 @@ export function fromRaw(data: Raw): GameState {
 
 		unlocked,
 		activeSource,
+
+		licences: readLicences(migrated.licences),
+		boat: readBoat(migrated.boat),
 
 		upgrades: readUpgrades(migrated.upgrades),
 		deckhands: readDeckhands(migrated.deckhands),

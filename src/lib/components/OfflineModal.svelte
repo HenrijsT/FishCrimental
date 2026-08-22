@@ -20,7 +20,17 @@
 		<ul class="lines">
 			<li><span>Fish landed</span><Num value={report.fish} /></li>
 			<li><span>Sold on the dock</span><Num value={report.coins} tone="coin" /></li>
+			{#if report.fuelSpent.gt(0)}
+				<li><span>Fuel, billed by the yard</span><Num value={report.fuelSpent} tone="coin" /></li>
+			{/if}
 		</ul>
+
+		{#if report.fellBack}
+			<p class="fell-back">
+				The boat ran out of fuel while you were away, so the crew worked inshore instead. They kept
+				earning — just not open-water money. Fuel up at the harbour.
+			</p>
+		{/if}
 		{#if report.seconds > MAX_OFFLINE_SECONDS}
 			<p class="faint small">
 				You were gone {formatDuration(report.seconds)}, but the crew only get paid for the first
@@ -47,5 +57,12 @@
 
 	.small {
 		font-size: 0.78rem;
+	}
+
+	.fell-back {
+		font-size: 0.8rem;
+		color: var(--coral);
+		border-left: 2px solid var(--coral);
+		padding-left: 0.6rem;
 	}
 </style>

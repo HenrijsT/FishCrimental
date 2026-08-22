@@ -6,16 +6,26 @@ import type { Fish } from '$lib/fishes/fish';
 import {
 	AUTOSAVE_MS,
 	MAX_OFFLINE_SECONDS,
+	OFFLINE_CHUNKS,
 	OFFLINE_EFFICIENCY,
 	SAVE_KEY,
 	SOURCE_CONFIG,
 	TICK_MS,
 	UPGRADES,
+	type BoatUpgradeId,
+	type LicenceId,
 	type UpgradeId
 } from './config';
 import {
 	accumulate,
 	affordableDeckhands,
+	buyBoat,
+	buyBoatUpgrade,
+	buyFuel,
+	buyLicence,
+	repairBoat,
+	reachableSource,
+	sourceBlocker,
 	affordableUpgradeLevels,
 	buyDeckhand,
 	buyPrestigeUpgrade,
@@ -93,6 +103,8 @@ class Game {
 
 	loaded = $state(false);
 	saveProblem = $state<SaveProblem | null>(null);
+	/** Set when the boat could not sail and the player was moved inshore. */
+	strandedFrom = $state<FishingSources | null>(null);
 
 	/** How many levels the buy buttons purchase at once. */
 	buyAmount = $state<BuyAmount>(1);
@@ -191,6 +203,7 @@ class Game {
 
 		this.state.playTime += elapsed;
 		accumulate(this.state, this.modifiers, elapsed);
+		this.#keepFishable();
 		this.#checkJokes();
 		this.#checkAchievements();
 	}
@@ -230,30 +243,70 @@ class Game {
 	// Offline
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Settle time away in a handful of chunks rather than one step.
+	 *
+	 * One step would be closed form, but the standing fuel order pays for fuel
+	 * out of coins, and coins only arrive when the catch is sold. Selling every
+	 * chunk lets the boat keep itself fuelled for the whole window. Twenty-four
+	 * chunks covers eight hours — it is not a per-cast simulation.
+	 */
 	#settleOffline(state: GameState): OfflineReport | null {
 		const seconds = (Date.now() - state.lastUpdate) / 1000;
 		if (!state.settings.offlineProgress || seconds < 30) return null;
 
 		const capped = Math.min(seconds, MAX_OFFLINE_SECONDS);
-		const modifiers = computeModifiers(state);
 
-		// Snapshot the hold — anything the crew landed while the tab was closed
-		// is sold on the dock rather than piling up in it.
+		// Snapshot the hold: everything the crew landed while you were away is
+		// sold on the dock rather than piling up in it.
 		const holdBefore = FISH_TYPES.map((type) => [type, state.hold[type]] as const);
 		const valueBefore = state.holdValue;
+		const coinsBefore = state.coins;
 
-		const { fish, value } = accumulate(state, modifiers, capped, OFFLINE_EFFICIENCY);
-		if (fish.lte(0)) return null;
+		let fish = d0();
+		let value = d0();
+		let fellBack = false;
+		let fuelSpent = d0();
 
+		const chunks = Math.max(1, Math.min(OFFLINE_CHUNKS, Math.ceil(capped / 60)));
+		const chunkSeconds = capped / chunks;
+
+		for (let i = 0; i < chunks; i++) {
+			const modifiers = computeModifiers(state);
+			const coinsAtChunkStart = state.coins;
+
+			const step = accumulate(state, modifiers, chunkSeconds, OFFLINE_EFFICIENCY);
+			fish = fish.plus(step.fish);
+			value = value.plus(step.value);
+			fellBack = fellBack || step.fellBack;
+
+			// runBoat may have spent coins on fuel through the standing order.
+			const spent = coinsAtChunkStart.minus(state.coins);
+			if (spent.gt(0)) fuelSpent = fuelSpent.plus(spent);
+
+			sellHold(state, modifiers);
+		}
+
+		if (fish.lte(0) && fuelSpent.lte(0)) {
+			for (const [type, amount] of holdBefore) state.hold[type] = amount;
+			state.holdValue = valueBefore;
+			return null;
+		}
+
+		// Put the hold back the way the player left it; the offline catch was sold.
 		for (const [type, amount] of holdBefore) state.hold[type] = amount;
 		state.holdValue = valueBefore;
 
-		const coins = value.times(modifiers.sellMultiplier);
-		state.coins = state.coins.plus(coins);
-		state.lifetimeCoins = state.lifetimeCoins.plus(coins);
-		state.allTimeCoins = state.allTimeCoins.plus(coins);
-
-		return { seconds, cappedSeconds: capped, fish, value, coins, autoSold: true };
+		return {
+			seconds,
+			cappedSeconds: capped,
+			fish,
+			value,
+			coins: state.coins.minus(coinsBefore),
+			autoSold: true,
+			fuelSpent,
+			fellBack
+		};
 	}
 
 	dismissOfflineReport(): void {
@@ -377,9 +430,39 @@ class Game {
 	}
 
 	setSource(source: FishingSources): void {
-		if (!this.state.unlocked[source]) return;
+		if (sourceBlocker(this.state, source, this.modifiers)) return;
 		this.endCast();
 		this.state.activeSource = source;
+	}
+
+	// -----------------------------------------------------------------------
+	// Paper and the boat
+	// -----------------------------------------------------------------------
+
+	takeLicence(id: LicenceId): boolean {
+		const bought = buyLicence(this.state, id);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
+	purchaseBoat(): boolean {
+		const bought = buyBoat(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
+	refuel(litres?: Decimal): Decimal {
+		return buyFuel(this.state, this.modifiers, litres);
+	}
+
+	repair(): boolean {
+		return repairBoat(this.state);
+	}
+
+	upgradeBoat(id: BoatUpgradeId): boolean {
+		const bought = buyBoatUpgrade(this.state, id);
+		if (bought) this.#checkAchievements();
+		return bought;
 	}
 
 	unlock(source: FishingSources): boolean {
@@ -424,6 +507,8 @@ class Game {
 		return buyPrestigeUpgrade(this.state, id);
 	}
 
+	boatBlocker = $derived(sourceBlocker(this.state, this.state.activeSource, this.modifiers));
+
 	prestige(): PrestigeResult | null {
 		const result = performPrestige(this.state);
 		if (result) {
@@ -446,6 +531,35 @@ class Game {
 	// -----------------------------------------------------------------------
 	// Achievements
 	// -----------------------------------------------------------------------
+
+	/**
+	 * If the water the player is standing over stops being workable — the tank
+	 * ran dry, mostly — move them to the deepest water they can still reach and
+	 * say so. Never leave the rod pointing at somewhere it cannot fish.
+	 */
+	#keepFishable(): void {
+		const stranded = this.strandedFrom;
+
+		// Clear the notice only once the water it is about is workable again —
+		// not on the next tick, which is what happens if you test the source the
+		// player was just moved to.
+		if (stranded && !sourceBlocker(this.state, stranded, this.modifiers)) {
+			this.strandedFrom = null;
+		}
+
+		if (!sourceBlocker(this.state, this.state.activeSource, this.modifiers)) return;
+
+		const fallback = reachableSource(this.state, this.modifiers);
+		if (fallback === this.state.activeSource) return;
+
+		this.strandedFrom = this.state.activeSource;
+		this.endCast();
+		this.state.activeSource = fallback;
+	}
+
+	dismissStranded(): void {
+		this.strandedFrom = null;
+	}
 
 	#checkAchievements(): void {
 		const unlocked = evaluateAchievements(this.state);

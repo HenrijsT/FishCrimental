@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import Decimal from 'break_eternity.js';
 import { simulatePrestigeChain, simulateRun } from './balance';
-import { PRESTIGE_THRESHOLD, SOURCE_CONFIG, SOURCE_ORDER, UPGRADES, UPGRADE_IDS } from './config';
+import {
+	LICENCE_IDS,
+	PRESTIGE_THRESHOLD,
+	SOURCE_CONFIG,
+	SOURCE_ORDER,
+	UPGRADES,
+	UPGRADE_IDS
+} from './config';
+import { FishingSources } from '$lib/fishing_sources';
 import { affordableUpgradeLevels, deckhandCost, upgradeBulkCost, upgradeCost } from './engine';
 import { D } from '$lib/decimal';
 
@@ -102,6 +110,24 @@ describe('first run pacing', () => {
 	it('lands the first prestige near 1e15 lifetime coins', () => {
 		expect(run.lifetimeCoins.gte(PRESTIGE_THRESHOLD)).toBe(true);
 		expect(run.lifetimeCoins.lt(new Decimal(PRESTIGE_THRESHOLD).times(10))).toBe(true);
+	});
+
+	it('takes every licence and buys a boat along the way', () => {
+		for (const id of LICENCE_IDS) {
+			expect(run.licencedAt[id], `${id} was never taken`).toBeDefined();
+		}
+		expect(run.boatAt, 'the boat was never bought').not.toBeNull();
+
+		// Paper before the water it covers, and a hull before open water.
+		expect(run.licencedAt.inland!).toBeLessThan(run.unlockedAt[FishingSources.Stream]!);
+		expect(run.licencedAt.coastal!).toBeLessThan(run.unlockedAt[FishingSources.Sea]!);
+		expect(run.boatAt!).toBeLessThan(run.unlockedAt[FishingSources.Offshore]!);
+	});
+
+	it('finishes with a boat that is fuelled and in one piece', () => {
+		expect(run.state.boat.owned).toBe(true);
+		expect(run.state.boat.condition).toBeGreaterThan(40);
+		expect(run.state.boat.fuel.gte(0)).toBe(true);
 	});
 
 	it('opens the sources one after another, spread across the run', () => {

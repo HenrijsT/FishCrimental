@@ -7,6 +7,7 @@
 	import CatchTicker from '$lib/components/CatchTicker.svelte';
 	import CrewPanel from '$lib/components/CrewPanel.svelte';
 	import Fishdex from '$lib/components/Fishdex.svelte';
+	import HarbourPanel from '$lib/components/HarbourPanel.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import LipfishModal from '$lib/components/LipfishModal.svelte';
 	import NextStep from '$lib/components/NextStep.svelte';
@@ -16,6 +17,7 @@
 	import SaveProblemBanner from '$lib/components/SaveProblemBanner.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import SourcePicker from '$lib/components/SourcePicker.svelte';
+	import StrandedBanner from '$lib/components/StrandedBanner.svelte';
 	import Tabs from '$lib/components/Tabs.svelte';
 	import Toasts from '$lib/components/Toasts.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
@@ -87,6 +89,7 @@
 <div class="shell" class:reduce-motion={game.state.settings.reduceMotion}>
 	<TopBar />
 	<SaveProblemBanner />
+	<StrandedBanner onnavigate={(tab) => selectTab(tab)} />
 	<NextStep onnavigate={(tab) => selectTab(tab)} />
 
 	<div class="grid">
@@ -111,6 +114,8 @@
 					<SourcePicker />
 				{:else if active === 'gear'}
 					<UpgradePanel />
+				{:else if active === 'harbour'}
+					<HarbourPanel />
 				{:else if active === 'crew'}
 					<CrewPanel />
 				{:else if active === 'dex'}

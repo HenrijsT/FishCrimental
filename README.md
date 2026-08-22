@@ -25,8 +25,14 @@ pnpm dev        # http://localhost:5173
    of them and they out-earn you — the game tells you the moment they do, and you can
    put the rod down.
 5. **Go deeper.** Pond → Stream → River → Lake → Lagoon → Sea → Offshore → Ocean. Each
-   one is slower to fish and pays far better, and each unlocks with coins.
-6. **Prestige.** Earn 1e15 coins in a single run with the Ocean open and cash the whole
+   one is slower to fish and pays far better. Coins are not the only gate: moving and
+   salt water need a **licence** (a chain of four, bought once each), and past the Sea
+   you need a **boat**.
+6. **Run the boat.** It burns fuel and wears down. Neither is a fail state — a worn
+   boat is slower but never stops, and an empty tank simply puts the crew back on the
+   nearest shore-accessible water until you fuel up. A Standing Fuel Order makes the
+   tank stop being something you think about, including while the game is closed.
+7. **Prestige.** Earn 1e15 coins in a single run with the Ocean open and cash the whole
    thing in for Pearls. Pearls are permanent: they multiply everything, and they buy a
    second upgrade tree that makes the next run dramatically shorter.
 
@@ -74,6 +80,8 @@ src/lib/
     state.svelte.ts     the single reactive store and the tick loop
     save.ts             versioned saves, migrations, export/import blob
     achievements.ts     17 records, one hidden
+    guide.ts            staged tab reveal and the one-next-action line
+    scenes.ts           the eight water palettes
     balance.ts          a greedy simulated player, used to tune the curves
   components/           the UI
 src/routes/+page.svelte the whole game
@@ -101,10 +109,11 @@ single calculation instead of a replay.
 constantly, unlock the next source when affordable, and always buy the cheapest thing
 available. `balance.test.ts` asserts against it, so the curves cannot silently drift.
 
-On the current numbers the first prestige takes about **2 h 18 m** of active play and
-lands at 1.00e15 lifetime coins; a mostly-idle player gets there in about 3 h 08 m. The
-second run takes an hour, the fourth under two minutes, and a sixth run over the same
-three-hour window reaches 1e45.
+On the current numbers the first prestige takes about **2 h 25 m** of active play and
+lands at 1.00e15 lifetime coins; a mostly-idle player gets there in about 3 h 30 m. The
+second run takes an hour, the fourth under a minute, and a sixth run over the same
+three-hour window reaches 1e55. Licences, the boat and its fuel are all bought by the
+simulated player, so the pacing figures include those sinks.
 
 ## Licence
 

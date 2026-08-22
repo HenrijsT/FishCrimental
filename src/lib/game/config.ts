@@ -37,7 +37,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 	},
 	[FishingSources.Stream]: {
 		order: 1,
-		unlockCost: 655,
+		unlockCost: 530,
 		castSeconds: 1.55,
 		valueMultiplier: 4.6,
 		deckhandBaseCost: 1480,
@@ -49,7 +49,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 	},
 	[FishingSources.River]: {
 		order: 2,
-		unlockCost: 17400,
+		unlockCost: 13900,
 		castSeconds: 2.05,
 		valueMultiplier: 13.4,
 		deckhandBaseCost: 38500,
@@ -63,7 +63,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 	},
 	[FishingSources.Lake]: {
 		order: 3,
-		unlockCost: 448000,
+		unlockCost: 356000,
 		castSeconds: 2.7,
 		valueMultiplier: 79,
 		deckhandBaseCost: 995000,
@@ -76,7 +76,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 	},
 	[FishingSources.Lagoon]: {
 		order: 4,
-		unlockCost: 11900000,
+		unlockCost: 9450000,
 		castSeconds: 3.55,
 		valueMultiplier: 308,
 		deckhandBaseCost: 25800000,
@@ -90,7 +90,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 	},
 	[FishingSources.Sea]: {
 		order: 5,
-		unlockCost: 304000000,
+		unlockCost: 244000000,
 		castSeconds: 4.65,
 		valueMultiplier: 84,
 		deckhandBaseCost: 670000000,
@@ -104,7 +104,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 	},
 	[FishingSources.Offshore]: {
 		order: 6,
-		unlockCost: 7900000000,
+		unlockCost: 6310000000,
 		castSeconds: 6.1,
 		valueMultiplier: 237,
 		deckhandBaseCost: 17400000000,
@@ -117,7 +117,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 	},
 	[FishingSources.Ocean]: {
 		order: 7,
-		unlockCost: 206000000000,
+		unlockCost: 164000000000,
 		castSeconds: 8,
 		valueMultiplier: 1010,
 		deckhandBaseCost: 450000000000,
@@ -190,7 +190,7 @@ export const UPGRADES: Record<UpgradeId, UpgradeConfig> = {
 		name: 'Market Contacts',
 		description: 'Buyers who actually pay what the catch is worth.',
 		baseCost: 128,
-		costGrowth: 3.71,
+		costGrowth: 3.62,
 		effect: 1.42,
 		maxLevel: 80,
 		format: (level) => `sale value ×${Math.pow(1.42, level).toFixed(2)}`
@@ -314,6 +314,176 @@ export const MAX_OFFLINE_SECONDS = 8 * 60 * 60;
 /** Offline deckhands are a little less productive than watched ones. */
 export const OFFLINE_EFFICIENCY = 0.75;
 
+/**
+ * Time away is settled in at most this many chunks, selling between each, so a
+ * standing fuel order has coins to spend across the whole window.
+ */
+export const OFFLINE_CHUNKS = 24;
+
 export const SAVE_KEY = 'fishcrimental.save';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const AUTOSAVE_MS = 10_000;
+
+// ---------------------------------------------------------------------------
+// Licences
+// ---------------------------------------------------------------------------
+
+export type LicenceId = 'inland' | 'lakes' | 'coastal' | 'deep';
+
+export interface LicenceConfig {
+	id: LicenceId;
+	name: string;
+	/** Sources this licence makes legal to fish. */
+	covers: FishingSources[];
+	cost: number;
+	/** Licences are a chain: each one is only issued to holders of the last. */
+	requires: LicenceId | null;
+	flavour: string;
+}
+
+/**
+ * A licence is bought once and is separate from the coin cost of the water
+ * itself, so opening a new source has two beats: qualify for it, then afford
+ * it. Chained rather than independent — a deep sea charter is not something
+ * you buy before you have ever held a rod.
+ */
+export const LICENCES: Record<LicenceId, LicenceConfig> = {
+	inland: {
+		id: 'inland',
+		name: 'Inland Angling Licence',
+		covers: [FishingSources.Stream, FishingSources.River],
+		cost: 360,
+		requires: null,
+		flavour:
+			'A stamped card and a set of rules about what you may keep. Everyone who fishes moving water has one.'
+	},
+	lakes: {
+		id: 'lakes',
+		name: 'Lake & Lagoon Permit',
+		covers: [FishingSources.Lake, FishingSources.Lagoon],
+		cost: 14_000,
+		requires: 'inland',
+		flavour:
+			'Standing water is managed water. The permit pays the wardens and buys you the right to a boat launch you do not yet own.'
+	},
+	coastal: {
+		id: 'coastal',
+		name: 'Coastal Waters Licence',
+		covers: [FishingSources.Sea, FishingSources.Offshore],
+		cost: 640_000,
+		requires: 'lakes',
+		flavour:
+			'Salt water is federal. This is the first piece of paper that took a fortnight and a signature that was not yours.'
+	},
+	deep: {
+		id: 'deep',
+		name: 'Deep Sea Charter',
+		covers: [FishingSources.Ocean],
+		cost: 38_000_000,
+		requires: 'coastal',
+		flavour:
+			'A charter, not a licence — it names your vessel and the water it may work. Framed, usually, by people who hold one.'
+	}
+};
+
+export const LICENCE_IDS = Object.keys(LICENCES) as LicenceId[];
+
+/** Which licence, if any, a source needs. The Pond needs none. */
+export const SOURCE_LICENCE: Partial<Record<FishingSources, LicenceId>> = LICENCE_IDS.reduce(
+	(acc, id) => {
+		for (const source of LICENCES[id].covers) acc[source] = id;
+		return acc;
+	},
+	{} as Partial<Record<FishingSources, LicenceId>>
+);
+
+// ---------------------------------------------------------------------------
+// The boat
+// ---------------------------------------------------------------------------
+
+/**
+ * Open water needs a vessel. The Sea is the last water you can work from the
+ * shore and a pier; past that you need a hull under you.
+ */
+export const BOAT_SOURCES: FishingSources[] = [FishingSources.Offshore, FishingSources.Ocean];
+
+export function needsBoat(source: FishingSources): boolean {
+	return BOAT_SOURCES.includes(source);
+}
+
+export const BOAT_COST = 1_950_000;
+
+/** Litres. */
+export const BOAT_BASE_FUEL_CAPACITY = 400;
+export const BOAT_BASE_FUEL_PER_CAST = 0.85;
+export const FUEL_PRICE = 5_400;
+
+/** Condition points, 0–100. */
+export const BOAT_BASE_WEAR_PER_CAST = 0.006;
+/** Coins to restore one point of condition. */
+export const REPAIR_COST_PER_POINT = 74_000;
+/**
+ * A neglected boat is slow, never dead. At zero condition it still works at
+ * this fraction of full speed — the brief is explicit that neither fuel nor
+ * condition may become a fail state.
+ */
+export const BOAT_MIN_EFFICIENCY = 0.4;
+
+export type BoatUpgradeId = 'hull' | 'engine' | 'tank' | 'order';
+
+export interface BoatUpgradeConfig {
+	id: BoatUpgradeId;
+	name: string;
+	description: string;
+	baseCost: number;
+	costGrowth: number;
+	effect: number;
+	maxLevel: number;
+	format: (level: number) => string;
+}
+
+export const BOAT_UPGRADES: Record<BoatUpgradeId, BoatUpgradeConfig> = {
+	hull: {
+		id: 'hull',
+		name: 'Reinforced Hull',
+		description: 'The sea takes less out of the boat on every trip.',
+		baseCost: 3_100_000,
+		costGrowth: 3.3,
+		effect: 0.72,
+		maxLevel: 15,
+		format: (level) => `wear ×${Math.pow(0.72, level).toFixed(3)}`
+	},
+	engine: {
+		id: 'engine',
+		name: 'Efficient Engine',
+		description: 'Same trip, less fuel burned getting there.',
+		baseCost: 4_600_000,
+		costGrowth: 3.5,
+		effect: 0.74,
+		maxLevel: 15,
+		format: (level) => `fuel use ×${Math.pow(0.74, level).toFixed(3)}`
+	},
+	tank: {
+		id: 'tank',
+		name: 'Larger Tank',
+		description: 'Stay out longer between fuel stops.',
+		baseCost: 2_700_000,
+		costGrowth: 3.0,
+		effect: 1.85,
+		maxLevel: 18,
+		format: (level) => `${Math.round(BOAT_BASE_FUEL_CAPACITY * Math.pow(1.85, level))} litres`
+	},
+	order: {
+		id: 'order',
+		name: 'Standing Fuel Order',
+		description:
+			'The yard delivers whatever the trip needs and bills you for it, including while the game is closed. The tank stops being something you think about.',
+		baseCost: 9_800_000,
+		costGrowth: 1,
+		effect: 1,
+		maxLevel: 1,
+		format: (level) => (level > 0 ? 'the tank looks after itself' : 'not arranged')
+	}
+};
+
+export const BOAT_UPGRADE_IDS = Object.keys(BOAT_UPGRADES) as BoatUpgradeId[];

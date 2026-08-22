@@ -2,20 +2,33 @@ import Decimal from 'break_eternity.js';
 import { d0 } from '$lib/decimal';
 import type { FishingSources } from '$lib/fishing_sources';
 import {
+	BOAT_COST,
+	BOAT_UPGRADES,
+	BOAT_UPGRADE_IDS,
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
-	SOURCE_CONFIG,
+	needsBoat,
 	SOURCE_ORDER,
 	UPGRADES,
 	UPGRADE_IDS,
+	type LicenceId,
 	type PrestigeUpgradeId,
 	type UpgradeId
 } from './config';
 import {
 	accumulate,
+	buyBoat,
+	buyBoatUpgrade,
 	buyDeckhand,
-	buyPrestigeUpgrade,
-	buyUpgrade,
+	buyFuel,
+	buyLicence,
+	boatUpgradeCost,
+	canBuyLicence,
+	canUnlock,
+	hasStandingOrder,
+	nextLicence,
+	repairBoat,
+	repairCost,
 	canPrestige,
 	computeModifiers,
 	createInitialState,
@@ -23,13 +36,15 @@ import {
 	catchTable,
 	nextLockedSource,
 	performPrestige,
+	buyPrestigeUpgrade,
+	buyUpgrade,
 	prestigeUpgradeCost,
 	sellHold,
 	totalIncomePerSecond,
 	unlockSource,
 	upgradeCost
 } from './engine';
-import type { GameState } from './types';
+import type { GameState, Modifiers } from './types';
 
 export interface SimulationResult {
 	/** Seconds of simulated play before the first prestige became available. */
@@ -40,6 +55,30 @@ export interface SimulationResult {
 	unlockedAt: Partial<Record<FishingSources, number>>;
 	/** Second at which the crew started out-earning the player holding the rod. */
 	idleCrossoverAt: number | null;
+	/** Second the boat was bought, if it was. */
+	boatAt: number | null;
+	/** Second each licence was taken. */
+	licencedAt: Partial<Record<LicenceId, number>>;
+}
+
+/**
+ * What a competent player does without thinking: fuel up, arrange a standing
+ * order once it pays for itself, and repair before the boat gets slow.
+ */
+function keepBoatWorking(state: GameState, modifiers: Modifiers): void {
+	if (!state.boat.owned) return;
+
+	if (!hasStandingOrder(state) && state.coins.gte(boatUpgradeCost('order', 0).times(2.5))) {
+		buyBoatUpgrade(state, 'order');
+	}
+
+	if (state.boat.fuel.lt(modifiers.fuelCapacity.times(0.35))) {
+		buyFuel(state, modifiers);
+	}
+
+	if (state.boat.condition < 65 && state.coins.gte(repairCost(state).times(2.5))) {
+		repairBoat(state);
+	}
 }
 
 export interface SimulationOptions {
@@ -101,6 +140,8 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 	let elapsed = 0;
 	let secondsToPrestige: number | null = null;
 	let idleCrossoverAt: number | null = null;
+	let boatAt: number | null = null;
+	const licencedAt: Partial<Record<LicenceId, number>> = {};
 
 	while (elapsed < maxSeconds) {
 		const modifiers = computeModifiers(state);
@@ -121,8 +162,23 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 
 		elapsed += step;
 
+		// Gates first: paper, then a hull, then the water itself.
+		const licence = nextLicence(state);
+		if (licence && canBuyLicence(state, licence)) {
+			buyLicence(state, licence);
+			licencedAt[licence] = elapsed;
+		}
+
 		const next = nextLockedSource(state);
-		if (next && state.coins.gte(SOURCE_CONFIG[next].unlockCost)) {
+
+		if (next && needsBoat(next) && !state.boat.owned && state.coins.gte(BOAT_COST)) {
+			buyBoat(state);
+			boatAt = elapsed;
+		}
+
+		keepBoatWorking(state, modifiers);
+
+		if (next && canUnlock(state, next)) {
 			unlockSource(state, next);
 			unlockedAt[next] = elapsed;
 		}
@@ -145,7 +201,9 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 		lifetimeCoins: state.lifetimeCoins,
 		state,
 		unlockedAt,
-		idleCrossoverAt
+		idleCrossoverAt,
+		boatAt,
+		licencedAt
 	};
 }
 
@@ -165,6 +223,13 @@ function cheapestPurchase(state: GameState): Purchase | null {
 	for (const source of SOURCE_ORDER) {
 		if (!state.unlocked[source]) continue;
 		consider(deckhandCost(source, state.deckhands[source]), () => buyDeckhand(state, source, 1));
+	}
+
+	if (state.boat.owned) {
+		for (const id of BOAT_UPGRADE_IDS) {
+			if (state.boat.upgrades[id].gte(BOAT_UPGRADES[id].maxLevel)) continue;
+			consider(boatUpgradeCost(id, state.boat.upgrades[id]), () => buyBoatUpgrade(state, id));
+		}
 	}
 
 	return best;

@@ -37,6 +37,7 @@ describe('the core loop', () => {
 		let roll = 0;
 		const rng = () => ((roll = (roll + 0.37) % 1), roll);
 
+		state.licences.inland = false;
 		// Fish the Pond until the Stream is affordable.
 		for (let cast = 0; cast < 4000; cast++) {
 			performCast(state, FishingSources.Pond, computeModifiers(state), rng);
@@ -50,6 +51,9 @@ describe('the core loop', () => {
 		expect(holdCount(state).eq(0)).toBe(true);
 
 		expect(nextLockedSource(state)).toBe(FishingSources.Stream);
+		// Moving water needs paper as well as money.
+		expect(canUnlock(state, FishingSources.Stream)).toBe(false);
+		state.licences.inland = true;
 		expect(canUnlock(state, FishingSources.Stream)).toBe(true);
 		expect(unlockSource(state, FishingSources.Stream)).toBe(true);
 		expect(state.activeSource).toBe(FishingSources.Stream);
@@ -60,6 +64,9 @@ describe('the core loop', () => {
 		const shallow = createInitialState();
 		const deep = createInitialState();
 		deep.unlocked[FishingSources.Ocean] = true;
+		deep.licences.deep = true;
+		deep.boat.owned = true;
+		deep.boat.fuel = D(1e6);
 
 		const rng = () => 0.5;
 		for (let i = 0; i < 50; i++) {

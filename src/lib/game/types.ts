@@ -1,7 +1,19 @@
 import type Decimal from 'break_eternity.js';
 import type { FishType } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
-import type { PrestigeUpgradeId, UpgradeId } from './config';
+import type { BoatUpgradeId, LicenceId, PrestigeUpgradeId, UpgradeId } from './config';
+
+export interface BoatState {
+	owned: boolean;
+	/** Litres in the tank. */
+	fuel: Decimal;
+	/**
+	 * 0–100. A UI dial rather than a game quantity, so a plain number is right:
+	 * it is bounded, it never compounds, and it is never spent.
+	 */
+	condition: number;
+	upgrades: Record<BoatUpgradeId, Decimal>;
+}
 
 export interface GameSettings {
 	/** Accumulate earnings while the tab is closed. */
@@ -42,6 +54,10 @@ export interface GameState {
 	unlocked: Record<FishingSources, boolean>;
 	activeSource: FishingSources;
 
+	/** Paper. Bought once, kept for the run. */
+	licences: Record<LicenceId, boolean>;
+	boat: BoatState;
+
 	upgrades: Record<UpgradeId, Decimal>;
 	deckhands: Record<FishingSources, Decimal>;
 
@@ -78,6 +94,14 @@ export interface Modifiers {
 	sellMultiplier: Decimal;
 	/** Casts per second contributed by a single deckhand, per source. */
 	deckhandCastsPerSecond: Record<FishingSources, number>;
+	/** Litres burned per cast in open water. */
+	fuelPerCast: Decimal;
+	/** Condition points lost per cast in open water. */
+	wearPerCast: number;
+	/** Tank size in litres. */
+	fuelCapacity: Decimal;
+	/** 0.4–1: how hard the boat is willing to work at its current condition. */
+	boatEfficiency: number;
 	/** The permanent Pearl bonus, applied to both catch size and sale value. */
 	pearlMultiplier: Decimal;
 }
@@ -95,4 +119,8 @@ export interface OfflineReport {
 	value: Decimal;
 	coins: Decimal;
 	autoSold: boolean;
+	/** Coins spent on fuel by the standing order while you were away. */
+	fuelSpent: Decimal;
+	/** True if the boat ran dry and the crew worked inshore instead. */
+	fellBack: boolean;
 }
