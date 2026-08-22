@@ -13,6 +13,7 @@ import {
 	PRESTIGE_UPGRADE_IDS,
 	AUTO_FISHER,
 	BUCKET_MAX_LEVEL,
+	MAP_MAX_LEVEL,
 	SAVE_BACKUP_KEY,
 	TOWN_TRIP_SECONDS,
 	TRADER_PERIOD_SECONDS,
@@ -124,6 +125,7 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 		fishingBlockedUntil: 0,
 		nextTraderAt: 0,
 		traderVisits: 0,
+		mapLevel: '0',
 		version: 5
 	})
 };
@@ -378,6 +380,7 @@ export function fromRaw(data: Raw): GameState {
 		// trader ever arriving again.
 		nextTraderAt: clampTraderDeadline(migrated.nextTraderAt),
 		traderVisits: Math.max(0, Math.floor(num(migrated.traderVisits, 0))),
+		mapLevel: level(migrated.mapLevel, MAP_MAX_LEVEL),
 		bucketLevel: level(migrated.bucketLevel, BUCKET_MAX_LEVEL),
 		hasBicycle: bool(migrated.hasBicycle, false),
 		// Clamped, not just parsed. `num()` only checks finiteness, so a

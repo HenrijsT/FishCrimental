@@ -581,6 +581,34 @@ export const SOURCE_LICENCE: Partial<Record<FishingSources, LicenceId>> = LICENC
 );
 
 // ---------------------------------------------------------------------------
+// The chart
+// ---------------------------------------------------------------------------
+
+/**
+ * The map you fish from.
+ *
+ * The first one is wrong. Not missing detail — actively wrong: places sit off
+ * where they really are, and the paper runs out before the water does. Buying a
+ * better chart does two things and neither of them is "show more fish": places
+ * settle closer to their true positions, and the edge of the paper moves out so
+ * rumours of somewhere further along become visible.
+ *
+ * Upgrading a map changes the odds and the clarity, never the contents. It is
+ * also never allowed to lie about what anything is *worth* — position is fair
+ * game, value is not, because a shadow catch table read by half the UI is a
+ * permanent "which table am I looking at" hazard.
+ */
+export const MAP_BASE_COST = 240;
+export const MAP_COST_GROWTH = 4.2;
+export const MAP_MAX_LEVEL = 6;
+
+/** How far off a place can be drawn on the worst chart, in 0-1 of the paper. */
+export const MAP_BASE_ERROR = 0.085;
+
+/** Locked places visible beyond the deepest one open, at level 0. */
+export const MAP_BASE_SIGHT = 1;
+
+// ---------------------------------------------------------------------------
 // The boat
 // ---------------------------------------------------------------------------
 

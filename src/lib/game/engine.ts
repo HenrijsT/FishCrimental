@@ -50,6 +50,11 @@ import {
 	PEARL_MULTIPLIER_SCALE,
 	PRESTIGE_THRESHOLD,
 	PRESTIGE_UPGRADES,
+	MAP_BASE_COST,
+	MAP_BASE_ERROR,
+	MAP_BASE_SIGHT,
+	MAP_COST_GROWTH,
+	MAP_MAX_LEVEL,
 	SHOPKEEPER_REACH,
 	PRESTIGE_UPGRADE_IDS,
 	SAVE_VERSION,
@@ -1153,6 +1158,81 @@ export function townSecondsLeft(state: GameState, now = Date.now()): number {
 }
 
 // ---------------------------------------------------------------------------
+// The chart
+// ---------------------------------------------------------------------------
+
+export function mapCost(level: Decimal | number): Decimal {
+	return D(MAP_BASE_COST).times(D(MAP_COST_GROWTH).pow(level));
+}
+
+/** 0 on the worst chart, 1 on the best. */
+export function mapAccuracy(level: Decimal | number): number {
+	const n = typeof level === 'number' ? level : level.toNumber();
+	return Math.min(1, Math.max(0, n / MAP_MAX_LEVEL));
+}
+
+/** How far a place can be drawn from where it really is. */
+export function mapError(level: Decimal | number): number {
+	return MAP_BASE_ERROR * (1 - mapAccuracy(level));
+}
+
+/** How many locked places are drawn beyond the deepest one open. */
+export function mapSight(level: Decimal | number): number {
+	const n = typeof level === 'number' ? level : level.toNumber();
+	return MAP_BASE_SIGHT + Math.floor(n);
+}
+
+/**
+ * How far this place is drawn from where it actually is.
+ *
+ * Derived from `startedAt`, which survives prestige, so a chart is wrong in the
+ * same way every time you look at it instead of reshuffling on every render.
+ * A map you cannot learn is not a map.
+ */
+export function mapOffset(
+	source: FishingSources,
+	startedAt: number,
+	level: Decimal | number
+): { dx: number; dy: number } {
+	const error = mapError(level);
+	if (error <= 0) return { dx: 0, dy: 0 };
+
+	// A cheap deterministic hash of the save's birthday and the place's name.
+	let hash = Math.floor(startedAt / 1000) >>> 0;
+	for (let i = 0; i < source.length; i++) hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+
+	const angle = ((hash % 1000) / 1000) * Math.PI * 2;
+	const radius = (((hash >>> 10) % 1000) / 1000) * error;
+	return { dx: Math.cos(angle) * radius, dy: Math.sin(angle) * radius };
+}
+
+/**
+ * Which places the chart draws.
+ *
+ * Everything already unlocked, always — hiding somewhere the player owns would
+ * strand them if the map is their only way to move — plus the next few locked
+ * ones, as far as the paper reaches.
+ */
+export function chartedSources(state: GameState): FishingSources[] {
+	const deepest = deepestOpenIndex(state);
+	const sight = mapSight(state.mapLevel);
+
+	return SOURCE_ORDER.filter((source, index) => state.unlocked[source] || index <= deepest + sight);
+}
+
+export function buyMapUpgrade(state: GameState): boolean {
+	const level = state.mapLevel;
+	if (level.gte(MAP_MAX_LEVEL)) return false;
+
+	const cost = mapCost(level);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	state.mapLevel = level.plus(1);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // The trader
 // ---------------------------------------------------------------------------
 
@@ -1563,6 +1643,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		// purchase goes on a reset.
 		nextTraderAt: 0,
 		traderVisits: 0,
+		mapLevel: d0(),
 		bucketLevel: d0(),
 		hasBicycle: false,
 		fishingBlockedUntil: 0,
