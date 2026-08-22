@@ -321,6 +321,11 @@ export const OFFLINE_EFFICIENCY = 0.75;
 export const OFFLINE_CHUNKS = 24;
 
 export const SAVE_KEY = 'fishcrimental.save';
+/**
+ * Where a save this build refuses to overwrite is copied before the player
+ * dismisses the banner protecting it.
+ */
+export const SAVE_BACKUP_KEY = `${SAVE_KEY}.bak`;
 export const SAVE_VERSION = 3;
 export const AUTOSAVE_MS = 10_000;
 

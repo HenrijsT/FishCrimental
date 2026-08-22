@@ -48,7 +48,15 @@ import {
 	type Rarity
 } from './engine';
 import { evaluateAchievements } from './achievements';
-import { exportSave, importSave, loadFromStorage, saveToStorage } from './save';
+import {
+	backupRawSave,
+	exportRawSave,
+	exportSave,
+	importSave,
+	loadFromStorage,
+	readRawSave,
+	saveToStorage
+} from './save';
 import type { GameState, Modifiers, OfflineReport } from './types';
 
 /**
@@ -58,9 +66,19 @@ import type { GameState, Modifiers, OfflineReport } from './types';
 const RESUME_THRESHOLD_SECONDS = 120;
 
 export interface SaveProblem {
-	kind: 'future' | 'corrupt' | 'conflict';
+	kind: 'future' | 'corrupt' | 'conflict' | 'write-failed';
 	message: string;
 }
+
+/**
+ * Problems that must stop the game writing over what is on disk.
+ *
+ * A conflict is deliberately not one of them. Muting the tab that *receives*
+ * a foreign write mutes the tab the player is looking at — a plain tab switch
+ * is enough to trigger it — and it threw away everything they then did. Saying
+ * so and carrying on is last-writer-wins, which is where the game already was.
+ */
+const BLOCKING_SAVE_PROBLEMS: ReadonlySet<SaveProblem['kind']> = new Set(['future', 'corrupt']);
 
 export type BuyAmount = 1 | 10 | 25 | 'max';
 
@@ -79,8 +97,12 @@ export interface CastFeedback {
  *
  * Everything reactive hangs off `state`; `modifiers` is derived from it and
  * recomputed only when something it reads actually changes.
+ *
+ * Exported as a class as well as a singleton so the lifecycle — offline
+ * settlement, the multi-tab guard, save orchestration — can be tested on a
+ * throwaway instance instead of only in a browser.
  */
-class Game {
+export class Game {
 	state = $state<GameState>(createInitialState());
 
 	/** 0 → 1 progress of the cast currently in the water. */
@@ -123,6 +145,8 @@ class Game {
 	#frameHandle: number | undefined;
 	#castStartedAt = 0;
 	#feedbackId = 0;
+	/** The unparsed save this build refused to read, kept so it can be rescued. */
+	#preservedSave: string | null = null;
 
 	// -----------------------------------------------------------------------
 	// Lifecycle
@@ -141,11 +165,13 @@ class Game {
 			// mutating the raw object afterwards would bypass reactivity.
 			this.offlineReport = this.#settleOffline(this.state);
 		} else if (outcome.kind === 'future') {
+			this.#preservedSave = readRawSave();
 			this.saveProblem = {
 				kind: 'future',
 				message: `This save was written by a newer version of FishCrimental (save format ${outcome.version}). It has been left untouched — update the game, or export it and start fresh.`
 			};
 		} else if (outcome.kind === 'corrupt') {
+			this.#preservedSave = readRawSave();
 			this.saveProblem = {
 				kind: 'corrupt',
 				message:
@@ -161,21 +187,25 @@ class Game {
 
 	/**
 	 * Two tabs on one save clobber each other: both autosave, and the last
-	 * writer wins. When another tab writes, this one stops saving and says so
-	 * rather than quietly overwriting whichever tab the player is actually
-	 * using.
+	 * writer wins. Warn about it — and keep saving.
+	 *
+	 * The `storage` event fires in the tab that did *not* write, so reacting to
+	 * it by muting saves silences the wrong tab. Switching tabs is enough to
+	 * trigger it, because the tab being left saves on `visibilitychange`; a
+	 * throttled background tab does it unaided. The tab the player is actually
+	 * using would then discard its whole session.
 	 */
 	#watchOtherTabs(): void {
 		if (typeof window === 'undefined') return;
 
 		window.addEventListener('storage', (event) => {
 			if (event.key !== SAVE_KEY || event.newValue === null) return;
-			if (this.saveProblem?.kind === 'conflict') return;
+			if (this.saveProblem) return;
 
 			this.saveProblem = {
 				kind: 'conflict',
 				message:
-					'FishCrimental is open in another tab, which is now the one being saved. This tab has stopped saving so it cannot overwrite it. Reload to pick up where the other tab is.'
+					'FishCrimental is open in another tab. Both tabs save to the same browser storage, so whichever writes last wins and the other one loses whatever it did. Close one of them — and take a backup first if you are not sure which is ahead.'
 			};
 		});
 	}
@@ -227,15 +257,42 @@ class Game {
 	}
 
 	save(): boolean {
-		// Refusing to write is the whole point of the save-problem states: a
-		// save this build could not read must not be replaced by one it made up.
-		if (this.saveProblem) return false;
+		// Refusing to write is the whole point of the blocking states: a save
+		// this build could not read must not be replaced by one it made up.
+		if (this.saveProblem && BLOCKING_SAVE_PROBLEMS.has(this.saveProblem.kind)) return false;
 
 		this.state.lastUpdate = Date.now();
-		return saveToStorage(this.state);
+		const written = saveToStorage(this.state);
+
+		// A refused write used to be swallowed by every caller alike — the
+		// autosave, the pagehide handler and the Save now button — while the
+		// panel underneath went on claiming the game saves every ten seconds.
+		if (!written) {
+			if (this.saveProblem?.kind !== 'write-failed') {
+				this.saveProblem = {
+					kind: 'write-failed',
+					message:
+						'This browser refused to store the save — usually a full quota, or storage blocked for this site. The game is still running, but nothing since the last successful save would survive a reload. Export a backup from Settings.'
+				};
+			}
+			return false;
+		}
+
+		if (this.saveProblem?.kind === 'write-failed') this.saveProblem = null;
+		return true;
 	}
 
 	dismissSaveProblem(): void {
+		const problem = this.saveProblem;
+		if (!problem) return;
+
+		// Dismissing re-arms the ten-second autosave, which is about to write
+		// the fresh game over the save the banner exists to protect. Copy it
+		// aside first, so Dismiss stops being a one-click total loss.
+		if (BLOCKING_SAVE_PROBLEMS.has(problem.kind) && this.#preservedSave !== null) {
+			backupRawSave(this.#preservedSave);
+		}
+
 		this.saveProblem = null;
 	}
 
@@ -257,11 +314,21 @@ class Game {
 
 		const capped = Math.min(seconds, MAX_OFFLINE_SECONDS);
 
-		// Snapshot the hold: everything the crew landed while you were away is
-		// sold on the dock rather than piling up in it.
+		// Take the hold out of play before settling, not after.
+		//
+		// `sellHold` inside the loop is there to fund the standing fuel order
+		// out of the offline catch. It used to sell the fish the player already
+		// had along with it, and the restore below put those fish back without
+		// ever rolling back the coins — paying for the hold and handing it back,
+		// on every reload more than thirty seconds after the last save, and
+		// silently when there were no deckhands. It inflated `lifetimeCoins`
+		// too, minting Pearls out of nothing.
 		const holdBefore = FISH_TYPES.map((type) => [type, state.hold[type]] as const);
 		const valueBefore = state.holdValue;
 		const coinsBefore = state.coins;
+
+		for (const type of FISH_TYPES) state.hold[type] = d0();
+		state.holdValue = d0();
 
 		let fish = d0();
 		let value = d0();
@@ -293,7 +360,8 @@ class Game {
 			return null;
 		}
 
-		// Put the hold back the way the player left it; the offline catch was sold.
+		// Put the hold back the way the player left it; only the offline catch
+		// was sold.
 		for (const [type, amount] of holdBefore) state.hold[type] = amount;
 		state.holdValue = valueBefore;
 
@@ -356,11 +424,13 @@ class Game {
 		const source = this.state.activeSource;
 		const valueMultiplier = SOURCE_CONFIG[source].valueMultiplier;
 
-		const known = new Set(
-			Object.entries(this.state.dex)
-				.filter(([, count]) => count.gte(1))
-				.map(([name]) => name)
-		);
+		// Which species were already in the dex before this cast, so a first
+		// sighting can be told apart from the thousandth. A plain record rather
+		// than a Set: this is a frozen lookup, not reactive state.
+		const known: Record<string, true> = {};
+		for (const [name, count] of Object.entries(this.state.dex)) {
+			if (count.gte(1)) known[name] = true;
+		}
 
 		const { caught } = performCast(this.state, source, this.modifiers);
 
@@ -380,7 +450,7 @@ class Game {
 				rarity: rarityAt(source, this.modifiers.luck, fish.name)
 			});
 
-			if (!known.has(fish.name) && this.state.dex[fish.name]?.gte(1)) fresh.push(fish);
+			if (!known[fish.name] && this.state.dex[fish.name]?.gte(1)) fresh.push(fish);
 		}
 
 		if (feedback.length) {
@@ -579,6 +649,14 @@ class Game {
 	// -----------------------------------------------------------------------
 
 	exportBlob(): string {
+		// While a blocking save problem stands, `this.state` is the blank game
+		// that was started in the save's place. Exporting that is exactly the
+		// wrong thing: the banner tells the player to export and start fresh,
+		// and the only copy worth keeping is the one on disk.
+		if (this.#preservedSave !== null && this.saveProblem) {
+			return exportRawSave(this.#preservedSave);
+		}
+
 		this.state.lastUpdate = Date.now();
 		return exportSave(this.state);
 	}

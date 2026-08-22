@@ -1,20 +1,40 @@
 <script lang="ts">
+	import { nextTabIndex, type TabId } from '$lib/game/guide';
+
 	interface Tab {
-		id: string;
+		id: TabId;
 		label: string;
 		badge?: string;
 	}
 
 	interface Props {
 		tabs: Tab[];
-		active: string;
-		onselect: (id: string) => void;
+		active: TabId;
+		onselect: (id: TabId) => void;
 	}
 
 	let { tabs, active, onselect }: Props = $props();
+
+	let strip: HTMLDivElement | undefined = $state();
+
+	/**
+	 * Only the selected tab is in the tab order, which is the standard pattern —
+	 * and it only works if the arrows move between them. Without this the other
+	 * seven tabs could not be reached from the keyboard at all.
+	 */
+	function onkeydown(event: KeyboardEvent) {
+		const index = tabs.findIndex((tab) => tab.id === active);
+		const next = nextTabIndex(event.key, index, tabs.length);
+		if (next === null) return;
+
+		event.preventDefault();
+		const id = tabs[next].id;
+		onselect(id);
+		strip?.querySelector<HTMLButtonElement>(`#tab-${id}`)?.focus();
+	}
 </script>
 
-<div class="tabs" role="tablist" aria-label="Game sections">
+<div class="tabs" role="tablist" aria-label="Game sections" bind:this={strip}>
 	{#each tabs as tab (tab.id)}
 		<button
 			role="tab"
@@ -24,6 +44,7 @@
 			tabindex={active === tab.id ? 0 : -1}
 			class:active={active === tab.id}
 			onclick={() => onselect(tab.id)}
+			{onkeydown}
 		>
 			{tab.label}
 			{#if tab.badge}<span class="badge">{tab.badge}</span>{/if}
