@@ -1964,3 +1964,330 @@ the first thing to drop.
    defect lived in the one layer with no tests; this is the start of closing
    that.
 5. **The licensing section of this file**, if a Steam release is still the plan.
+
+# FOURTH PASS
+
+Brief: `Goals/promt_goals/FOURTH_GOAL.md`. Authority: `Goals/ANSWERS.md` — the
+owner's own decisions, which override `PLAN.md` wherever they disagree.
+
+**The rule that governed the whole pass: build only what the owner has
+answered.** `ANSWERS.md` is answered down to and including §4D, plus Q2 and Q5.
+Everything after §4D — police fines, knowledge profit, the fish market, the
+one-time beats, layer implementation, and the N1 minigame licences — was left
+untouched. `ideas.txt` was treated as closed.
+
+---
+
+## Stage 0 — Foundations
+
+Branch `fix/foundations`, merged `--no-ff` as `0d8b905`.
+
+### One modal host
+
+`OfflineModal`, `PrestigeModal` and `LipfishModal` were siblings in
+`+page.svelte`, each rendering its own `Modal.svelte`, each mounting its own
+`<svelte:window onkeydown>`. One Escape therefore closed every open dialog — and
+the audit had reproduced the collision with a _natural_ save: a nine-hour gap
+with a crew and no lipfish in the dex raises both at once, and the payment
+report for eight hours of work went with the keystroke.
+
+`game.activeModal` now picks exactly one, in a declared `MODAL_ORDER`, and
+`ModalHost` renders only that. The rest queue behind it. **Offline is first**
+because it is the only one carrying information the player cannot get back; the
+two joke reveals persist until dismissed and can wait.
+
+`Modal.svelte` gained the three things it had been claiming with `aria-modal`
+and did not have:
+
+- **A Tab focus trap.** The second Tab press previously reached a toast button
+  painted _behind_ the backdrop — toasts sit at `z-index: 15`, the backdrop at 20.
+- **Focus restore.** `activeElement` used to end up on `BODY`, dropping a
+  keyboard user at the top of the page with no idea where they had been.
+- **An inert background**, on both the shell and the toasts.
+
+That closes audit debt 12 as well as the stacking defect. Six tests cover the
+priority order, the queue, and the exact offline+lipfish collision.
+
+### Contrast, measured rather than assumed
+
+**Lighthouse cannot see this.** axe returns colour-contrast as _incomplete_
+against the gradient backgrounds, so the 1.00 accessibility score is not
+evidence either way. The ratios were computed directly, against the six real
+composited backgrounds — including the `.75`-alpha panel gradient sitting over
+the page's radial highlight, which is the worst case and the one a naive check
+misses.
+
+| Token                   | Worst ratio | Verdict                                        |
+| ----------------------- | ----------- | ---------------------------------------------- |
+| `--ink-faint` `#6d89a1` | **3.59:1**  | fails AA on 4 of 6 backgrounds                 |
+| `--ink-faint` `#8aa4bb` | **5.07:1**  | passes everywhere                              |
+| `--coral` `#f2695c`     | **4.35:1**  | fails — the "Wipe the save" button, as audited |
+| `--coral` `#f57f73`     | **5.11:1**  | passes everywhere                              |
+
+Both were changed. `--ink-faint` stops at `#8aa4bb` rather than going lighter
+because `#9db4c8` is `--ink-dim`, and matching it would collapse two type tiers
+into one.
+
+### The pearl readout tells the truth
+
+`pearlMultiplier` is applied to both `fishPerCast` (`engine.ts:299`) and
+`sellMultiplier` (`:305`), so income moves by its **square**, while the panel
+printed the single application. It now shows both — "N× twice" and the real
+income effect — with a sentence explaining why.
+
+**Display only.** Whether the squaring itself stays is Q1, and Q1 is answered
+"show me both", which was Stage 3's job.
+
+---
+
+## Stage 1 — The opening act
+
+Branch `feat/opening-act`, merged `--no-ff` as `df09754`. Four items, with
+`simulateRun` re-run after each.
+
+### The shape that emerged
+
+The four items are not four features; they are one three-stage economy, and
+that only became clear while building item 3. **Who buys your fish is now the
+spine of the opening:**
+
+1. **No transport.** There is no on-demand sale at all. The trader comes when he
+   comes and pays `TRADER_RATE` (0.55). The bucket fills in between.
+2. **A bicycle.** Ride to town for the full price, at the cost of
+   `TOWN_TRIP_SECONDS` (75 s) off the water. The crew never stop.
+3. **An Assistant.** Full price, no trip, no cooldown — and no bucket.
+
+Buying your way out of that is the opening act. The instant Sell button that
+used to exist is now the _third_ graduation rather than the starting state.
+
+### 1. The bicycle and the town trip (§4C)
+
+Reading (a) only: manual casting stops, deckhands do not. `accumulate` never
+consults the cooldown.
+
+- **The deadline is an absolute `Date.now()` timestamp in `GameState`**, not a
+  countdown and not on `Game`. A hidden tab throttles timers to roughly once a
+  minute and `#settleOffline` never calls `tick()`, so a counted-down trip would
+  never end while the player was away; and on `Game` it would survive prestige
+  the way `strandedFrom` already wrongly does.
+- **Clamped on load.** `num()` only checks finiteness, so a hand-edited
+  `fishingBlockedUntil` of `Date.now() + 1e15` would refuse manual casting
+  forever. `clampDeadline` caps it at one trip and treats negatives as no trip.
+- **`#frame` bails _and_ calls `endCast()`.** Guarding `beginCast` alone is not
+  enough — the catch-up loop lands up to 25 casts per frame.
+
+Pacing: 2h28m13s → **2h47m37s** (+13%).
+
+### 2. The bucket and the Assistant (§4A)
+
+The owner changed my proposal: retire the bucket at an Assistant, not at the
+first deckhand.
+
+**The cap is applied before `takeWhole`, never trimmed after it.** `takeWhole`
+mutates `state.carry` — it banks the incoming fraction and returns the whole
+part. Letting it run and discarding the result would spend the banked fraction
+and lose the fish with no credit anywhere. `distributeCatch` clamps its _input_.
+Two tests pin it: `state.carry` is byte-identical after a refused catch, and the
+Fishdex gains no entries.
+
+**The check is at the top of `accumulate`'s per-source loop**, before
+`takeWhole(castCarryKey)` and before `runBoat` — otherwise casts, fuel and hull
+condition are all spent on a fish there is nowhere to put. A test asserts all
+three are untouched.
+
+**The tuning had to be measured, and the first attempt was wrong.** Offline
+throughput is `chunks × capacity`, so the bucket must outrun the crew or an
+implementation detail becomes the offline income ceiling. At capacity ×2.6
+against cost ×3.15, twenty Pond deckhands land 6,574 fish per chunk and the
+level covering that cost **78,697 cumulative — three times the Assistant's
+26,000**, so the player would always retire the bucket before ever upgrading it.
+Doubling the crew returned **1.41×** the night instead of 2×.
+
+Retuned to capacity **×3.4** against cost **×2.9**: level 5 holds 6,815 for
+17,190 cumulative, inside the Assistant's price. Doubling the crew now returns
+**>1.8×**, and the two purchases genuinely compete for the same coins.
+
+Sixteen existing tests across seven files began failing — all long-run
+accumulation on fresh states. They assert accumulation maths, not bucket
+behaviour, so each now opts out the in-game way (`state.hasAssistant = true`)
+with a comment saying so. Same pattern the licence gate used in the second pass.
+
+Pacing: 2h47m37s → **2h52m49s** (+3%).
+
+### 3. The trader (§4B)
+
+Agreed as specified, and it is what makes items 1 and 2 mean anything.
+
+- **`nextTraderAt` is an absolute deadline**, for the same reason as the trip.
+- **`runTrader` walks the deadline forward** rather than sampling the clock, so
+  a settle split into 24 chunks and one done in a single step resolve the _same_
+  number of arrivals. There is a test that asserts exactly that.
+- **`OfflineReport` gained `traderVisits` and `traderEarned`**, and the modal
+  shows "N traders came past". Without it the coins figure is unreconcilable.
+- **The standing fuel order still gets funded.** `OFFLINE_CHUNKS` exists so
+  selling happens periodically offline; at a 45-second period there is at least
+  one arrival in every chunk of any real length. With an Assistant the old
+  once-per-chunk full-price sale is unchanged.
+
+Stock rotates over a three-item catalogue, two at a time, indexed by visit
+count — so an offer can be a visit or two away. **That is the one thing a vendor
+adds over a price tag: a wait you cannot buy through**, bounded by the arrival
+period rather than by luck. When two or fewer offers remain open they are all in
+stock, so the opening can never stall waiting for the bicycle.
+
+`TRADER_PERIOD_SECONDS` is **45**, not 90. At 90 a starting bucket filled in
+about a fifth of the wait and the opening was mostly idling. The starting bucket
+went 15 → 20 for the same reason, and later to 30.
+
+Pacing: 2h52m49s → **3h08m32s** (+9%).
+
+### 4. The mud pool (§4D)
+
+**The four literals are gone, and `save.ts` was the one that mattered:**
+
+| Site                          | Was                          | Now                         |
+| ----------------------------- | ---------------------------- | --------------------------- |
+| `engine.ts` `shoreSource`     | `return FishingSources.Pond` | `SOURCE_ORDER[0]`           |
+| `engine.ts` `reachableSource` | `return FishingSources.Pond` | `SOURCE_ORDER[0]`           |
+| **`save.ts` `readUnlocked`**  | **`unlocked[Pond] = true`**  | `unlocked[SOURCE_ORDER[0]]` |
+| `save.ts` `activeSource`      | `: FishingSources.Pond`      | `: SOURCE_ORDER[0]`         |
+
+Left as it was, `readUnlocked` would have handed **every reloading player the
+Pond for free, permanently**, bypassing an unlock cost that now exists. Silent
+and economy-breaking. Both call sites carry a comment saying why the literal
+must never come back. `guide.ts`'s two `deckhandCost(Pond, 0)` calls — meaning
+"the cheapest hire there is" — became `SOURCE_ORDER[0]` for the same reason.
+
+Stocked with five existing Small species, the muddy ones: Guppy, Platy,
+Corydoras Catfish, Kuhli Loach, Rosy Barb. Five clears the ≥4 floor that stops
+`buildCatchTable` producing `totalWeight = 0`, whose `RandomIndex.pick()` throws
+from inside a `setInterval` on the first cast; and five of fifteen Small species
+keeps the "never lists every species of a category" invariant. **No new
+species**, so the Fishdex count and its bonus are untouched.
+
+`valueMultiplier` is **0.25 and not 0.3 on purpose**. `holdValue` accumulates
+per catch while the hold is priced in one multiplication, and 0.3 is not
+representable in binary: 300 casts drifted to 179.999999999999 against 180. A
+quarter is exact, and a cleaner design number anyway.
+
+**The prologue needed tuning.** At the first attempt it ran 20m16s before the
+Pond, which is too long to spend in a puddle. The binding constraint was the
+bucket against the trader's period, not the price: 20 fish per 45 seconds is
+0.12 coins/s whatever the rod does. Starting bucket 20 → 30 and Pond 120 → 75
+brings the Pond to **8m16s**, which is a prologue rather than a chapter.
+
+Forty-one tests failed on the first run, almost all using `Pond` to mean "the
+source you start in". Those now say `SOURCE_ORDER[0]`, which is what they meant.
+The handful that genuinely meant the Pond name it explicitly and say why.
+
+Pacing: 3h08m32s → **3h25m12s**.
+
+### What the opening act cost, and why that is acceptable
+
+| After    | Full uptime  | Half uptime  |
+| -------- | ------------ | ------------ |
+| baseline | 2h28m13s     | 2h43m03s     |
+| bicycle  | 2h47m37s     | 3h02m50s     |
+| bucket   | 2h52m49s     | 3h11m01s     |
+| trader   | 3h08m32s     | 3h20m58s     |
+| mud pool | **3h25m12s** | **3h40m12s** |
+
+**+38% on the first prestige.** That is a deliberate consequence, not drift: the
+opening is _supposed_ to be poor, and everything before the Assistant now sells
+at 55% of face value. Once the Assistant is bought the game is back at full
+rate, so the change is confined to the opening.
+
+It is also comfortably inside the genre. `RESEARCH.md` records the nearest
+comparables at **8 h (Cookie Clicker) to ~28 h (Antimatter Dimensions) for a
+first reset, both cited as quit-reasons for being too long**, and 2h25m as
+already at the short end. 3h25m sits between, with four distinct chapters in it
+rather than one.
+
+`balance.test.ts`'s prestige chain needed its session cap raised from 3 h to
+4 h: the first run no longer fits in three hours, so the chain reported a single
+unfinished run. That is a harness budget, not a balance figure, and the comment
+in the file says so.
+
+Sources at full uptime: Mud Pool 0m, Pond 8m16s, Stream 20m16s, River 49m31s,
+Lake 1h09m, Lagoon 1h19m, Sea 1h30m, Offshore 1h46m, Ocean 2h06m.
+
+---
+
+## Stage 2 — The map and the shopkeeper chain
+
+Branch `feat/map`, merged `--no-ff` as `1d383bc`.
+
+### The shopkeeper chain
+
+`SHOPKEEPER_REACH` is **one array** indexed by position in `SOURCE_ORDER` — the
+fraction of a track the shopkeeper in that place will sell. One array rather
+than a per-track table so the ladder cannot drift between tracks, and so adding
+a source cannot silently leave a track ungated.
+
+| Place    | rod | net | lure | market | crew |
+| -------- | --: | --: | ---: | -----: | ---: |
+| Mud Pool |   5 |   6 |    3 |      6 |    4 |
+| Pond     |  11 |  12 |    7 |     12 |    9 |
+| Stream   |  18 |  20 |   11 |     20 |   15 |
+| River    |  28 |  32 |   18 |     32 |   24 |
+| Ocean    |  70 |  80 |   45 |     80 |   60 |
+
+**The guard is in the engine, not the component.** `buyUpgrade` and
+`buyBoatUpgrade` clamp to the ceiling, and `affordableUpgradeLevels` takes it as
+a parameter — without that the max button goes on offering "buy 14" for
+something the purchase then refuses.
+
+**`cheapestPurchase` compares against the ceiling**, not `maxLevel`. Against
+`maxLevel` it would pick a gated track as cheapest every step, buy nothing, and
+stall the whole reference strategy _silently_, because `buyUpgrade` returns 0
+rather than throwing.
+
+**Fuel and repairs are never gated**, and there is a test named for it.
+`runBoat` buys fuel out of coins inside the offline settle.
+
+**An honest measurement: the gate does not move the pacing at all.** The first
+prestige is 3h25m12s with and without it, to the second. Price already gates
+harder than shopkeepers do — rod level 5 costs 4,776 cumulative, which is forty
+thousand seconds of mud-pool income, so the money runs out long before the
+shopkeeper does. I tightened the early end from 0.14 to 0.08 to check this was
+not a tuning artefact; the figure did not move.
+
+That is the right shape rather than a disappointment, and two tests pin both
+halves: **the gate is invisible to a player who keeps moving, and binds hard on
+one who camps in shallow water** trying to max a track before leaving. It shapes
+without punishing. What it adds for everyone is legibility — the panel shows
+"lv 3 / 5" and names the place that stocks the next tier.
+
+### The map
+
+The owner overruled me here and was right to. **A correction I owed them:**
+`SourcePicker.svelte:29` already renders only `{#if open || isNext}`, so the
+concealment half of the request was already shipped — the player already saw
+what they owned plus exactly one thing beyond. What the map adds is **place**:
+spatial memory, a home, a world instead of a list.
+
+**Decision on whether it replaces `SourcePicker`: it does not.** The chart sits
+above the list and they do different jobs. The chart is the navigation and gives
+the water a shape; the list carries the blocker reasons, cast times and average
+values an SVG cannot say well, and it guarantees every source stays reachable by
+keyboard and by screen reader. An SVG-only map would have been a step backwards
+on both counts.
+
+**The inaccuracy hook is in, and it lies about position only:**
+
+- Every `SceneConfig` gained a true `at: {x, y}`. The chart draws each place
+  displaced by `mapOffset()`, shrinking to exactly zero at the top level.
+- **The displacement is derived from a hash of `startedAt`** and the place's
+  name. `startedAt` survives prestige, so a chart is wrong in the _same_ way
+  every time you look at it rather than reshuffling on every render. **A map you
+  cannot learn is not a map.**
+- **The paper runs out.** Locked places beyond `mapSight()` are not drawn at
+  all, and the edge is marked with a `?`. A better chart moves the edge outward,
+  so somewhere further along becomes a rumour before it becomes a purchase —
+  which is the owner's _"only when they purchase a better map do they learn
+  there are more things"_.
+- **It never hides a place already unlocked**, and there is a test named for it.
+- **It never lies about worth.** No `perceivedCatchTable`, no shadow economy, no
+  permanent "which table am I reading" hazard.
+
+Lighthouse after Stage 2: **100 / 100 / 100 / 100**.
