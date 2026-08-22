@@ -30,7 +30,7 @@ describe('scenes', () => {
 		for (let i = 1; i < SOURCE_ORDER.length; i++) {
 			expect(SCENES[SOURCE_ORDER[i]].depth).toBeGreaterThan(SCENES[SOURCE_ORDER[i - 1]].depth);
 		}
-		expect(SCENES[FishingSources.Ocean].swell).toBeGreaterThan(SCENES[FishingSources.Pond].swell);
+		expect(SCENES[FishingSources.Ocean].swell).toBeGreaterThan(SCENES[SOURCE_ORDER[0]].swell);
 	});
 
 	it('uses only colours, never an asset path', () => {
@@ -69,7 +69,7 @@ describe('rarity', () => {
 	});
 
 	it('calls a pond guppy common', () => {
-		expect(rarityAt(FishingSources.Pond, 1, 'Guppy')).toBe('common');
+		expect(rarityAt(SOURCE_ORDER[0], 1, 'Guppy')).toBe('common');
 	});
 });
 
@@ -140,7 +140,7 @@ describe('onboarding', () => {
 			() => (state.totalCasts = D(5)),
 			() => (state.lifetimeCoins = D(1000)),
 			() => (state.coins = D(1000)),
-			() => (state.deckhands[FishingSources.Pond] = D(4)),
+			() => (state.deckhands[SOURCE_ORDER[0]] = D(4)),
 			() => SOURCE_ORDER.forEach((s) => (state.unlocked[s] = true))
 		]) {
 			mutate();

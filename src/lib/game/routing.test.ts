@@ -138,7 +138,7 @@ describe('the advertised rate and the earned rate', () => {
 describe('routeCasts', () => {
 	it('sends shore work straight through', () => {
 		const state = drydocked();
-		const route = routeCasts(state, computeModifiers(state), FishingSources.Pond, D(100));
+		const route = routeCasts(state, computeModifiers(state), SOURCE_ORDER[0], D(100));
 
 		expect(route.sailed.toNumber()).toBe(100);
 		expect(route.stranded.toNumber()).toBe(0);

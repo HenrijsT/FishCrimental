@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { D } from '$lib/decimal';
 import { FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
-import { SAVE_KEY, SAVE_VERSION } from './config';
+import { SAVE_KEY, SAVE_VERSION, SOURCE_ORDER } from './config';
 import { ALL_SPECIES, createInitialState } from './engine';
 import {
 	clearStorage,
@@ -118,12 +118,12 @@ describe('hostile input', () => {
 
 	it('keeps the Pond open even if the save says otherwise', () => {
 		const loaded = fromRaw({ version: SAVE_VERSION, unlocked: { Pond: false } });
-		expect(loaded.unlocked[FishingSources.Pond]).toBe(true);
+		expect(loaded.unlocked[SOURCE_ORDER[0]]).toBe(true);
 	});
 
 	it('refuses to make a locked source active', () => {
 		const loaded = fromRaw({ version: SAVE_VERSION, activeSource: FishingSources.Ocean });
-		expect(loaded.activeSource).toBe(FishingSources.Pond);
+		expect(loaded.activeSource).toBe(SOURCE_ORDER[0]);
 	});
 
 	it('ignores nonsense in the achievement list', () => {
@@ -139,13 +139,13 @@ describe('hostile input', () => {
 			playTime: -100
 		});
 		expect(loaded.upgrades.rod.eq(0)).toBe(true);
-		expect(loaded.deckhands[FishingSources.Pond].eq(0)).toBe(true);
+		expect(loaded.deckhands[SOURCE_ORDER[0]].eq(0)).toBe(true);
 		expect(loaded.playTime).toBe(0);
 	});
 
 	it('loads a completely empty object into a playable game', () => {
 		const loaded = fromRaw({});
-		expect(loaded.unlocked[FishingSources.Pond]).toBe(true);
+		expect(loaded.unlocked[SOURCE_ORDER[0]]).toBe(true);
 		expect(loaded.coins.eq(0)).toBe(true);
 		expect(loaded.version).toBe(SAVE_VERSION);
 	});

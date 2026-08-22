@@ -35,7 +35,7 @@ describe('round two: the catch ticker showed the same species every cast', () =>
 		const modifiers = computeModifiers(state);
 		expect(modifiers.fishPerCast.toNumber()).toBeCloseTo(1.19, 6);
 
-		const { caught } = performCast(state, FishingSources.Pond, modifiers, () => 0.5);
+		const { caught } = performCast(state, SOURCE_ORDER[0], modifiers, () => 0.5);
 		expect(caught.size).toBeLessThanOrEqual(2);
 		expect(Object.keys(state.dex).length).toBeLessThanOrEqual(2);
 	});
@@ -46,7 +46,7 @@ describe('round two: the catch ticker showed the same species every cast', () =>
 		buyUpgrade(state, 'net', 4);
 		const modifiers = computeModifiers(state);
 
-		for (let i = 0; i < 200; i++) performCast(state, FishingSources.Pond, modifiers, Math.random);
+		for (let i = 0; i < 200; i++) performCast(state, SOURCE_ORDER[0], modifiers, Math.random);
 
 		for (const type of FISH_TYPES) {
 			expect(state.hold[type].eq(state.hold[type].floor())).toBe(true);
@@ -61,7 +61,7 @@ describe('round two: the Erotic count rendered as a red-flagged zero', () => {
 	it('a species you have not caught is simply absent from the hold', () => {
 		const state = createInitialState();
 		const modifiers = computeModifiers(state);
-		performCast(state, FishingSources.Pond, modifiers, () => 0.5);
+		performCast(state, SOURCE_ORDER[0], modifiers, () => 0.5);
 
 		expect(state.hold[FishType.Erotic].eq(0)).toBe(true);
 		expect(state.hold[FishType.Jelly].eq(0)).toBe(true);
@@ -77,7 +77,7 @@ describe('round two: the Erotic count rendered as a red-flagged zero', () => {
 describe('round two: deckhands landed every species of a category at once', () => {
 	it('a small crew brings up a handful of species, not the whole roster', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(3);
+		state.deckhands[SOURCE_ORDER[0]] = D(3);
 		const modifiers = computeModifiers(state);
 
 		accumulate(state, modifiers, 10, 1, undefined, () => 0.5);
@@ -89,6 +89,10 @@ describe('round two: deckhands landed every species of a category at once', () =
 
 	it('still reaches the whole roster given long enough', () => {
 		const state = createInitialState();
+		// The Pond, not the mud pool: the mud pool stocks five species and this
+		// is about a crew eventually landing more than a handful.
+		state.unlocked[FishingSources.Pond] = true;
+		state.activeSource = FishingSources.Pond;
 		state.deckhands[FishingSources.Pond] = D(50);
 		// Species coverage, not bucket capacity: an Assistant keeps the hold
 		// unlimited so 20,000 seconds of crew work actually lands.
@@ -104,10 +108,10 @@ describe('round two: deckhands landed every species of a category at once', () =
 describe('round two: a huge crew overflowed a double and poisoned the save', () => {
 	it('cast rates stay Decimal past the double limit', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D('1e320');
+		state.deckhands[SOURCE_ORDER[0]] = D('1e320');
 		const modifiers = computeModifiers(state);
 
-		const rate = autoCastsPerSecond(state, modifiers, FishingSources.Pond);
+		const rate = autoCastsPerSecond(state, modifiers, SOURCE_ORDER[0]);
 		expect(rate instanceof Decimal).toBe(true);
 		expect(rate.isFinite()).toBe(true);
 		expect(rate.gt('1e300')).toBe(true);
@@ -148,14 +152,14 @@ describe('round two: bulk-buying deckhands cost more than buying them singly', (
 	it('and the player is charged the same either way', () => {
 		const bulkState = createInitialState();
 		bulkState.coins = D(1e9);
-		buyDeckhand(bulkState, FishingSources.Pond, 10);
+		buyDeckhand(bulkState, SOURCE_ORDER[0], 10);
 
 		const singleState = createInitialState();
 		singleState.coins = D(1e9);
-		for (let i = 0; i < 10; i++) buyDeckhand(singleState, FishingSources.Pond, 1);
+		for (let i = 0; i < 10; i++) buyDeckhand(singleState, SOURCE_ORDER[0], 1);
 
-		expect(bulkState.deckhands[FishingSources.Pond].eq(10)).toBe(true);
-		expect(singleState.deckhands[FishingSources.Pond].eq(10)).toBe(true);
+		expect(bulkState.deckhands[SOURCE_ORDER[0]].eq(10)).toBe(true);
+		expect(singleState.deckhands[SOURCE_ORDER[0]].eq(10)).toBe(true);
 		expect(bulkState.coins.div(singleState.coins).toNumber()).toBeCloseTo(1, 9);
 	});
 });

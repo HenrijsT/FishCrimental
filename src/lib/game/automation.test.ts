@@ -28,11 +28,11 @@ describe('deckhands', () => {
 		const state = createInitialState();
 		state.unlocked[FishingSources.Stream] = true;
 		state.licences.inland = true;
-		state.deckhands[FishingSources.Pond] = D(3);
+		state.deckhands[SOURCE_ORDER[0]] = D(3);
 		state.deckhands[FishingSources.Stream] = D(3);
 
 		const modifiers = computeModifiers(state);
-		const pond = sourceIncomePerSecond(state, modifiers, FishingSources.Pond);
+		const pond = sourceIncomePerSecond(state, modifiers, SOURCE_ORDER[0]);
 		const stream = sourceIncomePerSecond(state, modifiers, FishingSources.Stream);
 
 		expect(pond.gt(0)).toBe(true);
@@ -42,7 +42,7 @@ describe('deckhands', () => {
 
 	it('get better with Crew Quarters', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(5);
+		state.deckhands[SOURCE_ORDER[0]] = D(5);
 		const before = totalIncomePerSecond(state, computeModifiers(state));
 
 		state.coins = D(1e12);
@@ -54,7 +54,7 @@ describe('deckhands', () => {
 
 	it('also speed up from the rod, since they cast the same line', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(5);
+		state.deckhands[SOURCE_ORDER[0]] = D(5);
 		const before = totalIncomePerSecond(state, computeModifiers(state));
 
 		state.coins = D(1e12);
@@ -64,7 +64,7 @@ describe('deckhands', () => {
 
 	it('earn less per second offline than watched', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(9);
+		state.deckhands[SOURCE_ORDER[0]] = D(9);
 		const modifiers = computeModifiers(state);
 
 		// Long windows so whole-fish quantisation averages out.
@@ -76,7 +76,7 @@ describe('deckhands', () => {
 
 	function createStateWithCrew() {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(9);
+		state.deckhands[SOURCE_ORDER[0]] = D(9);
 		// Not a bucket test — see routing.test.ts.
 		state.hasAssistant = true;
 		return state;
@@ -89,10 +89,10 @@ describe('the manual to idle transition', () => {
 		const state = createInitialState();
 		const modifiers = computeModifiers(state);
 
-		const table = catchTable(FishingSources.Pond, modifiers.luck);
+		const table = catchTable(SOURCE_ORDER[0], modifiers.luck);
 		const manual = modifiers.fishPerCast
 			.times(table.averageSourceValue)
-			.div(modifiers.castSeconds[FishingSources.Pond]);
+			.div(modifiers.castSeconds[SOURCE_ORDER[0]]);
 
 		expect(manual.gt(0)).toBe(true);
 		expect(totalIncomePerSecond(state, modifiers).eq(0)).toBe(true);
@@ -109,7 +109,7 @@ describe('the manual to idle transition', () => {
 	it('leaves a crewed game earning while nobody is holding the rod', () => {
 		const state = createInitialState();
 		state.coins = D(1e9);
-		state.deckhands[FishingSources.Pond] = D(40);
+		state.deckhands[SOURCE_ORDER[0]] = D(40);
 
 		const modifiers = computeModifiers(state);
 		const before = state.holdValue;
@@ -121,11 +121,11 @@ describe('the manual to idle transition', () => {
 
 	it('still lets the player cast by hand at any point', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(500);
+		state.deckhands[SOURCE_ORDER[0]] = D(500);
 		const modifiers = computeModifiers(state);
 
 		const before = state.totalCasts;
-		performCast(state, FishingSources.Pond, modifiers, () => 0.5);
+		performCast(state, SOURCE_ORDER[0], modifiers, () => 0.5);
 		expect(state.totalCasts.eq(before.plus(1))).toBe(true);
 	});
 

@@ -85,8 +85,6 @@ describe('what lives where', () => {
 	it('keeps bull sharks in the river and whale sharks in the ocean', () => {
 		expect(sourcesToFish[FishingSources.River].some((f) => f.name === 'Bull Shark')).toBe(true);
 		expect(sourcesToFish[FishingSources.Ocean].some((f) => f.name === 'Whale Shark')).toBe(true);
-		expect(sourcesToFish[FishingSources.Pond].some((f) => f.category === FishType.Shark)).toBe(
-			false
-		);
+		expect(sourcesToFish[SOURCE_ORDER[0]].some((f) => f.category === FishType.Shark)).toBe(false);
 	});
 });

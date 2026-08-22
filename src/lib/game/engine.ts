@@ -515,7 +515,11 @@ export function shoreSource(state: GameState): FishingSources {
 		return source;
 	}
 
-	return FishingSources.Pond;
+	// `SOURCE_ORDER[0]` and not a named source: the first source is guaranteed
+	// unlocked, licence-free and boat-free, and that invariant is what makes
+	// this fallback safe. Spelling it with a literal breaks silently the moment
+	// something is prepended.
+	return SOURCE_ORDER[0];
 }
 
 export function reachableSource(state: GameState, modifiers: Modifiers): FishingSources {
@@ -529,7 +533,11 @@ export function reachableSource(state: GameState, modifiers: Modifiers): Fishing
 		return source;
 	}
 
-	return FishingSources.Pond;
+	// `SOURCE_ORDER[0]` and not a named source: the first source is guaranteed
+	// unlocked, licence-free and boat-free, and that invariant is what makes
+	// this fallback safe. Spelling it with a literal breaks silently the moment
+	// something is prepended.
+	return SOURCE_ORDER[0];
 }
 
 /** Whether a source can be worked right now, with the reason if it cannot. */
@@ -1474,7 +1482,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 	// they cannot work.
 	const activeSource =
 		SOURCE_ORDER.filter((source) => unlocked[source] && !needsBoat(source)).pop() ??
-		FishingSources.Pond;
+		SOURCE_ORDER[0];
 
 	return {
 		version: SAVE_VERSION,

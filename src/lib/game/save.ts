@@ -111,7 +111,21 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 	// 3 → 4: the auto-fisher. Purely additive — a version 3 save simply has not
 	// bought one, which is what the defaults below already say. The step exists
 	// so the version is stamped explicitly rather than by `fromRaw`'s fallback.
-	3: (data) => ({ ...data, autoFisher: '0', autoFisherOffline: false, version: 4 })
+	3: (data) => ({ ...data, autoFisher: '0', autoFisherOffline: false, version: 4 }),
+	// 4 → 5: the mud pool became the first source, and the opening act arrived.
+	// Purely additive — every new field reads its default — but the version is
+	// stamped explicitly rather than left to `fromRaw`'s fallback, and the bump
+	// makes an older build refuse the save instead of dropping the new source.
+	4: (data) => ({
+		...data,
+		bucketLevel: '0',
+		hasBicycle: false,
+		hasAssistant: false,
+		fishingBlockedUntil: 0,
+		nextTraderAt: 0,
+		traderVisits: 0,
+		version: 5
+	})
 };
 
 function grandfatherLicences(unlocked: unknown): Raw {
@@ -272,8 +286,12 @@ function readUnlocked(raw: unknown, fallback: Record<FishingSources, boolean>) {
 		},
 		{} as Record<FishingSources, boolean>
 	);
-	// The Pond is always open — otherwise a corrupt save is unplayable.
-	unlocked[FishingSources.Pond] = true;
+	// The first source is always open — otherwise a corrupt save is unplayable.
+	//
+	// This MUST be `SOURCE_ORDER[0]` and not a named source. With a literal
+	// here, prepending a new first source silently hands every reloading player
+	// the old first source for free, permanently, bypassing its unlock cost.
+	unlocked[SOURCE_ORDER[0]] = true;
 	return unlocked;
 }
 
@@ -331,7 +349,7 @@ export function fromRaw(data: Raw): GameState {
 		(SOURCE_ORDER as string[]).includes(migrated.activeSource) &&
 		unlocked[migrated.activeSource as FishingSources]
 			? (migrated.activeSource as FishingSources)
-			: FishingSources.Pond;
+			: SOURCE_ORDER[0];
 
 	return {
 		version: SAVE_VERSION,
