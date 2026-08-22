@@ -426,6 +426,26 @@ export function canSail(state: GameState, modifiers: Modifiers): boolean {
 	return hasStandingOrder(state) && state.coins.gte(modifiers.fuelPerCast.times(FUEL_PRICE));
 }
 
+/**
+ * The deepest water that can be worked from the shore, boat or no boat.
+ *
+ * Where casts the boat could not cover go. It deliberately does not consult
+ * the tank: `reachableSource` answers "can I sail right now", which changes
+ * the moment fuel is burned, so estimating with it before the trip and
+ * settling with it after gave two different answers for the same trip.
+ */
+export function shoreSource(state: GameState): FishingSources {
+	for (let i = SOURCE_ORDER.length - 1; i >= 0; i--) {
+		const source = SOURCE_ORDER[i];
+		if (!state.unlocked[source]) continue;
+		if (missingLicence(state, source)) continue;
+		if (needsBoat(source)) continue;
+		return source;
+	}
+
+	return FishingSources.Pond;
+}
+
 export function reachableSource(state: GameState, modifiers: Modifiers): FishingSources {
 	const sailable = canSail(state, modifiers);
 
@@ -478,7 +498,21 @@ export function autoCastsPerSecond(
 	return crew.times(modifiers.deckhandCastsPerSecond[source]);
 }
 
-/** Coins per second the hold gains from a source, at present rates. */
+/** Coins per second `casts` at a source are worth, before anything gates them. */
+function castIncome(modifiers: Modifiers, source: FishingSources, casts: Decimal): Decimal {
+	const table = catchTable(source, modifiers.luck);
+	return modifiers.fishPerCast
+		.times(casts)
+		.times(table.averageSourceValue)
+		.times(modifiers.sellMultiplier);
+}
+
+/**
+ * Coins per second the hold gains from a source, at present rates.
+ *
+ * Priced through `routeCasts`, so a crew the boat cannot carry is costed where
+ * they will actually be working rather than where they were hired.
+ */
 export function sourceIncomePerSecond(
 	state: GameState,
 	modifiers: Modifiers,
@@ -487,11 +521,13 @@ export function sourceIncomePerSecond(
 	const casts = autoCastsPerSecond(state, modifiers, source);
 	if (casts.lte(0)) return d0();
 
-	const table = catchTable(source, modifiers.luck);
-	return modifiers.fishPerCast
-		.times(casts)
-		.times(table.averageSourceValue)
-		.times(modifiers.sellMultiplier);
+	const route = routeCasts(state, modifiers, source, casts);
+
+	let total = route.sailed.gt(0) ? castIncome(modifiers, source, route.sailed) : d0();
+	if (route.stranded.gt(0) && route.fallback !== null) {
+		total = total.plus(castIncome(modifiers, route.fallback, route.stranded));
+	}
+	return total;
 }
 
 export function totalIncomePerSecond(state: GameState, modifiers: Modifiers): Decimal {
@@ -616,25 +652,14 @@ export function runBoat(
 ): { sailed: Decimal; shortfall: Decimal } {
 	if (!state.boat.owned) return { sailed: d0(), shortfall: casts };
 
-	if (hasStandingOrder(state)) {
-		// A standing order is a delivery, not a tank top-up: the yard supplies
-		// what the trip needs and bills for it. Capping it at tank capacity
-		// would leave a large crew running dry every few minutes despite the
-		// most expensive fit-out in the game already being paid for.
-		// A hair of margin: without it, dividing the exact amount back out and
-		// flooring can strand the last cast of every trip.
-		const needed = casts.times(modifiers.fuelPerCast).times(1.0001).plus(1).minus(state.boat.fuel);
-		if (needed.gt(0)) {
-			const buying = Decimal.min(needed, state.coins.div(FUEL_PRICE));
-			if (buying.gt(0)) {
-				state.coins = state.coins.minus(buying.times(FUEL_PRICE));
-				state.boat.fuel = state.boat.fuel.plus(buying);
-			}
-		}
+	const available = fuelForTrip(state, modifiers, casts);
+	const buying = available.minus(state.boat.fuel);
+	if (buying.gt(0)) {
+		state.coins = state.coins.minus(buying.times(FUEL_PRICE));
+		state.boat.fuel = available;
 	}
 
-	const possible = state.boat.fuel.div(modifiers.fuelPerCast).floor();
-	const sailed = Decimal.min(casts, possible);
+	const sailed = Decimal.min(casts, castsFromFuel(state.boat.fuel, modifiers));
 	if (sailed.lte(0)) return { sailed: d0(), shortfall: casts };
 
 	state.boat.fuel = Decimal.max(d0(), state.boat.fuel.minus(sailed.times(modifiers.fuelPerCast)));
@@ -646,6 +671,84 @@ export function runBoat(
 	return { sailed, shortfall: casts.minus(sailed) };
 }
 
+/**
+ * Fuel the boat would have in the tank for a trip of `casts`, buying on the
+ * standing order if it has one.
+ *
+ * Split out of `runBoat` so the estimator can ask the same question without
+ * spending anything. A standing order is a delivery, not a tank top-up: the
+ * yard supplies what the trip needs and bills for it. Capping it at tank
+ * capacity would leave a large crew running dry every few minutes despite the
+ * most expensive fit-out in the game already being paid for. The hair of
+ * margin is load-bearing — without it, dividing the exact amount back out and
+ * flooring strands the last cast of every trip.
+ */
+function fuelForTrip(state: GameState, modifiers: Modifiers, casts: Decimal): Decimal {
+	if (!hasStandingOrder(state)) return state.boat.fuel;
+
+	const needed = casts.times(modifiers.fuelPerCast).times(1.0001).plus(1).minus(state.boat.fuel);
+	if (needed.lte(0)) return state.boat.fuel;
+
+	const buying = Decimal.min(needed, state.coins.div(FUEL_PRICE));
+	return buying.gt(0) ? state.boat.fuel.plus(buying) : state.boat.fuel;
+}
+
+/** Whole casts a tank of `fuel` covers. */
+function castsFromFuel(fuel: Decimal, modifiers: Modifiers): Decimal {
+	if (modifiers.fuelPerCast.lte(0)) return fuel;
+	return fuel.div(modifiers.fuelPerCast).floor();
+}
+
+/** Where a source's casts actually get worked. */
+export interface CastRouting {
+	/** Casts worked at the source that was asked for. */
+	sailed: Decimal;
+	/** Casts the boat could not cover. */
+	stranded: Decimal;
+	/** Where the stranded casts go instead, or null if there is nowhere. */
+	fallback: FishingSources | null;
+}
+
+/**
+ * The one place that decides where a source's casts are worked.
+ *
+ * `accumulate` burns the fuel and works the shortfall inshore;
+ * `sourceIncomePerSecond` has to reach the same answer without spending
+ * anything. They used to decide it separately, and the estimator never checked
+ * the boat at all — advertising up to 25x what an unfuelled open-water crew
+ * were actually landing, in the state you are in the moment you buy the boat.
+ * Both go through here now, so they cannot drift apart again.
+ */
+export function routeCasts(
+	state: GameState,
+	modifiers: Modifiers,
+	source: FishingSources,
+	casts: Decimal,
+	/** Burn the fuel and wear the hull. Estimates leave this false. */
+	spend = false
+): CastRouting {
+	if (!needsBoat(source) || casts.lte(0)) {
+		return { sailed: casts, stranded: d0(), fallback: null };
+	}
+
+	let sailed: Decimal;
+	if (spend) {
+		sailed = runBoat(state, modifiers, casts).sailed;
+	} else if (!state.boat.owned) {
+		sailed = d0();
+	} else {
+		sailed = Decimal.max(
+			d0(),
+			Decimal.min(casts, castsFromFuel(fuelForTrip(state, modifiers, casts), modifiers))
+		);
+	}
+
+	const stranded = casts.minus(sailed);
+	if (stranded.lte(0)) return { sailed, stranded: d0(), fallback: null };
+
+	return { sailed, stranded, fallback: shoreSource(state) };
+}
+
 /** One manual cast — what the player gets for holding the rod. */
 export function performCast(
 	state: GameState,
@@ -653,12 +756,8 @@ export function performCast(
 	modifiers: Modifiers,
 	random: () => number = Math.random
 ): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal; source: FishingSources } {
-	let working = source;
-
-	if (needsBoat(source)) {
-		const { sailed } = runBoat(state, modifiers, d1());
-		if (sailed.lte(0)) working = reachableSource(state, modifiers);
-	}
+	const route = routeCasts(state, modifiers, source, d1(), true);
+	const working = route.sailed.gt(0) ? source : (route.fallback ?? source);
 
 	const result = distributeCatch(state, working, modifiers.fishPerCast, modifiers, random);
 	state.totalCasts = state.totalCasts.plus(1);
@@ -706,20 +805,13 @@ export function accumulate(
 		);
 		if (casts.lte(0)) continue;
 
-		let working = casts;
-		let stranded = d0();
+		const route = routeCasts(state, modifiers, source, casts, true);
 
-		if (needsBoat(source)) {
-			const run = runBoat(state, modifiers, casts);
-			working = run.sailed;
-			stranded = run.shortfall;
-		}
-
-		if (working.gt(0)) {
+		if (route.sailed.gt(0)) {
 			const { value, fish } = distributeCatch(
 				state,
 				source,
-				working.times(modifiers.fishPerCast),
+				route.sailed.times(modifiers.fishPerCast),
 				modifiers,
 				random
 			);
@@ -728,20 +820,17 @@ export function accumulate(
 		}
 
 		// Whatever the boat could not cover is worked from the shore instead.
-		if (stranded.gt(0)) {
-			const inshore = reachableSource(state, modifiers);
-			if (!needsBoat(inshore)) {
-				const { value, fish } = distributeCatch(
-					state,
-					inshore,
-					stranded.times(modifiers.fishPerCast),
-					modifiers,
-					random
-				);
-				fishTotal = fishTotal.plus(fish);
-				valueTotal = valueTotal.plus(value);
-				fellBack = true;
-			}
+		if (route.stranded.gt(0) && route.fallback !== null) {
+			const { value, fish } = distributeCatch(
+				state,
+				route.fallback,
+				route.stranded.times(modifiers.fishPerCast),
+				modifiers,
+				random
+			);
+			fishTotal = fishTotal.plus(fish);
+			valueTotal = valueTotal.plus(value);
+			fellBack = true;
 		}
 
 		state.totalCasts = state.totalCasts.plus(casts);

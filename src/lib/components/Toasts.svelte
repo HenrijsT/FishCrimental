@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { ACHIEVEMENTS_BY_ID } from '$lib/game/achievements';
+	import type { TabId } from '$lib/game/guide';
 	import { game } from '$lib/game/state.svelte';
 
 	interface Props {
 		/** Jump to a tab, and optionally to something inside it. */
-		onnavigate: (tab: string, focus?: string) => void;
+		onnavigate: (tab: TabId, focus?: string) => void;
 	}
 
 	let { onnavigate }: Props = $props();

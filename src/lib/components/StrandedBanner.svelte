@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { game } from '$lib/game/state.svelte';
 	import { sources } from '$lib/fishing_sources';
+	import type { TabId } from '$lib/game/guide';
 
 	interface Props {
-		onnavigate: (tab: string) => void;
+		onnavigate: (tab: TabId) => void;
 	}
 
 	let { onnavigate }: Props = $props();

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { game } from '$lib/game/state.svelte';
-	import { TABS, availableTabs } from '$lib/game/guide';
+	import { TABS, availableTabs, type TabId } from '$lib/game/guide';
 	import AchievementsPanel from '$lib/components/AchievementsPanel.svelte';
 	import CastPanel from '$lib/components/CastPanel.svelte';
 	import CatchTicker from '$lib/components/CatchTicker.svelte';
@@ -23,11 +23,11 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import UpgradePanel from '$lib/components/UpgradePanel.svelte';
 
-	let active = $state('water');
+	let active = $state<TabId>('water');
 	/** Set when a toast is tapped, so the panel can open and scroll to the thing. */
 	let focus = $state<string | null>(null);
 	/** Tabs the player has already seen, so a new one can announce itself once. */
-	let seen = $state<string[]>(['water']);
+	let seen = $state<TabId[]>(['water']);
 
 	const tabs = $derived(
 		availableTabs(game.state).map((tab) => ({
@@ -45,7 +45,7 @@
 		if (!tabs.some((tab) => tab.id === active)) active = 'water';
 	});
 
-	function selectTab(id: string, target: string | null = null) {
+	function selectTab(id: TabId, target: string | null = null) {
 		active = id;
 		focus = target;
 		if (typeof history !== 'undefined') {
@@ -59,7 +59,8 @@
 
 	onMount(() => {
 		const fromHash = location.hash.replace('#', '');
-		if (TABS.some((tab) => tab.id === fromHash)) active = fromHash;
+		const known = TABS.find((tab) => tab.id === fromHash);
+		if (known) active = known.id;
 
 		game.init();
 

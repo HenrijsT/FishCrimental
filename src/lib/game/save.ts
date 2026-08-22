@@ -11,6 +11,7 @@ import {
 	LICENCE_IDS,
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
+	SAVE_BACKUP_KEY,
 	SAVE_KEY,
 	SAVE_VERSION,
 	SOURCE_ORDER,
@@ -424,6 +425,30 @@ export function clearStorage(): void {
 	storage()?.removeItem(SAVE_KEY);
 }
 
+/**
+ * The save exactly as it sits on disk, unparsed.
+ *
+ * A save this build cannot read still has to be rescuable — exported, or
+ * copied aside before the player dismisses the banner protecting it — and
+ * neither of those can go through `deserialize`, which is what could not read
+ * it in the first place.
+ */
+export function readRawSave(): string | null {
+	return storage()?.getItem(SAVE_KEY) ?? null;
+}
+
+/** Copy a raw save to the backup key. Returns false if storage refused it. */
+export function backupRawSave(raw: string): boolean {
+	const store = storage();
+	if (!store) return false;
+	try {
+		store.setItem(SAVE_BACKUP_KEY, raw);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Export / import blob
 // ---------------------------------------------------------------------------
@@ -448,6 +473,24 @@ function fromBase64(encoded: string): string | null {
 /** `FISHC1.<base64>` — one line, safe to paste anywhere. */
 export function exportSave(state: GameState): string {
 	return `${EXPORT_PREFIX}${SAVE_VERSION}.${toBase64(serialize(state))}`;
+}
+
+/**
+ * Wrap a raw save verbatim, for a blob this build could not parse.
+ *
+ * The player's only copy of a future or damaged save is the one on disk, so
+ * the export has to carry the original bytes rather than the blank game that
+ * was started in its place.
+ */
+export function exportRawSave(raw: string): string {
+	let version = SAVE_VERSION;
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (isRecord(parsed)) version = num(parsed.version, SAVE_VERSION);
+	} catch {
+		// Unparseable is exactly the case this exists for; hand it back as-is.
+	}
+	return `${EXPORT_PREFIX}${version}.${toBase64(raw)}`;
 }
 
 /** Returns null for anything this build cannot safely read, including future saves. */
