@@ -13,11 +13,25 @@
 
 	// Named `g`, not `state`: in a Svelte component `$state` would be read as a
 	// store subscription to a local called `state`, which collides with the rune.
+	interface Props {
+		/** A species to open and scroll to, set when a toast is tapped. */
+		focus?: string | null;
+	}
+
+	let { focus = null }: Props = $props();
+
 	const g = $derived(game.state);
 	const found = $derived(game.discovered);
 	const total = ALL_SPECIES.length;
 
 	let expanded = $state<string | null>(null);
+	let entries = $state<Record<string, HTMLElement | undefined>>({});
+
+	$effect(() => {
+		if (!focus) return;
+		expanded = focus;
+		entries[focus]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	});
 
 	function caught(name: string) {
 		return g.dex[name];
@@ -56,7 +70,7 @@
 				{#each species as fish (fish.name)}
 					{@const count = caught(fish.name)}
 					{@const known = count !== undefined && count.gte(1)}
-					<li>
+					<li bind:this={entries[fish.name]}>
 						<button
 							class="entry"
 							class:known

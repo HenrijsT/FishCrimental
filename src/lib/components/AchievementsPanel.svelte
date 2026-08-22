@@ -5,8 +5,21 @@
 	import { ALL_SPECIES } from '$lib/game/engine';
 	import Num from './Num.svelte';
 
+	interface Props {
+		/** An achievement to highlight and scroll to, set when a toast is tapped. */
+		focus?: string | null;
+	}
+
+	let { focus = null }: Props = $props();
+
 	const g = $derived(game.state);
 	const earned = $derived(new Set(g.achievements));
+	let rows = $state<Record<string, HTMLElement | undefined>>({});
+
+	$effect(() => {
+		if (!focus) return;
+		rows[focus]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	});
 	const visible = $derived(ACHIEVEMENTS.filter((a) => !a.secret || earned.has(a.id)));
 	const hiddenCount = $derived(ACHIEVEMENTS.length - visible.length);
 </script>
@@ -19,7 +32,11 @@
 
 	<ul class="list">
 		{#each visible as achievement (achievement.id)}
-			<li class:got={earned.has(achievement.id)}>
+			<li
+				class:got={earned.has(achievement.id)}
+				class:focused={focus === achievement.id}
+				bind:this={rows[achievement.id]}
+			>
 				<span class="mark" aria-hidden="true">{earned.has(achievement.id) ? '●' : '○'}</span>
 				<div>
 					<p class="name">{achievement.name}</p>
@@ -104,6 +121,11 @@
 	li.got {
 		opacity: 1;
 		border-left: 2px solid var(--brass);
+	}
+
+	li.focused {
+		outline: 2px solid var(--brass);
+		outline-offset: 2px;
 	}
 
 	.mark {

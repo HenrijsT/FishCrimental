@@ -132,25 +132,44 @@ describe('accumulation', () => {
 	});
 
 	it('scales linearly with elapsed time', () => {
+		// Catches are whole fish, so a single short window is quantised. Over a
+		// long window the quantisation error is bounded by one fish per species.
 		const modifiers = computeModifiers(state);
-		const short = accumulate(state, modifiers, 60);
-		const long = accumulate(state, modifiers, 600);
-		expect(long.fish.div(short.fish).toNumber()).toBeCloseTo(10, 6);
-		expect(long.value.div(short.value).toNumber()).toBeCloseTo(10, 6);
+		const short = accumulate(state, modifiers, 6000);
+		const long = accumulate(state, modifiers, 60000);
+
+		expect(long.fish.div(short.fish).toNumber()).toBeCloseTo(10, 1);
+		expect(long.value.div(short.value).toNumber()).toBeCloseTo(10, 1);
 	});
 
 	it('matches one long step against many short ones', () => {
+		// The carry bank is what makes this true: whatever a short step cannot
+		// pay out in whole fish is banked and paid by a later one.
 		const modifiers = computeModifiers(state);
-		const oneStep = accumulate(state, modifiers, 100);
+		const oneStep = accumulate(state, modifiers, 1000);
 
 		const stepwise = fresh();
 		stepwise.deckhands[FishingSources.Pond] = D(10);
 		let total = d0();
-		for (let i = 0; i < 100; i++) {
+		for (let i = 0; i < 1000; i++) {
 			total = total.plus(accumulate(stepwise, modifiers, 1).fish);
 		}
 
-		expect(total.div(oneStep.fish).toNumber()).toBeCloseTo(1, 8);
+		expect(total.div(oneStep.fish).toNumber()).toBeCloseTo(1, 2);
+	});
+
+	it('never puts a fraction of a fish anywhere', () => {
+		const modifiers = computeModifiers(state);
+		accumulate(state, modifiers, 137.4);
+
+		for (const type of FISH_TYPES) {
+			expect(state.hold[type].eq(state.hold[type].floor())).toBe(true);
+		}
+		for (const count of Object.values(state.dex)) {
+			expect(count.eq(count.floor())).toBe(true);
+		}
+		expect(state.totalFish.eq(state.totalFish.floor())).toBe(true);
+		expect(state.totalCasts.eq(state.totalCasts.floor())).toBe(true);
 	});
 
 	it('honours the offline efficiency factor', () => {

@@ -13,6 +13,7 @@
 	import CatchTicker from '$lib/components/CatchTicker.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import OfflineModal from '$lib/components/OfflineModal.svelte';
+	import SaveProblemBanner from '$lib/components/SaveProblemBanner.svelte';
 	import SourcePicker from '$lib/components/SourcePicker.svelte';
 	import Tabs from '$lib/components/Tabs.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
@@ -21,10 +22,13 @@
 	const TAB_IDS = ['water', 'gear', 'crew', 'dex', 'pearls', 'records', 'settings'];
 
 	let active = $state('water');
+	/** Set when a toast is tapped, so the panel can open and scroll to the thing. */
+	let focus = $state<string | null>(null);
 
 	/** Tabs are addressable so a refresh (or a shared link) lands where you were. */
-	function selectTab(id: string) {
+	function selectTab(id: string, target: string | null = null) {
 		active = id;
+		focus = target;
 		if (typeof history !== 'undefined') {
 			history.replaceState(history.state, '', `#${id}`);
 		}
@@ -71,6 +75,7 @@
 
 <div class="shell" class:reduce-motion={game.state.settings.reduceMotion}>
 	<TopBar />
+	<SaveProblemBanner />
 
 	<div class="grid">
 		<aside class="rig">
@@ -90,11 +95,11 @@
 				{:else if active === 'crew'}
 					<CrewPanel />
 				{:else if active === 'dex'}
-					<Fishdex />
+					<Fishdex {focus} />
 				{:else if active === 'pearls'}
 					<PrestigePanel />
 				{:else if active === 'records'}
-					<AchievementsPanel />
+					<AchievementsPanel {focus} />
 				{:else if active === 'settings'}
 					<SettingsPanel />
 				{/if}
@@ -106,7 +111,7 @@
 <OfflineModal />
 <PrestigeModal />
 <LipfishModal />
-<Toasts />
+<Toasts onnavigate={(tab, target) => selectTab(tab, target ?? null)} />
 
 <style>
 	.shell {

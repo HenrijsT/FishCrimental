@@ -21,6 +21,7 @@ import {
 	PRESTIGE_THRESHOLD,
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
+	SAVE_VERSION,
 	SOURCE_CONFIG,
 	SOURCE_ORDER,
 	UPGRADES,
@@ -170,10 +171,12 @@ export function prestigeUpgradeCost(id: PrestigeUpgradeId, level: Decimal | numb
 	return D(config.baseCost).times(D(config.costGrowth).pow(level)).floor();
 }
 
+/**
+ * Not floored. `deckhandBulkCost` sums the exact geometric series, so flooring
+ * here would make buying ten at once cost more than buying ten one at a time.
+ */
 export function deckhandCost(source: FishingSources, owned: Decimal | number): Decimal {
-	return D(SOURCE_CONFIG[source].deckhandBaseCost)
-		.times(D(DECKHAND_COST_GROWTH).pow(owned))
-		.floor();
+	return D(SOURCE_CONFIG[source].deckhandBaseCost).times(D(DECKHAND_COST_GROWTH).pow(owned));
 }
 
 export function deckhandBulkCost(source: FishingSources, owned: Decimal, count: Decimal): Decimal {
@@ -257,16 +260,23 @@ export function computeModifiers(state: GameState): Modifiers {
 // Catching
 // ---------------------------------------------------------------------------
 
-/** Casts per second contributed by every deckhand at a source. */
+/**
+ * Casts per second contributed by every deckhand at a source.
+ *
+ * Returns a Decimal, not a number: a large enough crew overflows a double, and
+ * an `Infinity` here used to poison the hold value, the coin balance and then
+ * the save file — where `parseDecimal` rejects it and silently resets the
+ * field to zero.
+ */
 export function autoCastsPerSecond(
 	state: GameState,
 	modifiers: Modifiers,
 	source: FishingSources
-): number {
-	if (!state.unlocked[source]) return 0;
+): Decimal {
+	if (!state.unlocked[source]) return d0();
 	const crew = state.deckhands[source];
-	if (crew.lte(0)) return 0;
-	return crew.times(modifiers.deckhandCastsPerSecond[source]).toNumber();
+	if (crew.lte(0)) return d0();
+	return crew.times(modifiers.deckhandCastsPerSecond[source]);
 }
 
 /** Coins per second the hold gains from a source, at present rates. */
@@ -276,7 +286,7 @@ export function sourceIncomePerSecond(
 	source: FishingSources
 ): Decimal {
 	const casts = autoCastsPerSecond(state, modifiers, source);
-	if (casts <= 0) return d0();
+	if (casts.lte(0)) return d0();
 
 	const table = catchTable(source, modifiers.luck);
 	return modifiers.fishPerCast
@@ -301,59 +311,118 @@ function recordCatch(state: GameState, fish: Fish, count: Decimal, value: Decima
 }
 
 /**
- * A real, random cast — what the player gets for holding the rod.
- *
- * Once a cast lands more fish than `SAMPLED_FISH_LIMIT`, only that many are
- * rolled individually and the remainder is filled in from the expected
- * distribution. Rolling ten billion fish one at a time is not an option.
+ * Above this many fish in one go, individual rolls stop being worth it and the
+ * catch is split across the species by their expected share instead.
  */
-const SAMPLED_FISH_LIMIT = 16;
+const ROLL_LIMIT = 24;
 
+/** Carry-bank keys. Casts and fish are banked per source, species per source. */
+function castCarryKey(source: FishingSources): string {
+	return `${source}#casts`;
+}
+
+function fishCarryKey(source: FishingSources): string {
+	return `${source}#fish`;
+}
+
+function speciesCarryKey(source: FishingSources, name: string): string {
+	return `${source}#${name}`;
+}
+
+/**
+ * Take whole units out of a fractional amount, banking what is left over.
+ *
+ * This is what keeps every count in the game an integer while staying exactly
+ * unbiased: 1.19 fish per cast pays 1, 1, 1, 1, 1, 2, 1, … and the long-run
+ * average is 1.19 to the last digit. No rounding, no RNG, and eight hours of
+ * offline progress resolves in one step rather than one step per cast.
+ */
+export function takeWhole(state: GameState, key: string, amount: Decimal): Decimal {
+	if (amount.lte(0)) return d0();
+
+	// Past 2^53 there is no representable fractional part left to bank.
+	if (amount.gte(Number.MAX_SAFE_INTEGER)) return amount.floor();
+
+	const banked = state.carry[key] ?? 0;
+	const total = amount.toNumber() + banked;
+	const whole = Math.floor(total);
+	const remainder = total - whole;
+
+	if (remainder > 1e-9) state.carry[key] = remainder;
+	else delete state.carry[key];
+
+	return D(whole);
+}
+
+/**
+ * Turn a fractional number of fish into whole fish of specific species.
+ *
+ * Small hauls are rolled one fish at a time against the source's weighted
+ * table, so a manual cast is a real draw and a rare fish is a real surprise.
+ * Large hauls are split across the species by expected share, with the same
+ * carry banking applied per species so the counts stay whole. Both paths pay
+ * the same amount on average — the only difference is that one has variance
+ * and the other does not.
+ */
+export function distributeCatch(
+	state: GameState,
+	source: FishingSources,
+	fishAmount: Decimal,
+	modifiers: Modifiers,
+	random: () => number = Math.random
+): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal } {
+	const caught = new Map<Fish, Decimal>();
+	let value = d0();
+	let landed = d0();
+
+	const whole = takeWhole(state, fishCarryKey(source), fishAmount);
+	if (whole.lte(0)) return { caught, value, fish: landed };
+
+	const table = catchTable(source, modifiers.luck);
+	const valueMultiplier = SOURCE_CONFIG[source].valueMultiplier;
+
+	const add = (fish: Fish, count: Decimal) => {
+		if (count.lte(0)) return;
+		const worth = count.times(fishTypeBaseValue[fish.category]).times(valueMultiplier);
+		caught.set(fish, (caught.get(fish) ?? d0()).plus(count));
+		value = value.plus(worth);
+		landed = landed.plus(count);
+		recordCatch(state, fish, count, worth);
+	};
+
+	if (whole.lte(ROLL_LIMIT)) {
+		const rolls = whole.toNumber();
+		for (let i = 0; i < rolls; i++) add(table.picker.pick(random()), d1());
+		return { caught, value, fish: landed };
+	}
+
+	for (const { fish, probability } of table.species) {
+		add(fish, takeWhole(state, speciesCarryKey(source, fish.name), whole.times(probability)));
+	}
+
+	return { caught, value, fish: landed };
+}
+
+/** One manual cast — what the player gets for holding the rod. */
 export function performCast(
 	state: GameState,
 	source: FishingSources,
 	modifiers: Modifiers,
 	random: () => number = Math.random
-): { caught: Map<Fish, Decimal>; value: Decimal } {
-	const table = catchTable(source, modifiers.luck);
-	const valueMultiplier = SOURCE_CONFIG[source].valueMultiplier;
-
-	const total = modifiers.fishPerCast;
-	const sampled = Math.max(1, Math.min(SAMPLED_FISH_LIMIT, Math.floor(total.toNumber() || 1)));
-
-	const caught = new Map<Fish, Decimal>();
-	let value = d0();
-
-	for (let i = 0; i < sampled; i++) {
-		const fish = table.picker.pick(random());
-		caught.set(fish, (caught.get(fish) ?? d0()).plus(1));
-		const worth = D(fishTypeBaseValue[fish.category]).times(valueMultiplier);
-		value = value.plus(worth);
-		recordCatch(state, fish, d1(), worth);
-	}
-
-	const remainder = total.minus(sampled);
-	if (remainder.gt(0)) {
-		for (const { fish, probability } of table.species) {
-			const count = remainder.times(probability);
-			if (count.lte(0)) continue;
-			const worth = count.times(fishTypeBaseValue[fish.category]).times(valueMultiplier);
-			caught.set(fish, (caught.get(fish) ?? d0()).plus(count));
-			value = value.plus(worth);
-			recordCatch(state, fish, count, worth);
-		}
-	}
-
+): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal } {
+	const result = distributeCatch(state, source, modifiers.fishPerCast, modifiers, random);
 	state.totalCasts = state.totalCasts.plus(1);
-	return { caught, value };
+	return result;
 }
 
 /**
  * Advance the deckhands by `seconds`.
  *
  * Nothing is ticked per entity: each source contributes
- * `casts = crew * castsPerSecond * seconds` in one step, and the catch is
- * spread across the source's species by their expected probability.
+ * `casts = crew * castsPerSecond * seconds` in one step. Casts and fish are
+ * both banked through `takeWhole`, so a crew landing 0.22 fish a tick produces
+ * a whole fish roughly every fifth tick rather than a fifth of a fish every
+ * tick.
  */
 export function accumulate(
 	state: GameState,
@@ -361,7 +430,8 @@ export function accumulate(
 	seconds: number,
 	efficiency = 1,
 	/** Extra casts per second on top of the crew — used to model the player. */
-	extraCastsPerSecond?: Partial<Record<FishingSources, number>>
+	extraCastsPerSecond?: Partial<Record<FishingSources, number>>,
+	random: () => number = Math.random
 ): { fish: Decimal; value: Decimal } {
 	let fishTotal = d0();
 	let valueTotal = d0();
@@ -369,34 +439,26 @@ export function accumulate(
 	if (seconds <= 0) return { fish: fishTotal, value: valueTotal };
 
 	for (const source of SOURCE_ORDER) {
-		const castsPerSecond =
-			autoCastsPerSecond(state, modifiers, source) +
-			(state.unlocked[source] ? (extraCastsPerSecond?.[source] ?? 0) : 0);
-		if (castsPerSecond <= 0) continue;
+		const extra = state.unlocked[source] ? (extraCastsPerSecond?.[source] ?? 0) : 0;
+		const castsPerSecond = autoCastsPerSecond(state, modifiers, source).plus(extra);
+		if (castsPerSecond.lte(0)) continue;
 
-		const casts = D(castsPerSecond).times(seconds).times(efficiency);
-		const fish = casts.times(modifiers.fishPerCast);
-		if (fish.lte(0)) continue;
+		const casts = takeWhole(
+			state,
+			castCarryKey(source),
+			castsPerSecond.times(seconds).times(efficiency)
+		);
+		if (casts.lte(0)) continue;
 
-		const table = catchTable(source, modifiers.luck);
-
-		for (const { fish: species, probability } of table.species) {
-			const count = fish.times(probability);
-			if (count.lte(0)) continue;
-			state.dex[species.name] = (state.dex[species.name] ?? d0()).plus(count);
-		}
-
-		for (const [type, probability] of table.typeProbability) {
-			const count = fish.times(probability);
-			if (count.lte(0)) continue;
-			state.hold[type] = state.hold[type].plus(count);
-		}
-
-		const value = fish.times(table.averageSourceValue);
-		state.holdValue = state.holdValue.plus(value);
+		const { value, fish } = distributeCatch(
+			state,
+			source,
+			casts.times(modifiers.fishPerCast),
+			modifiers,
+			random
+		);
 
 		state.totalCasts = state.totalCasts.plus(casts);
-		state.totalFish = state.totalFish.plus(fish);
 		fishTotal = fishTotal.plus(fish);
 		valueTotal = valueTotal.plus(value);
 	}
@@ -645,23 +707,24 @@ export interface CarryOver {
 	settings: GameState['settings'];
 }
 
-export function createInitialState(carry?: Partial<CarryOver>): GameState {
+export function createInitialState(keep?: Partial<CarryOver>): GameState {
 	const now = Date.now();
-	const prestigeUpgrades = carry?.prestigeUpgrades ?? zeroPrestigeUpgrades();
+	const prestigeUpgrades = keep?.prestigeUpgrades ?? zeroPrestigeUpgrades();
 	const unlocked = unlockedFor(prestigeUpgrades.pearl_headstart ?? d0());
 	const activeSource =
 		SOURCE_ORDER.filter((source) => unlocked[source]).pop() ?? FishingSources.Pond;
 
 	return {
-		version: 1,
+		version: SAVE_VERSION,
 		coins: d0(),
 		lifetimeCoins: d0(),
-		allTimeCoins: carry?.allTimeCoins ?? d0(),
+		allTimeCoins: keep?.allTimeCoins ?? d0(),
 
 		hold: emptyHold(),
 		holdValue: d0(),
 
-		dex: carry?.dex ?? {},
+		dex: keep?.dex ?? {},
+		carry: {},
 		totalCasts: d0(),
 		totalFish: d0(),
 
@@ -671,21 +734,21 @@ export function createInitialState(carry?: Partial<CarryOver>): GameState {
 		upgrades: zeroUpgrades(),
 		deckhands: zeroDeckhands(),
 
-		pearls: carry?.pearls ?? d0(),
-		allTimePearls: carry?.allTimePearls ?? d0(),
+		pearls: keep?.pearls ?? d0(),
+		allTimePearls: keep?.allTimePearls ?? d0(),
 		prestigeUpgrades,
-		prestigeCount: carry?.prestigeCount ?? d0(),
+		prestigeCount: keep?.prestigeCount ?? d0(),
 
-		achievements: carry?.achievements ?? [],
-		completed: carry?.completed ?? false,
-		jellyJokeSeen: carry?.jellyJokeSeen ?? false,
-		eroticJokeSeen: carry?.eroticJokeSeen ?? false,
+		achievements: keep?.achievements ?? [],
+		completed: keep?.completed ?? false,
+		jellyJokeSeen: keep?.jellyJokeSeen ?? false,
+		eroticJokeSeen: keep?.eroticJokeSeen ?? false,
 
-		startedAt: carry?.startedAt ?? now,
+		startedAt: keep?.startedAt ?? now,
 		lastUpdate: now,
-		playTime: carry?.playTime ?? 0,
+		playTime: keep?.playTime ?? 0,
 
-		settings: carry?.settings ?? {
+		settings: keep?.settings ?? {
 			offlineProgress: true,
 			reduceMotion: false,
 			scientificNotation: false

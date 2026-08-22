@@ -66,10 +66,11 @@ describe('deckhands', () => {
 		state.deckhands[FishingSources.Pond] = D(9);
 		const modifiers = computeModifiers(state);
 
-		const online = accumulate(createStateWithCrew(), modifiers, 600, 1);
-		const offline = accumulate(createStateWithCrew(), modifiers, 600, OFFLINE_EFFICIENCY);
+		// Long windows so whole-fish quantisation averages out.
+		const online = accumulate(createStateWithCrew(), modifiers, 200_000, 1);
+		const offline = accumulate(createStateWithCrew(), modifiers, 200_000, OFFLINE_EFFICIENCY);
 
-		expect(offline.value.div(online.value).toNumber()).toBeCloseTo(OFFLINE_EFFICIENCY, 6);
+		expect(offline.value.div(online.value).toNumber()).toBeCloseTo(OFFLINE_EFFICIENCY, 2);
 	});
 
 	function createStateWithCrew() {

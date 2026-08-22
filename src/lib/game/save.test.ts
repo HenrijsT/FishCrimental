@@ -225,17 +225,34 @@ describe('localStorage', () => {
 		expect(localStorage.getItem(SAVE_KEY)).toBeTruthy();
 
 		const loaded = loadFromStorage();
-		expect(loaded).not.toBeNull();
-		expect(loaded!.coins.toJSON()).toBe(original.coins.toJSON());
+		expect(loaded.kind).toBe('loaded');
+		if (loaded.kind !== 'loaded') return;
+		expect(loaded.state.coins.toJSON()).toBe(original.coins.toJSON());
 	});
 
-	it('returns null when there is nothing stored', () => {
+	it('reports an empty slot rather than failing', () => {
 		clearStorage();
-		expect(loadFromStorage()).toBeNull();
+		expect(loadFromStorage().kind).toBe('empty');
 	});
 
-	it('returns null when the stored blob is corrupt', () => {
+	it('reports a corrupt blob rather than throwing', () => {
 		localStorage.setItem(SAVE_KEY, '{{{');
-		expect(loadFromStorage()).toBeNull();
+		expect(loadFromStorage().kind).toBe('corrupt');
+	});
+
+	it('refuses a save written by a newer build instead of truncating it', () => {
+		const original = populated();
+		const raw = JSON.parse(serialize(original));
+		raw.version = SAVE_VERSION + 3;
+		raw.somethingThisBuildHasNeverHeardOf = 42;
+		localStorage.setItem(SAVE_KEY, JSON.stringify(raw));
+
+		const loaded = loadFromStorage();
+		expect(loaded.kind).toBe('future');
+		if (loaded.kind !== 'future') return;
+		expect(loaded.version).toBe(SAVE_VERSION + 3);
+
+		// And the file on disk is untouched.
+		expect(JSON.parse(localStorage.getItem(SAVE_KEY)!).somethingThisBuildHasNeverHeardOf).toBe(42);
 	});
 });

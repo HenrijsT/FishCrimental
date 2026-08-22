@@ -18,7 +18,7 @@ export const oddityFishes = {
 		name: OddityFishes.MoonJelly,
 		category: FishType.Jelly,
 		sources: [FishingSources.Lagoon, FishingSources.Sea, FishingSources.Ocean],
-		baseChance: 12,
+		baseChance: 14,
 		description:
 			'A translucent saucer of pure inconvenience. It has no brain, no heart and no market value, and it still manages to look smug about it. Every dock has a bucket that is only for these.'
 	},
@@ -26,7 +26,7 @@ export const oddityFishes = {
 		name: OddityFishes.BarrelJelly,
 		category: FishType.Jelly,
 		sources: [FishingSources.Lagoon, FishingSources.Sea, FishingSources.Offshore],
-		baseChance: 9,
+		baseChance: 7,
 		description:
 			'Roughly the size and weight of a wet duffel bag, and worth exactly as much. Hauling one aboard is a two-person job that pays nothing, which is the whole personality of a barrel jelly.'
 	},
@@ -34,7 +34,7 @@ export const oddityFishes = {
 		name: OddityFishes.LionsMane,
 		category: FishType.Jelly,
 		sources: [FishingSources.Sea, FishingSources.Offshore, FishingSources.Ocean],
-		baseChance: 6,
+		baseChance: 3,
 		description:
 			'Trails stinging threads longer than the boat. Buyers will not touch it, the crew will not touch it, and after one encounter neither will you. Zero coins, considerable regret.'
 	},
