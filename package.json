@@ -1,6 +1,9 @@
 {
 	"name": "fishcrimental",
 	"version": "0.0.1",
+	"description": "A fishing incremental. Cast a line, sell the catch, hire a crew, and work your way from a pond to the open ocean.",
+	"author": "Henrijs Treiguts",
+	"license": "SEE LICENSE IN LICENSE",
 	"private": true,
 	"scripts": {
 		"dev": "vite dev --host",

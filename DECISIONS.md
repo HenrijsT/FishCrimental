@@ -1073,3 +1073,331 @@ CHROME_PATH=/usr/bin/google-chrome-stable pnpm audit:ui    # Lighthouse
 ```
 
 Everything is committed locally on `feat/going-ham`. Nothing was pushed.
+
+# THIRD PASS
+
+Brief: `Goals/THIRD_GOAL.md`. Inputs: `Goals/AUDIT.md` (an independent 13-agent
+audit — 29 findings raised, 6 refuted, 23 confirmed), `ideas.txt`,
+`USER-REQUIREMENTS.md`, and this file.
+
+Five stages: act on the audit, settle licensing and visibility, research and
+plan from `ideas.txt` (the main deliverable), build an auto-fisher, and
+evaluate SvelteKit 3.
+
+---
+
+## Stage 0 — the six mandatory audit defects
+
+Branch `fix/audit`, merged into `feat/going-ham` with `--no-ff` as `d789326`.
+Branch kept.
+
+The audit's structural finding drove the approach: **260 tests, all green, all
+in the pure engine — and all 23 confirmed defects outside it.** The 612-line
+`Game` class and all 29 components had zero coverage. So every fix here is
+paired with a test, and `src/lib/game/lifecycle.test.ts` is the first thing in
+the repo to import `state.svelte.ts`.
+
+Each defect was reproduced before being fixed. The reproduction ran first and
+failed; 8 of the 15 lifecycle tests failed on the original code, and 10 of the
+12 routing tests.
+
+### 1. Offline settle paid for the hold you already had, and handed it back
+
+`state.svelte.ts:287`, critical. `sellHold` ran *inside* the chunk loop; the
+restore afterwards put the fish back without ever rolling back `coins`.
+
+Reproduced exactly as the audit described — three resumes with a 1e6 hold:
+
+```
+resume 1: coins=1000000  holdValue=1000000  hold=1000
+resume 2: coins=2000000  holdValue=1000000  hold=1000
+resume 3: coins=3000000  holdValue=1000000  hold=1000
+```
+
+Silent with no deckhands, because the early return means no modal renders at
+all. It inflated `lifetimeCoins` identically, so it minted Pearls out of
+nothing.
+
+Fixed by zeroing the hold *before* the loop instead of restoring it after. That
+repairs the early-return path for free: with the hold zeroed, a no-catch settle
+sells nothing.
+
+Five tests: no payment for the existing hold; no duplication across repeated
+resumes; `lifetimeCoins` unchanged; the crew's real earnings still paid and the
+report's coin figure matching the balance (it used to say 11,171 next to
+62,757); and the hold untouched when nothing happened.
+
+### 2. The multi-tab guard muted the tab the player was using
+
+`state.svelte.ts:168`. The `storage` event fires in the tab that did **not**
+write, so reacting to it by muting saves silences the victim. A plain tab
+switch is enough to trigger it, because the tab being left saves on
+`visibilitychange`.
+
+**This refutes B9 in the second pass above, which called it "the only option
+that cannot lose data".** It lost data three ways.
+
+Now it warns and **keeps saving**. That is last-writer-wins, which is where the
+game already was — the guard was not preventing the clobbering, only choosing a
+different victim. `SaveProblem` gained a blocking/non-blocking split:
+`BLOCKING_SAVE_PROBLEMS` is `future` and `corrupt` only.
+
+The banner also gained a **Copy backup** button, because its old advice
+("Reload to pick up where the other tab is") discards the muted tab's session.
+
+### 3. A refused localStorage write was completely silent
+
+`state.svelte.ts:235`. Every caller discarded the boolean — the autosave, the
+`pagehide` handler, and the Save now button — while `SettingsPanel` went on
+asserting *"The game saves to this browser every 10 seconds."*
+
+New `write-failed` problem kind, raised on refusal and cleared when a write
+succeeds again. Deliberately non-blocking: a full quota should not also stop
+the game trying.
+
+### 4. Dismiss on the future/corrupt banner destroyed the save it protected
+
+`state.svelte.ts:238`. Dismissing cleared the flag with no other effect, and
+the 10-second autosave was still armed — so ten seconds later the fresh game
+overwrote the preserved save. The banner's own advice, *export it and start
+fresh*, was impossible: `exportBlob()` serialised the brand-new game.
+
+Two fixes. `dismissSaveProblem()` copies the raw bytes to
+`fishcrimental.save.bak` first (new `SAVE_BACKUP_KEY`, `backupRawSave`,
+`readRawSave`). And `exportBlob()` returns the **preserved** blob while a
+blocking problem stands, via a new `exportRawSave` that wraps the original
+bytes verbatim rather than round-tripping them through the parser that could
+not read them.
+
+### 5. The headline coins/s ignored the boat gate
+
+`engine.ts:482`. Measured here at **5.03x** overstatement for a dry-tank
+Offshore crew (the audit measured 20-34x in its own scenarios), and the
+deeper-deckhand claim reproduced to the digit: **22,339/s advertised for an
+Offshore deckhand against 5,958/s for a Sea one**, when the Offshore crew
+cannot sail and are actually working the Sea.
+
+Fixed by extracting **one** routing helper, `routeCasts(state, modifiers,
+source, casts, spend)`, used by `accumulate` (with `spend = true`, which burns
+the fuel) and by `sourceIncomePerSecond` (with `spend = false`, which predicts
+the identical split without spending). `runBoat`'s fuel arithmetic was factored
+into `fuelForTrip` and `castsFromFuel` so the estimating and spending paths run
+the same code rather than two copies of it.
+
+**This uncovered a second drift the audit did not name.** The stranded fallback
+was `reachableSource`, which consults the tank — so it answered *Ocean* when
+asked before the trip and *Sea* when asked after the fuel was burned. The
+estimator and the settler disagreed by construction. New `shoreSource(state)`
+returns the deepest water workable from the shore, ignoring fuel entirely, so
+the answer does not depend on when you ask. This matches what `accumulate`
+already did in practice; only the estimator changes behaviour.
+
+Twelve tests, including a direct assertion that a prediction and a real spend
+return identical splits.
+
+### 6. Seven of eight tabs were unreachable by keyboard
+
+`Tabs.svelte:24`. A roving `tabindex` with no arrow-key handler anywhere, and
+nothing in the codebase navigating to `settings` — so Reduce Motion, Offline
+Progress, notation and the save controls could not be reached from a keyboard
+at all.
+
+Arrow/Home/End handling added. `nextTabIndex(key, index, count)` lives in
+`guide.ts`, not in the component, so it is testable without a DOM — eight tests
+including "never returns an index outside the strip".
+
+The handler is on the **buttons**, not the tablist. Putting it on the container
+tripped `a11y_interactive_supports_focus`, and the buttons are where the ARIA
+tab pattern wants it anyway.
+
+### 7. Tab ids typed as a union
+
+`TAB_IDS` / `TabId` in `guide.ts`, replacing bare strings written out
+independently in `guide.ts`, `+page.svelte`, `StrandedBanner`, `Toasts` and
+`NextStep`. Two tests: `TAB_IDS` and `TABS` describe the same set in the same
+order, and every `nextStep` destination is a real tab across eight coin
+magnitudes.
+
+Per the audit's correction in its §5, source ids were **not** touched: they are
+already the `FishingSources` enum, which is the union the finding asked for.
+
+### One incidental fix
+
+`castOnce`'s dex lookup moved from a `Set` to a plain record. Exporting the
+`Game` class made `svelte/prefer-svelte-reactivity` see it and fail the lint
+gate. It is a frozen lookup rather than reactive state, so a record is both
+correct and clearer. Typing it `ReadonlySet` did not satisfy the rule; the
+record does.
+
+### Not done, deliberately
+
+Per the brief: no directory refactor, and the six refuted findings in the
+audit's §3 were not re-investigated. **I found nothing to disagree with in any
+of the six refutations.** The remaining 17 confirmed defects are carried into
+`Goals/PLAN.md` rather than fixed here.
+
+### Gates
+
+`pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok · `pnpm test`
+**296 passing** across 19 files, up from 260/17 · `pnpm audit:ui`
+100/100/100/100 across 3 runs.
+
+---
+
+## Stage 1 — repository visibility and licensing
+
+**Everything the brief assumed about this turned out to be checkable, and three
+of its assumptions were wrong.** Facts first, decision second.
+
+### What is actually true
+
+**The repository is public.** An unauthenticated
+`GET https://api.github.com/repos/HenrijsT/FishCrimental` returns **200**. (`gh`
+is not installed on this machine, so this was the available method.)
+
+**But almost nothing is published.** `origin/main` is **6 commits** of
+prototype. `git ls-tree -r origin/main | grep -c src/lib/game` returns **0** —
+there is no engine, no config, no save layer, no balance work, no `DECISIONS.md`
+on the public branch. The 29 commits that constitute the actual game have never
+been pushed, because R9 says never push. **The public repository contains a
+fish-list prototype and a progress bar.**
+
+**The design backlog is not exposed.** `ideas.txt`, `Goals/` and
+`USER-REQUIREMENTS.md` are all in `.git/info/exclude` and are untracked. The
+brief's concern that they "expose the entire design direction" is currently
+false. `DECISIONS.md` *is* tracked, but is not on `main` — it would become
+public the first time `feat/going-ham` is pushed. That is a decision to take
+deliberately, not by accident.
+
+**The owner is not quite the sole author — but is the sole copyright holder of
+the current code.** `git shortlog -sne` shows a second contributor,
+`Gogls <gustavs.degteris@gmail.com>`, with 2 commits: `ProgressBars.svelte`
+plus edits to `functions_generic.ts` and a test route. All three files were
+deleted in `d5e1eff` and `661869f`. A `git blame` sweep over all 88 tracked
+files finds **0 surviving lines** attributable to them. So relicensing the
+current tree is clean; the historical commits are not, and cannot be made so.
+
+**The GPL was never actually applied.** `LICENSE` was the unmodified GPL-3.0
+text from the very first commit (`b47f85a Initialize project base`), with the
+copyright line still reading `Copyright (C) 2007 Free Software Foundation,
+Inc.` and the how-to-apply template still containing literal `<year> <name of
+author>`. `grep -rl "GNU General Public" src/` returns **nothing** — not one
+source file carries a licence notice. `package.json` had no `license` field at
+all.
+
+**No dependency forces anything.** I scanned all **651** installed packages:
+506 MIT, 52 Apache-2.0, 49 ISC, 19 BSD-2-Clause, 12 BSD-3-Clause, 4 MPL-2.0,
+3 0BSD, 2 CC-BY-4.0, 1 each Python-2.0, CC0-1.0, BlueOak-1.0.0, BSD. **Zero
+GPL, LGPL or AGPL anywhere in the tree.** The only reciprocal licences are
+MPL-2.0 (`lightningcss` via Vite, `axe-core` via `@lhci/cli`), which is
+file-level copyleft — it obliges publishing changes to those files and nothing
+more. Neither is modified, and neither ships. **Exactly one third-party package
+reaches the player: `break_eternity.js` 2.1.3, MIT**, which requires only that
+its notice travel with distributions.
+
+### What the GPL would actually mean, accurately
+
+Checked against the FSF's own GPL FAQ rather than folklore.
+
+- **Selling GPL software is explicitly permitted.** *"Yes, the GPL allows
+  everyone to do this. The right to sell copies is part of the definition of
+  free software."* There is no price cap. (`#DoesTheGPLAllowMoney`)
+- **Distributing a binary obliges you to offer the Corresponding Source to
+  every recipient**, and under GPLv3 §6(a)/(d) by equivalent access through the
+  same place at no further charge. (`#DoesTheGPLAllowDownloadFee`)
+- **A buyer may then redistribute freely, including for free.** The FSF is
+  blunt: *"someone could pay your fee, and then put her copy on a web site for
+  the general public."* (`#DoesTheGPLRequireAvailabilityToPublic`)
+- **You cannot stop them.** *"You can't require people to pay you when they get
+  a copy from someone else."*
+- **Hosting is not distribution.** GPLv3 has no network-use clause, so serving
+  the game as a web page triggers nothing. **Shipping a Tauri or Electron build
+  on Steam is distribution and does trigger it.** That asymmetry is the whole
+  practical point for this project.
+- **A copyright holder may licence future versions differently, but cannot
+  withdraw rights already granted.** *"the public already has the right to use
+  the program under the GPL, and this right cannot be withdrawn."*
+  (`#CanDeveloperThirdParty`)
+
+The genre precedent is real and worth knowing: **Mindustry is GPL-3.0 and sells
+for $9.99 on Steam**, while the same game is free on itch.io, F-Droid and as
+automatic per-commit builds on GitHub. It works — but it works because the
+developer chose to give it away too. A paid GPL release is a *convenience and
+support* purchase, not an exclusive one. That is a legitimate business model.
+It is a different one from what I1 describes.
+
+### The decision
+
+**Repository: stays public. Licence: changed from GPL-3.0 to a proprietary
+source-available licence, all rights reserved.**
+
+Reasoning:
+
+1. **The Steam plan (I1) and GPL-3.0 are compatible only in the Mindustry
+   sense** — sell it, and accept that any buyer may lawfully repost the build
+   for free with the source attached. That is a real business model, but it is
+   a choice, and nothing in `USER-REQUIREMENTS.md` says the owner has made it.
+   Keeping GPL by default would make it for them, permanently.
+2. **The asymmetry decides it.** You can always open-source later. You can
+   never un-GPL what you already published. Given the choice is being made
+   autonomously and cannot be checked with the owner, the reversible option is
+   the correct one.
+3. **The cost of going proprietary is close to zero here.** No dependency
+   requires copyleft. No contributor's code survives. The GPL was never applied
+   to a single source file, and everything of value was never pushed.
+4. **Public still buys what the owner is actually getting from it** — a
+   portfolio piece, a readable codebase, review and feedback. Source-available
+   keeps all of that. Going private would trade it away to protect a design
+   backlog that is already untracked.
+
+Runner-up: **keep GPL-3.0, fill in the copyright line, and adopt the Mindustry
+model deliberately.** It lost on point 2 alone. It is a perfectly good answer if
+the owner wants it, and switching to it later is one commit — the reverse is
+not.
+
+Rejected: MIT/Apache (gives away more than GPL for a commercial plan);
+AGPL (a network clause on a game with no server is pure friction);
+private repo (loses the portfolio value, protects nothing not already
+untracked); dual licensing and BUSL/PolyForm (real overhead, and dual
+licensing only pays when there are third-party contributions to sell around —
+there are none).
+
+### What changed
+
+- **`LICENSE`** — replaced. Proprietary, source-available: read, fork, build
+  locally, quote with attribution; no distribution, hosting, sale or derivative
+  works without permission. Real copyright line: `Copyright (c) 2026 Henrijs
+  Treiguts`. Includes a contribution grant, so a future pull request does not
+  create the exact fragmentation problem `Gogls` nearly created. Includes an
+  explicit **note on earlier versions** stating that whatever the old GPL text
+  granted for already-published commits is not withdrawn — because it cannot
+  be.
+- **`package.json`** — `"license": "SEE LICENSE IN LICENSE"` (the SPDX form for
+  a non-standard licence), plus `author` and `description`. `"private": true`
+  **stays**: it is correct for something never published to npm, and it is what
+  prevents an accidental `npm publish`. The manifest and the licence file now
+  agree, which they did not before.
+- **`THIRD-PARTY-NOTICES.md`** — new. Reproduces the `break_eternity.js` MIT
+  notice in full (the one thing genuinely required for a distributed build),
+  lists the tooling licences, records the full 651-package scan, and flags that
+  a Tauri/Electron wrapper adds dependencies not in this tree and needs the
+  scan re-run before any Steam release.
+
+### What warrants a lawyer, and what does not
+
+**Not in dispute, and safe to act on:** that the GPL permits sale; that
+distribution triggers the source obligation; that recipients may redistribute;
+that a licence grant on already-published code cannot be retracted; that none
+of the 651 dependencies imposes copyleft on this project; that `break_eternity`
+requires attribution in a distributed build.
+
+**Genuinely uncertain, and worth real advice before money changes hands:**
+whether a bare `LICENSE` file with an unfilled copyright line and no per-file
+notices constituted an effective GPL grant at all; what exactly that grant
+covers given the only published commits are a prototype containing none of the
+current code; whether the two removed contributions from `Gogls` leave any
+residual claim; and the Steam Distribution Agreement's own terms, which I did
+not obtain. **I am not a lawyer and this is not legal advice.** The practical
+exposure is small — the published prototype has no game in it — but "small" is
+a judgement, not a legal opinion.
+
