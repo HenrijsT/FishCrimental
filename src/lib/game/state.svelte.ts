@@ -11,7 +11,8 @@ import {
 	SAVE_KEY,
 	SOURCE_CONFIG,
 	TICK_MS,
-	UPGRADES,
+	BOAT_UPGRADE_IDS,
+	UPGRADE_IDS,
 	type BoatUpgradeId,
 	type LicenceId,
 	type UpgradeId
@@ -28,6 +29,8 @@ import {
 	buyAutoFisherOffline,
 	buyBicycle,
 	buyBucket,
+	buyMapUpgrade,
+	mapCost,
 	holdRoom,
 	inTown,
 	runTrader,
@@ -45,6 +48,9 @@ import {
 	reachableSource,
 	sourceBlocker,
 	affordableUpgradeLevels,
+	boatUpgradeCeiling,
+	upgradeCeiling,
+	upgradeStockedAt,
 	buyDeckhand,
 	buyPrestigeUpgrade,
 	buyUpgrade,
@@ -616,6 +622,12 @@ export class Game {
 		return bought;
 	}
 
+	buyMap(): boolean {
+		const bought = buyMapUpgrade(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
 	upgradeBucket(): boolean {
 		const bought = buyBucket(this.state);
 		if (bought) this.#checkAchievements();
@@ -672,12 +684,13 @@ export class Game {
 
 	/** Levels a buy button would purchase right now, given the selected amount. */
 	upgradeStep(id: UpgradeId): Decimal {
-		const remaining = D(UPGRADES[id].maxLevel).minus(this.state.upgrades[id]);
+		const ceiling = upgradeCeiling(this.state, id);
+		const remaining = D(ceiling).minus(this.state.upgrades[id]);
 		if (remaining.lte(0)) return d0();
 
 		const wanted =
 			this.buyAmount === 'max'
-				? affordableUpgradeLevels(id, this.state.upgrades[id], this.state.coins)
+				? affordableUpgradeLevels(id, this.state.upgrades[id], this.state.coins, ceiling)
 				: D(this.buyAmount);
 
 		return Decimal.max(d0(), Decimal.min(wanted, remaining));
@@ -705,6 +718,27 @@ export class Game {
 	buyPearlUpgrade(id: Parameters<typeof buyPrestigeUpgrade>[1]): boolean {
 		return buyPrestigeUpgrade(this.state, id);
 	}
+
+	mapPrice = $derived(mapCost(this.state.mapLevel));
+
+	/** Highest level of each track anyone the player can reach will sell. */
+	ceilings = $derived(
+		Object.fromEntries(UPGRADE_IDS.map((id) => [id, upgradeCeiling(this.state, id)])) as Record<
+			UpgradeId,
+			number
+		>
+	);
+	stockedAt = $derived(
+		Object.fromEntries(UPGRADE_IDS.map((id) => [id, upgradeStockedAt(this.state, id)])) as Record<
+			UpgradeId,
+			FishingSources | null
+		>
+	);
+	boatCeilings = $derived(
+		Object.fromEntries(
+			BOAT_UPGRADE_IDS.map((id) => [id, boatUpgradeCeiling(this.state, id)])
+		) as Record<BoatUpgradeId, number>
+	);
 
 	/** What the last trader paid, for a one-line note on the Shore. */
 	lastTraderEarned = $state<Decimal | null>(null);

@@ -226,6 +226,29 @@ export const UPGRADES: Record<UpgradeId, UpgradeConfig> = {
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
 
+// ---------------------------------------------------------------------------
+// Shopkeepers
+// ---------------------------------------------------------------------------
+
+/**
+ * How much of a track the shopkeeper in each place will sell you, as a
+ * fraction of its maximum level, indexed by that place's position in
+ * `SOURCE_ORDER`.
+ *
+ * This is the whole shopkeeper mechanic: *"you cannot purchase the best parts
+ * without purchasing previous ones — you have to progress to new places to
+ * unlock better shopkeepers."* The man at the mud pool sells the cheap end of
+ * everything and nothing else; getting the best rod means reaching the place
+ * that stocks it.
+ *
+ * Expressed as one array rather than a per-track table so the ladder cannot
+ * drift between tracks, and so adding a source cannot silently leave a track
+ * ungated. A test asserts the length matches `SOURCE_ORDER`, that it rises,
+ * and that it ends at 1 — the last place must sell everything, or a track
+ * would be unfinishable.
+ */
+export const SHOPKEEPER_REACH = [0.08, 0.16, 0.26, 0.4, 0.55, 0.7, 0.82, 0.92, 1] as const;
+
 /** Cost of deckhand n+1 at a source is `deckhandBaseCost * DECKHAND_COST_GROWTH^n`. */
 export const DECKHAND_COST_GROWTH = 1.79;
 
@@ -556,6 +579,34 @@ export const SOURCE_LICENCE: Partial<Record<FishingSources, LicenceId>> = LICENC
 	},
 	{} as Partial<Record<FishingSources, LicenceId>>
 );
+
+// ---------------------------------------------------------------------------
+// The chart
+// ---------------------------------------------------------------------------
+
+/**
+ * The map you fish from.
+ *
+ * The first one is wrong. Not missing detail — actively wrong: places sit off
+ * where they really are, and the paper runs out before the water does. Buying a
+ * better chart does two things and neither of them is "show more fish": places
+ * settle closer to their true positions, and the edge of the paper moves out so
+ * rumours of somewhere further along become visible.
+ *
+ * Upgrading a map changes the odds and the clarity, never the contents. It is
+ * also never allowed to lie about what anything is *worth* — position is fair
+ * game, value is not, because a shadow catch table read by half the UI is a
+ * permanent "which table am I looking at" hazard.
+ */
+export const MAP_BASE_COST = 240;
+export const MAP_COST_GROWTH = 4.2;
+export const MAP_MAX_LEVEL = 6;
+
+/** How far off a place can be drawn on the worst chart, in 0-1 of the paper. */
+export const MAP_BASE_ERROR = 0.085;
+
+/** Locked places visible beyond the deepest one open, at level 0. */
+export const MAP_BASE_SIGHT = 1;
 
 // ---------------------------------------------------------------------------
 // The boat

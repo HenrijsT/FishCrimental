@@ -50,6 +50,12 @@ import {
 	PEARL_MULTIPLIER_SCALE,
 	PRESTIGE_THRESHOLD,
 	PRESTIGE_UPGRADES,
+	MAP_BASE_COST,
+	MAP_BASE_ERROR,
+	MAP_BASE_SIGHT,
+	MAP_COST_GROWTH,
+	MAP_MAX_LEVEL,
+	SHOPKEEPER_REACH,
 	PRESTIGE_UPGRADE_IDS,
 	SAVE_VERSION,
 	SOURCE_CONFIG,
@@ -167,6 +173,42 @@ export function clearCatchTableCache(): void {
 // Costs
 // ---------------------------------------------------------------------------
 
+/**
+ * The deepest place the player has opened, as an index into `SOURCE_ORDER`.
+ *
+ * Which shopkeepers they can reach, in other words.
+ */
+export function deepestOpenIndex(state: GameState): number {
+	let best = 0;
+	for (let i = 0; i < SOURCE_ORDER.length; i++) {
+		if (state.unlocked[SOURCE_ORDER[i]]) best = i;
+	}
+	return best;
+}
+
+/**
+ * The highest level of a track anyone the player can reach will sell.
+ *
+ * Never gates fuel or repairs — `buyFuel` and `repairBoat` do not consult this,
+ * deliberately: the standing order buys fuel out of coins inside the offline
+ * settle, and a gate there would strand the boat while the player slept.
+ */
+export function upgradeCeiling(state: GameState, id: UpgradeId): number {
+	const reach = SHOPKEEPER_REACH[Math.min(deepestOpenIndex(state), SHOPKEEPER_REACH.length - 1)];
+	return Math.floor(UPGRADES[id].maxLevel * reach);
+}
+
+/** Where the next tier of a track is sold, or null if it is all available. */
+export function upgradeStockedAt(state: GameState, id: UpgradeId): FishingSources | null {
+	const ceiling = upgradeCeiling(state, id);
+	if (UPGRADES[id].maxLevel <= ceiling) return null;
+
+	for (let i = deepestOpenIndex(state) + 1; i < SOURCE_ORDER.length; i++) {
+		if (Math.floor(UPGRADES[id].maxLevel * SHOPKEEPER_REACH[i]) > ceiling) return SOURCE_ORDER[i];
+	}
+	return null;
+}
+
 export function upgradeCost(id: UpgradeId, level: Decimal | number): Decimal {
 	const config = UPGRADES[id];
 	return D(config.baseCost).times(D(config.costGrowth).pow(level));
@@ -184,7 +226,13 @@ export function upgradeBulkCost(id: UpgradeId, level: Decimal, count: Decimal): 
 }
 
 /** How many further levels the given coin pile can buy. */
-export function affordableUpgradeLevels(id: UpgradeId, level: Decimal, coins: Decimal): Decimal {
+export function affordableUpgradeLevels(
+	id: UpgradeId,
+	level: Decimal,
+	coins: Decimal,
+	/** Highest level anyone will sell. Defaults to the track's own maximum. */
+	ceiling?: number
+): Decimal {
 	const config = UPGRADES[id];
 	const first = upgradeCost(id, level);
 	if (coins.lt(first)) return d0();
@@ -194,7 +242,7 @@ export function affordableUpgradeLevels(id: UpgradeId, level: Decimal, coins: De
 	const ratio = coins.times(growth.minus(1)).div(first).plus(1);
 	const count = Decimal.log10(ratio).div(Decimal.log10(growth)).floor();
 
-	const remaining = D(config.maxLevel).minus(level);
+	const remaining = D(ceiling ?? config.maxLevel).minus(level);
 	return Decimal.max(d0(), Decimal.min(count, remaining));
 }
 
@@ -419,10 +467,16 @@ export function buyBoat(state: GameState): boolean {
 	return true;
 }
 
+/** The best fit-out the yards the player can reach will sell. */
+export function boatUpgradeCeiling(state: GameState, id: BoatUpgradeId): number {
+	const reach = SHOPKEEPER_REACH[Math.min(deepestOpenIndex(state), SHOPKEEPER_REACH.length - 1)];
+	return Math.floor(BOAT_UPGRADES[id].maxLevel * reach);
+}
+
 export function buyBoatUpgrade(state: GameState, id: BoatUpgradeId): boolean {
 	if (!state.boat.owned) return false;
 	const level = state.boat.upgrades[id];
-	if (level.gte(BOAT_UPGRADES[id].maxLevel)) return false;
+	if (level.gte(boatUpgradeCeiling(state, id))) return false;
 
 	const cost = boatUpgradeCost(id, level);
 	if (state.coins.lt(cost)) return false;
@@ -1104,6 +1158,81 @@ export function townSecondsLeft(state: GameState, now = Date.now()): number {
 }
 
 // ---------------------------------------------------------------------------
+// The chart
+// ---------------------------------------------------------------------------
+
+export function mapCost(level: Decimal | number): Decimal {
+	return D(MAP_BASE_COST).times(D(MAP_COST_GROWTH).pow(level));
+}
+
+/** 0 on the worst chart, 1 on the best. */
+export function mapAccuracy(level: Decimal | number): number {
+	const n = typeof level === 'number' ? level : level.toNumber();
+	return Math.min(1, Math.max(0, n / MAP_MAX_LEVEL));
+}
+
+/** How far a place can be drawn from where it really is. */
+export function mapError(level: Decimal | number): number {
+	return MAP_BASE_ERROR * (1 - mapAccuracy(level));
+}
+
+/** How many locked places are drawn beyond the deepest one open. */
+export function mapSight(level: Decimal | number): number {
+	const n = typeof level === 'number' ? level : level.toNumber();
+	return MAP_BASE_SIGHT + Math.floor(n);
+}
+
+/**
+ * How far this place is drawn from where it actually is.
+ *
+ * Derived from `startedAt`, which survives prestige, so a chart is wrong in the
+ * same way every time you look at it instead of reshuffling on every render.
+ * A map you cannot learn is not a map.
+ */
+export function mapOffset(
+	source: FishingSources,
+	startedAt: number,
+	level: Decimal | number
+): { dx: number; dy: number } {
+	const error = mapError(level);
+	if (error <= 0) return { dx: 0, dy: 0 };
+
+	// A cheap deterministic hash of the save's birthday and the place's name.
+	let hash = Math.floor(startedAt / 1000) >>> 0;
+	for (let i = 0; i < source.length; i++) hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+
+	const angle = ((hash % 1000) / 1000) * Math.PI * 2;
+	const radius = (((hash >>> 10) % 1000) / 1000) * error;
+	return { dx: Math.cos(angle) * radius, dy: Math.sin(angle) * radius };
+}
+
+/**
+ * Which places the chart draws.
+ *
+ * Everything already unlocked, always — hiding somewhere the player owns would
+ * strand them if the map is their only way to move — plus the next few locked
+ * ones, as far as the paper reaches.
+ */
+export function chartedSources(state: GameState): FishingSources[] {
+	const deepest = deepestOpenIndex(state);
+	const sight = mapSight(state.mapLevel);
+
+	return SOURCE_ORDER.filter((source, index) => state.unlocked[source] || index <= deepest + sight);
+}
+
+export function buyMapUpgrade(state: GameState): boolean {
+	const level = state.mapLevel;
+	if (level.gte(MAP_MAX_LEVEL)) return false;
+
+	const cost = mapCost(level);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	state.mapLevel = level.plus(1);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // The trader
 // ---------------------------------------------------------------------------
 
@@ -1260,11 +1389,15 @@ export function unlockSource(state: GameState, source: FishingSources): boolean 
 
 export function buyUpgrade(state: GameState, id: UpgradeId, count: Decimal | number = 1): Decimal {
 	const level = state.upgrades[id];
-	const remaining = D(UPGRADES[id].maxLevel).minus(level);
+	// The gate lives here, in the engine, and not in the panel. Put it in the
+	// component and `affordableUpgradeLevels` goes on offering "buy 14" for
+	// something the purchase then refuses.
+	const ceiling = upgradeCeiling(state, id);
+	const remaining = D(ceiling).minus(level);
 	let amount = Decimal.min(D(count), remaining);
 	if (amount.lte(0)) return d0();
 
-	const affordable = affordableUpgradeLevels(id, level, state.coins);
+	const affordable = affordableUpgradeLevels(id, level, state.coins, ceiling);
 	amount = Decimal.min(amount, affordable);
 	if (amount.lte(0)) return d0();
 
@@ -1510,6 +1643,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		// purchase goes on a reset.
 		nextTraderAt: 0,
 		traderVisits: 0,
+		mapLevel: d0(),
 		bucketLevel: d0(),
 		hasBicycle: false,
 		fishingBlockedUntil: 0,

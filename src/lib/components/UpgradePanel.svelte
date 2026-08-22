@@ -24,15 +24,18 @@
 		{#each UPGRADE_IDS as id (id)}
 			{@const config = UPGRADES[id]}
 			{@const level = state.upgrades[id]}
+			{@const ceiling = game.ceilings[id]}
 			{@const maxed = level.gte(config.maxLevel)}
+			{@const capped = !maxed && level.gte(ceiling)}
+			{@const stockedAt = game.stockedAt[id]}
 			{@const step = game.upgradeStep(id)}
 			{@const cost = step.gt(0) ? upgradeBulkCost(id, level, step) : null}
 			{@const affordable = cost !== null && state.coins.gte(cost)}
-			<li class="upgrade" class:maxed>
+			<li class="upgrade" class:maxed class:capped>
 				<div class="text">
 					<h3 class="name">
 						{config.name}
-						<span class="level">lv {level.toFixed(0)}{maxed ? ' · max' : ''}</span>
+						<span class="level">lv {level.toFixed(0)}{maxed ? ' · max' : ` / ${ceiling}`}</span>
 					</h3>
 					<p class="desc muted">{config.description}</p>
 					<p class="effect">
@@ -42,15 +45,26 @@
 							<span class="next">{config.format(level.plus(step).toNumber())}</span>
 						{/if}
 					</p>
+					{#if capped}
+						<p class="locked">
+							The best one anyone around here sells.
+							{#if stockedAt}
+								Better is stocked at the <strong>{stockedAt}</strong>: {config.format(ceiling + 1)}
+								and up.
+							{/if}
+						</p>
+					{/if}
 				</div>
 
 				<button
 					class="buy"
-					disabled={maxed || !affordable || step.lte(0)}
+					disabled={maxed || capped || !affordable || step.lte(0)}
 					onclick={() => game.buy(id)}
 				>
 					{#if maxed}
 						Maxed
+					{:else if capped}
+						Not sold here
 					{:else if step.lte(0) || cost === null}
 						Not yet
 					{:else}
@@ -93,6 +107,17 @@
 		border-radius: var(--radius-sm);
 		background: rgba(4, 16, 27, 0.5);
 		border: 1px solid transparent;
+	}
+
+	.upgrade.capped .name {
+		color: var(--ink-dim);
+	}
+
+	.locked {
+		font-size: 0.75rem;
+		color: var(--brass);
+		margin-top: 0.25rem;
+		max-width: 58ch;
 	}
 
 	.upgrade.maxed {

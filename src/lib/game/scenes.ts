@@ -19,6 +19,17 @@ export type SceneFeature =
 	| 'rays'
 	| 'stars';
 
+/**
+ * Where a place sits on the map, in 0-1 of the chart. The layout is a rough
+ * journey inland-to-open-water: home and the mud pool bottom-left, the ocean
+ * top-right. These are the TRUE positions — the map draws them displaced by an
+ * amount that shrinks as the chart is upgraded.
+ */
+export interface MapPoint {
+	x: number;
+	y: number;
+}
+
 export interface SceneConfig {
 	/** Top and bottom of the sky gradient. */
 	sky: [string, string];
@@ -39,6 +50,8 @@ export interface SceneConfig {
 	shoal: number;
 	/** One line, shown under the scene. */
 	mood: string;
+	/** True position on the chart. */
+	at: MapPoint;
 }
 
 /**
@@ -60,7 +73,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.3,
 		features: ['reeds', 'pebbles', 'sun'],
 		shoal: 2,
-		mood: 'Brown, still, and barely knee deep. Whatever lives here is not hiding.'
+		mood: 'Brown, still, and barely knee deep. Whatever lives here is not hiding.',
+		at: { x: 0.12, y: 0.82 }
 	},
 	[FishingSources.Pond]: {
 		sky: ['#bfe3c4', '#8cc79c'],
@@ -72,7 +86,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.34,
 		features: ['reeds', 'lilypads', 'sun'],
 		shoal: 3,
-		mood: 'Flat, warm and shallow. You can see the bottom.'
+		mood: 'Flat, warm and shallow. You can see the bottom.',
+		at: { x: 0.26, y: 0.7 }
 	},
 	[FishingSources.Stream]: {
 		sky: ['#cfe6f2', '#9dc6dd'],
@@ -84,7 +99,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.3,
 		features: ['boulders', 'pebbles', 'current', 'trees'],
 		shoal: 4,
-		mood: 'Fast, clear and cold. The water never stops moving.'
+		mood: 'Fast, clear and cold. The water never stops moving.',
+		at: { x: 0.2, y: 0.5 }
 	},
 	[FishingSources.River]: {
 		sky: ['#b9d3e6', '#8fb2cf'],
@@ -96,7 +112,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.28,
 		features: ['trees', 'current', 'boulders'],
 		shoal: 5,
-		mood: 'Wide and pulling. Something big uses this channel.'
+		mood: 'Wide and pulling. Something big uses this channel.',
+		at: { x: 0.36, y: 0.38 }
 	},
 	[FishingSources.Lake]: {
 		sky: ['#a8c4e0', '#7d9ec4'],
@@ -108,7 +125,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.26,
 		features: ['hills', 'jetty', 'rays'],
 		shoal: 6,
-		mood: 'Still enough to mirror the far shore. Deeper than it looks.'
+		mood: 'Still enough to mirror the far shore. Deeper than it looks.',
+		at: { x: 0.52, y: 0.52 }
 	},
 	[FishingSources.Lagoon]: {
 		sky: ['#bfe9ee', '#7fd0d8'],
@@ -120,7 +138,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.24,
 		features: ['sandbar', 'coral', 'sun', 'rays'],
 		shoal: 7,
-		mood: 'Turquoise over white sand, walled off from the open sea.'
+		mood: 'Turquoise over white sand, walled off from the open sea.',
+		at: { x: 0.62, y: 0.72 }
 	},
 	[FishingSources.Sea]: {
 		sky: ['#9fbdd8', '#6f92b8'],
@@ -132,7 +151,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.22,
 		features: ['gulls', 'swell', 'rays'],
 		shoal: 7,
-		mood: 'Salt in the air and no bottom in sight.'
+		mood: 'Salt in the air and no bottom in sight.',
+		at: { x: 0.74, y: 0.5 }
 	},
 	[FishingSources.Offshore]: {
 		sky: ['#7f93aa', '#54687f'],
@@ -144,7 +164,8 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.2,
 		features: ['buoy', 'swell', 'gulls', 'kelp'],
 		shoal: 6,
-		mood: 'Grey water, long swell, and the coast well out of sight.'
+		mood: 'Grey water, long swell, and the coast well out of sight.',
+		at: { x: 0.84, y: 0.3 }
 	},
 	[FishingSources.Ocean]: {
 		sky: ['#2c3b52', '#16202f'],
@@ -156,6 +177,7 @@ export const SCENES: Record<FishingSources, SceneConfig> = {
 		horizon: 0.18,
 		features: ['stars', 'swell', 'kelp', 'rays'],
 		shoal: 5,
-		mood: 'Black water under a cold sky. Whatever is down there is enormous.'
+		mood: 'Black water under a cold sky. Whatever is down there is enormous.',
+		at: { x: 0.93, y: 0.14 }
 	}
 };

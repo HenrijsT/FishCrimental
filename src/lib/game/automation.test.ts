@@ -42,6 +42,12 @@ describe('deckhands', () => {
 
 	it('get better with Crew Quarters', () => {
 		const state = createInitialState();
+		// Six levels of Crew Quarters is more than the mud pool's shopkeeper
+		// stocks, and this is about the multiplier, not about the shopkeeper.
+		for (const source of SOURCE_ORDER) {
+			state.unlocked[source] = true;
+			if (source === FishingSources.River) break;
+		}
 		state.deckhands[SOURCE_ORDER[0]] = D(5);
 		const before = totalIncomePerSecond(state, computeModifiers(state));
 
