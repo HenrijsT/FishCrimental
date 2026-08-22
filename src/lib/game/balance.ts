@@ -20,10 +20,12 @@ import {
 	computeModifiers,
 	createInitialState,
 	deckhandCost,
+	catchTable,
 	nextLockedSource,
 	performPrestige,
 	prestigeUpgradeCost,
 	sellHold,
+	totalIncomePerSecond,
 	unlockSource,
 	upgradeCost
 } from './engine';
@@ -36,6 +38,8 @@ export interface SimulationResult {
 	state: GameState;
 	/** Wall-clock second at which each source was unlocked. */
 	unlockedAt: Partial<Record<FishingSources, number>>;
+	/** Second at which the crew started out-earning the player holding the rod. */
+	idleCrossoverAt: number | null;
 }
 
 export interface SimulationOptions {
@@ -77,11 +81,22 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 
 	let elapsed = 0;
 	let secondsToPrestige: number | null = null;
+	let idleCrossoverAt: number | null = null;
 
 	while (elapsed < maxSeconds) {
 		const modifiers = computeModifiers(state);
 
 		const manual = 1 / modifiers.castSeconds[state.activeSource];
+
+		if (idleCrossoverAt === null) {
+			const table = catchTable(state.activeSource, modifiers.luck);
+			const manualIncome = modifiers.fishPerCast
+				.times(manual)
+				.times(table.averageSourceValue)
+				.times(modifiers.sellMultiplier);
+			if (totalIncomePerSecond(state, modifiers).gt(manualIncome)) idleCrossoverAt = elapsed;
+		}
+
 		accumulate(state, modifiers, step, 1, { [state.activeSource]: manual * manualUptime });
 		sellHold(state, modifiers);
 
@@ -106,7 +121,13 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 		}
 	}
 
-	return { secondsToPrestige, lifetimeCoins: state.lifetimeCoins, state, unlockedAt };
+	return {
+		secondsToPrestige,
+		lifetimeCoins: state.lifetimeCoins,
+		state,
+		unlockedAt,
+		idleCrossoverAt
+	};
 }
 
 function cheapestPurchase(state: GameState): Purchase | null {

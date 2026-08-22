@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { game } from '$lib/game/state.svelte';
 	import CastPanel from '$lib/components/CastPanel.svelte';
+	import CrewPanel from '$lib/components/CrewPanel.svelte';
 	import CatchTicker from '$lib/components/CatchTicker.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import OfflineModal from '$lib/components/OfflineModal.svelte';
@@ -14,7 +15,8 @@
 
 	const tabs = $derived([
 		{ id: 'water', label: 'Water' },
-		{ id: 'gear', label: 'Gear' }
+		{ id: 'gear', label: 'Gear' },
+		{ id: 'crew', label: 'Crew' }
 	]);
 
 	onMount(() => {
@@ -59,6 +61,8 @@
 					<SourcePicker />
 				{:else if active === 'gear'}
 					<UpgradePanel />
+				{:else if active === 'crew'}
+					<CrewPanel />
 				{/if}
 			</div>
 		</main>
