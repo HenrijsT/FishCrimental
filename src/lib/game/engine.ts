@@ -29,6 +29,11 @@ import {
 	needsBoat,
 	ASSISTANT_COST,
 	AUTO_FISHER,
+	BUCKET_BASE_CAPACITY,
+	BUCKET_BASE_COST,
+	BUCKET_COST_GROWTH,
+	BUCKET_GROWTH,
+	BUCKET_MAX_LEVEL,
 	AUTO_FISHER_OFFLINE_COST,
 	BICYCLE_COST,
 	TOWN_RATE,
@@ -675,13 +680,28 @@ export function distributeCatch(
 	source: FishingSources,
 	fishAmount: Decimal,
 	modifiers: Modifiers,
-	random: () => number = Math.random
+	random: () => number = Math.random,
+	/**
+	 * Fish the hold can still take. `undefined` means unlimited, which is what
+	 * every caller that does not care about the bucket passes.
+	 */
+	room?: Decimal | null
 ): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal } {
 	const caught = new Map<Fish, Decimal>();
 	let value = d0();
 	let landed = d0();
 
-	const whole = takeWhole(state, fishCarryKey(source), fishAmount);
+	// Clamp BEFORE `takeWhole`, never trim after it.
+	//
+	// `takeWhole` mutates `state.carry` — it banks the incoming fraction and
+	// hands back the whole part. Letting it run and then discarding the result
+	// spends the banked fraction and loses the fish with no credit anywhere.
+	// Clamping the input keeps the bank honest: what is not caught is not
+	// banked either.
+	const wanted = room === undefined || room === null ? fishAmount : Decimal.min(fishAmount, room);
+	if (wanted.lte(0)) return { caught, value, fish: landed };
+
+	const whole = takeWhole(state, fishCarryKey(source), wanted);
 	if (whole.lte(0)) return { caught, value, fish: landed };
 
 	const table = catchTable(source, modifiers.luck);
@@ -830,7 +850,14 @@ export function performCast(
 	const route = routeCasts(state, modifiers, source, d1(), true);
 	const working = route.sailed.gt(0) ? source : (route.fallback ?? source);
 
-	const result = distributeCatch(state, working, modifiers.fishPerCast, modifiers, random);
+	const result = distributeCatch(
+		state,
+		working,
+		modifiers.fishPerCast,
+		modifiers,
+		random,
+		holdRoom(state)
+	);
 	state.totalCasts = state.totalCasts.plus(1);
 	return { ...result, source: working };
 }
@@ -867,6 +894,14 @@ export function accumulate(
 	if (seconds <= 0) return { fish: fishTotal, value: valueTotal, fellBack };
 
 	for (const source of SOURCE_ORDER) {
+		// A full bucket stops the work before it starts. This has to be checked
+		// here, at the top, rather than at the catch: below this line the loop
+		// mints casts through `takeWhole` and `runBoat` burns fuel and hull
+		// condition, all of which would be spent on a fish there is nowhere to
+		// put.
+		const room = holdRoom(state);
+		if (room !== null && room.lte(0)) break;
+
 		// Unlicensed water pays nothing, however it came to be unlocked. Without
 		// this, `accumulate` and `reachableSource` disagree about where the crew
 		// are allowed to work.
@@ -891,7 +926,8 @@ export function accumulate(
 				source,
 				route.sailed.times(modifiers.fishPerCast),
 				modifiers,
-				random
+				random,
+				holdRoom(state)
 			);
 			fishTotal = fishTotal.plus(fish);
 			valueTotal = valueTotal.plus(value);
@@ -904,7 +940,8 @@ export function accumulate(
 				route.fallback,
 				route.stranded.times(modifiers.fishPerCast),
 				modifiers,
-				random
+				random,
+				holdRoom(state)
 			);
 			fishTotal = fishTotal.plus(fish);
 			valueTotal = valueTotal.plus(value);
@@ -920,8 +957,14 @@ export function accumulate(
 	if (autoFisherShare > 0) {
 		const source = state.activeSource;
 		const perSecond = autoFisherCastsPerSecond(state, modifiers);
+		const rigRoom = holdRoom(state);
 
-		if (perSecond.gt(0) && state.unlocked[source] && !missingLicence(state, source)) {
+		if (
+			perSecond.gt(0) &&
+			state.unlocked[source] &&
+			!missingLicence(state, source) &&
+			(rigRoom === null || rigRoom.gt(0))
+		) {
 			const casts = takeWhole(
 				state,
 				AUTO_FISHER_CARRY_KEY,
@@ -937,7 +980,8 @@ export function accumulate(
 						source,
 						route.sailed.times(modifiers.fishPerCast),
 						modifiers,
-						random
+						random,
+						holdRoom(state)
 					);
 					fishTotal = fishTotal.plus(fish);
 					valueTotal = valueTotal.plus(value);
@@ -949,7 +993,8 @@ export function accumulate(
 						route.fallback,
 						route.stranded.times(modifiers.fishPerCast),
 						modifiers,
-						random
+						random,
+						holdRoom(state)
 					);
 					fishTotal = fishTotal.plus(fish);
 					valueTotal = valueTotal.plus(value);
@@ -996,6 +1041,37 @@ export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RAT
 	for (const type of FISH_TYPES) state.hold[type] = d0();
 
 	return earned;
+}
+
+export function bucketCapacity(level: Decimal | number): Decimal {
+	return D(BUCKET_BASE_CAPACITY).times(D(BUCKET_GROWTH).pow(level));
+}
+
+export function bucketCost(level: Decimal | number): Decimal {
+	return D(BUCKET_BASE_COST).times(D(BUCKET_COST_GROWTH).pow(level));
+}
+
+/**
+ * How many more fish will fit, or `null` when nothing limits it.
+ *
+ * `null` rather than a very large number so the limit can be switched off
+ * outright: an Assistant minds the catch, so there is no bucket to fill.
+ */
+export function holdRoom(state: GameState): Decimal | null {
+	if (state.hasAssistant) return null;
+	return Decimal.max(d0(), bucketCapacity(state.bucketLevel).minus(holdCount(state)));
+}
+
+export function buyBucket(state: GameState): boolean {
+	const level = state.bucketLevel;
+	if (level.gte(BUCKET_MAX_LEVEL)) return false;
+
+	const cost = bucketCost(level);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	state.bucketLevel = level.plus(1);
+	return true;
 }
 
 /** What the player gets per coin of catch right now. */
@@ -1339,6 +1415,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		deckhands: zeroDeckhands(),
 		// Everything below is bought with coins, so it goes the way every coin
 		// purchase goes on a reset.
+		bucketLevel: d0(),
 		hasBicycle: false,
 		fishingBlockedUntil: 0,
 		hasAssistant: false,

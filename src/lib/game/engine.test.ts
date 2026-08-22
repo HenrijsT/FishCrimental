@@ -28,7 +28,11 @@ import type { GameState } from './types';
 
 function fresh(): GameState {
 	clearCatchTableCache();
-	return createInitialState();
+	const state = createInitialState();
+	// Not a bucket test: an Assistant is the in-game way to say the hold is
+	// unlimited, so these assertions are about accumulation and nothing else.
+	state.hasAssistant = true;
+	return state;
 }
 
 describe('catch tables', () => {

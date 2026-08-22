@@ -6,6 +6,7 @@ import {
 	BOAT_UPGRADES,
 	ASSISTANT_COST,
 	AUTO_FISHER,
+	BUCKET_MAX_LEVEL,
 	AUTO_FISHER_OFFLINE_COST,
 	BICYCLE_COST,
 	BOAT_UPGRADE_IDS,
@@ -23,8 +24,10 @@ import {
 	accumulate,
 	buyBoat,
 	autoFisherCost,
+	bucketCost,
 	buyAssistant,
 	buyAutoFisher,
+	buyBucket,
 	buyAutoFisherOffline,
 	buyBicycle,
 	buyBoatUpgrade,
@@ -266,6 +269,14 @@ function cheapestPurchase(state: GameState): Purchase | null {
 			if (state.boat.upgrades[id].gte(BOAT_UPGRADES[id].maxLevel)) continue;
 			consider(boatUpgradeCost(id, state.boat.upgrades[id]), () => buyBoatUpgrade(state, id));
 		}
+	}
+
+	// The bucket only matters until the Assistant retires it, and a greedy
+	// player upgrades it while it does.
+	if (!state.hasAssistant && state.bucketLevel.lt(BUCKET_MAX_LEVEL)) {
+		consider(bucketCost(state.bucketLevel), () => {
+			buyBucket(state);
+		});
 	}
 
 	if (!state.hasBicycle) {

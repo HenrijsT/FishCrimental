@@ -162,6 +162,8 @@ describe('manual and automatic fishing pay the same', () => {
 		state.coins = D('1e12');
 		buyUpgrade(state, 'net', levels);
 		state.coins = d0();
+		// Not a bucket test — the hold is unlimited so the maths is visible.
+		state.hasAssistant = true;
 		return state;
 	}
 
@@ -233,6 +235,8 @@ describe('eight hours away resolves in one step', () => {
 		state.licences.deep = true;
 		state.boat.owned = true;
 		state.boat.fuel = D('1e30');
+		// Not a bucket test — a billion fish need somewhere to go.
+		state.hasAssistant = true;
 
 		const modifiers = computeModifiers(state);
 		const started = performance.now();
@@ -317,6 +321,8 @@ describe('the numbers a player sees', () => {
 		const state = createInitialState();
 		state.coins = D('1e12');
 		buyUpgrade(state, 'net', 3);
+		// The quoted rate is per cast; 5000 casts must not hit a bucket.
+		state.hasAssistant = true;
 
 		const modifiers = computeModifiers(state);
 		const quoted = modifiers.fishPerCast;

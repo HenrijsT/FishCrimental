@@ -77,6 +77,8 @@ describe('deckhands', () => {
 	function createStateWithCrew() {
 		const state = createInitialState();
 		state.deckhands[FishingSources.Pond] = D(9);
+		// Not a bucket test — see routing.test.ts.
+		state.hasAssistant = true;
 		return state;
 	}
 });

@@ -9,7 +9,12 @@
 
 <section class="panel">
 	<div class="head">
-		<h2>The hold</h2>
+		<h2>
+			The bucket
+			{#if game.holdRoom !== null}
+				<span class="cap"><Num value={game.holdSize} /> / <Num value={game.bucketSize} /></span>
+			{/if}
+		</h2>
 		<button onclick={() => game.sell()} disabled={state.holdValue.lte(0)}>
 			Sell · <Num
 				value={state.holdValue.times(game.modifiers.sellMultiplier).times(game.saleRate)}
@@ -25,6 +30,12 @@
 			This button takes the trader's price — the Shore has a better one.
 		{/if}
 	</p>
+
+	{#if game.holdRoom !== null && game.holdRoom.lte(0)}
+		<p class="full">
+			The bucket is full. Nothing else will fit until it is emptied — the crew have stopped too.
+		</p>
+	{/if}
 
 	{#if visible.length === 0}
 		<p class="muted empty">Empty. Hold the rod and put something in it.</p>
@@ -46,6 +57,21 @@
 </section>
 
 <style>
+	.cap {
+		font-size: 0.7rem;
+		font-weight: 400;
+		color: var(--ink-dim);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.full {
+		font-size: 0.78rem;
+		color: var(--brass);
+		border: 1px dashed var(--brass-dim);
+		border-radius: var(--radius-sm);
+		padding: 0.4rem 0.6rem;
+	}
+
 	.head {
 		display: flex;
 		align-items: center;

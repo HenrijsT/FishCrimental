@@ -249,6 +249,36 @@ export const TOWN_TRIP_SECONDS = 75;
  */
 export const ASSISTANT_COST = 26_000;
 
+/**
+ * The bucket.
+ *
+ * A poor fisherman carries what he can carry. The bucket filling is the whole
+ * reason the trader matters, and the reason the Assistant is worth hiring.
+ *
+ * It is upgradeable for a reason that is not flavour: `#settleOffline` sells
+ * between chunks, so offline throughput is `chunks x capacity` — at most
+ * `OFFLINE_CHUNKS` bucketfuls a night, whatever the crew size. A fixed cap
+ * would turn an implementation detail into the game's offline income ceiling,
+ * so capacity has to outrun the crew until the Assistant retires it.
+ */
+export const BUCKET_BASE_CAPACITY = 15;
+/**
+ * Capacity has to climb faster than the cost, or the bucket falls behind the
+ * crew and the cap becomes the offline ceiling.
+ *
+ * Measured: 20 Pond deckhands land 6,574 fish per offline chunk. At the first
+ * tuning (capacity x2.6, cost x3.15) the level that covered that cost 78,697
+ * cumulative — three times the Assistant — so the player would always retire
+ * the bucket before ever upgrading it, and doubling the crew produced only
+ * 1.41x the night instead of 2x. At x3.4 against x2.9, level 5 holds 6,817 for
+ * 17,190 cumulative, which is inside the Assistant's price. The two now
+ * genuinely compete.
+ */
+export const BUCKET_GROWTH = 3.4;
+export const BUCKET_BASE_COST = 55;
+export const BUCKET_COST_GROWTH = 2.9;
+export const BUCKET_MAX_LEVEL = 12;
+
 // ---------------------------------------------------------------------------
 // The auto-fisher
 // ---------------------------------------------------------------------------

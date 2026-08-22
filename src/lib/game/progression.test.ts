@@ -208,6 +208,10 @@ describe('running dry is never a fail state', () => {
 		state.boat.condition = 0;
 		state.activeSource = FishingSources.Ocean;
 		for (const source of SOURCE_ORDER) state.deckhands[source] = D(10);
+		// These are boat tests, not bucket tests: an Assistant means the hold
+		// never runs out of room, so a fallback that earns nothing can only mean
+		// the boat logic is wrong.
+		state.hasAssistant = true;
 		return state;
 	}
 
