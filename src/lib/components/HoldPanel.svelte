@@ -15,6 +15,11 @@
 		</button>
 	</div>
 
+	<p class="faint note">
+		Fish are sorted by size. The bigger the fish the more it fetches, and where you caught it
+		matters more than what it is.
+	</p>
+
 	{#if visible.length === 0}
 		<p class="muted empty">Empty. Hold the rod and put something in it.</p>
 	{:else}
@@ -41,6 +46,12 @@
 		justify-content: space-between;
 		gap: var(--gap);
 		flex-wrap: wrap;
+	}
+
+	.note {
+		font-size: 0.72rem;
+		margin-top: 0.35rem;
+		max-width: 56ch;
 	}
 
 	.empty {

@@ -29,10 +29,13 @@ import {
 	jellyCaught,
 	performCast,
 	performPrestige,
+	rarityAt,
 	sellHold,
 	totalIncomePerSecond,
 	unlockSource,
-	type PrestigeResult
+	RARITY_ORDER,
+	type PrestigeResult,
+	type Rarity
 } from './engine';
 import { evaluateAchievements } from './achievements';
 import { exportSave, importSave, loadFromStorage, saveToStorage } from './save';
@@ -58,6 +61,7 @@ export interface CastFeedback {
 	fish: Fish;
 	count: Decimal;
 	value: Decimal;
+	rarity: Rarity;
 }
 
 /**
@@ -75,6 +79,10 @@ class Game {
 
 	/** The most recent catches, newest first — the catch ticker. */
 	recentCatches = $state<CastFeedback[]>([]);
+	/** Bumped on every landed cast, so the scene can play its splash. */
+	catchPulse = $state(0);
+	/** The best fish of the last cast, for the flash over the water. */
+	lastCatch = $state<CastFeedback | null>(null);
 
 	offlineReport = $state<OfflineReport | null>(null);
 	prestigeResult = $state<PrestigeResult | null>(null);
@@ -309,13 +317,25 @@ class Game {
 				.times(fishTypeBaseValue[fish.category])
 				.times(valueMultiplier)
 				.times(this.modifiers.sellMultiplier);
-			feedback.push({ id: this.#feedbackId++, fish, count, value });
+			feedback.push({
+				id: this.#feedbackId++,
+				fish,
+				count,
+				value,
+				rarity: rarityAt(source, this.modifiers.luck, fish.name)
+			});
 
 			if (!known.has(fish.name) && this.state.dex[fish.name]?.gte(1)) fresh.push(fish);
 		}
 
 		if (feedback.length) {
 			this.recentCatches = [...feedback, ...this.recentCatches].slice(0, 12);
+
+			// The flash names the rarest thing that came up, not the last one.
+			this.lastCatch = feedback.reduce((best, entry) =>
+				RARITY_ORDER.indexOf(entry.rarity) > RARITY_ORDER.indexOf(best.rarity) ? entry : best
+			);
+			this.catchPulse += 1;
 		}
 
 		if (fresh.length) {
@@ -409,6 +429,7 @@ class Game {
 		if (result) {
 			this.endCast();
 			this.recentCatches = [];
+			this.lastCatch = null;
 			this.prestigeResult = result;
 			this.save();
 		}

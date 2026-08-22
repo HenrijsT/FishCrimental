@@ -794,3 +794,41 @@ export function performPrestige(state: GameState): PrestigeResult | null {
 
 	return { gained, firstTime, jellyFree };
 }
+
+// ---------------------------------------------------------------------------
+// Rarity
+// ---------------------------------------------------------------------------
+
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'exotic' | 'mythic';
+
+/** Ordered commonest first, so the UI can compare two catches. */
+export const RARITY_ORDER: Rarity[] = ['common', 'uncommon', 'rare', 'exotic', 'mythic'];
+
+export const RARITY_LABEL: Record<Rarity, string> = {
+	common: 'Common',
+	uncommon: 'Uncommon',
+	rare: 'Rare',
+	exotic: 'Exotic',
+	mythic: 'One in a million'
+};
+
+/**
+ * How special a catch is, from how likely it was *in the water it came from*.
+ * A Guppy is common in the Pond; a Whale Shark is not common anywhere.
+ */
+export function rarityOf(probability: number): Rarity {
+	if (probability >= 0.12) return 'common';
+	if (probability >= 0.045) return 'uncommon';
+	if (probability >= 0.012) return 'rare';
+	if (probability >= 0.0008) return 'exotic';
+	return 'mythic';
+}
+
+export function speciesProbability(source: FishingSources, luck: number, name: string): number {
+	const table = catchTable(source, luck);
+	return table.species.find((entry) => entry.fish.name === name)?.probability ?? 0;
+}
+
+export function rarityAt(source: FishingSources, luck: number, name: string): Rarity {
+	return rarityOf(speciesProbability(source, luck, name));
+}

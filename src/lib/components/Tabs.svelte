@@ -53,11 +53,13 @@
 	}
 
 	.badge {
-		font-size: 0.65rem;
-		padding: 0.05rem 0.3rem;
+		font-size: 0.6rem;
+		padding: 0.05rem 0.32rem;
 		border-radius: 999px;
 		background: var(--coral);
 		color: #200a08;
 		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 </style>
