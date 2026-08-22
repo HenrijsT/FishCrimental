@@ -1,5 +1,5 @@
 import { writable, type Writable } from 'svelte/store';
-import Big from 'big.js';
+import Decimal from 'break_eternity.js';
 
 //TODO: Jelly fish description opens up during the gameplay. After finishing the game -
 // A popup shows up about you not having any Jelly fish with "Don't be too Jelly" :D
@@ -13,9 +13,9 @@ export enum FishType {
 	Jelly = 'Jelly'
 }
 
-export const fishTypeCurrentCount: Map<FishType, Writable<Big>> = new Map();
+export const fishTypeCurrentCount: Map<FishType, Writable<Decimal>> = new Map();
 
-Object.values(FishType).forEach((i) => fishTypeCurrentCount.set(i, writable(new Big(0))));
+Object.values(FishType).forEach((i) => fishTypeCurrentCount.set(i, writable(new Decimal(0))));
 
 export const fishTypeBaseValue: Record<FishType, number> = {
 	[FishType.Small]: 2,

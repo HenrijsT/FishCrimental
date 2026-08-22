@@ -1,15 +1,15 @@
 import { get, writable } from 'svelte/store';
-import Big from 'big.js';
+import Decimal from 'break_eternity.js';
 import { FishType, fishTypeBaseValue, fishTypeCurrentCount } from '$lib/fish_types';
 
-export const marketCoinCount = writable(new Big('0'));
+export const marketCoinCount = writable(new Decimal('0'));
 
 export function sellFish() {
 	const currentMarketcoinCount = get(marketCoinCount);
 
 	fishTypeCurrentCount.forEach((value, key) => {
 		marketCoinCount.set(get(marketCoinCount).plus(get(value).times(fishTypeBaseValue[key])));
-		value.set(new Big(0));
+		value.set(new Decimal(0));
 		console.log('Total', FishType[key], 'count:', get(value).toFixed(0));
 	});
 
