@@ -30,6 +30,12 @@ export interface GameState {
 	// Progress
 	/** Lifetime catches per species name — the Fishdex. */
 	dex: Record<string, Decimal>;
+	/**
+	 * Sub-unit remainders banked by `takeWhole`, keyed by `source#thing`. Every
+	 * value is a plain number in `[0, 1)` — these are fractions of a unit, not
+	 * counts, so they never need Decimal and never mix with one.
+	 */
+	carry: Record<string, number>;
 	totalCasts: Decimal;
 	totalFish: Decimal;
 

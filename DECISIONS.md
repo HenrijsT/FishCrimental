@@ -363,12 +363,12 @@ bug that only a browser could find.
 **No quality gate was relaxed.** `pnpm check`, `pnpm lint`, `pnpm build`, `pnpm test`
 and `pnpm audit:ui` all pass at their original thresholds:
 
-| Gate | Result |
-|---|---|
-| `pnpm check` | 395 files, **0 errors, 0 warnings** |
-| `pnpm lint` | Prettier clean, ESLint clean |
-| `pnpm build` | ok — static output in `build/static` |
-| `pnpm test` | **136 passing** across 11 files |
+| Gate            | Result                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `pnpm check`    | 395 files, **0 errors, 0 warnings**                                                              |
+| `pnpm lint`     | Prettier clean, ESLint clean                                                                     |
+| `pnpm build`    | ok — static output in `build/static`                                                             |
+| `pnpm test`     | **136 passing** across 11 files                                                                  |
 | `pnpm audit:ui` | performance **1.00**, accessibility **1.00**, best-practices **1.00**, SEO **1.00** (three runs) |
 
 The compromises that were made are design decisions, not relaxed gates:
@@ -437,3 +437,129 @@ CHROME_PATH=/usr/bin/google-chrome-stable pnpm audit:ui   # Lighthouse
 ```
 
 Everything is committed locally on `feat/going-ham`. Nothing was pushed.
+
+---
+
+# SECOND PASS
+
+## Stage 0 — triple verification and bug fixes (`fix/round-two`)
+
+Three passes were run separately, each with its own lens, and compared at the end.
+Pass 1 read the maths and state handling. Pass 2 attacked it with hostile inputs.
+Pass 3 drove the production build in headless Chrome over the DevTools Protocol.
+
+### Confirmed bugs
+
+**B1 — one cast wrote every species in the source into the ticker, the hold and the
+Fishdex.** *(the user's reported bugs 1, 2 and 5, all one defect)*
+
+Reproduced in a unit probe: with `net` at level 1 (`fishPerCast` 1.19), a single Pond
+cast produced **31 entries** — one rolled fish plus a fractional sliver of all 30 other
+species — and `Object.keys(state.dex).length` went from 0 to 31 in one click. Confirmed
+live in the browser: the catch ticker read `Betta Fish ×1.06 9.55 | Zebra Barb ×1.06
+9.55 | Guppy 0.51 | Tetra 0.51 | Platy 0.51 | Swordtail 0.51 …` — exactly the reported
+"same stuff on every line but the first". The hold read `Small 7.21 | Medium 1.29 |
+Large 0.02 | Erotic 0 !`, which is the reported Erotic bug in the same screenshot.
+
+Cause: `performCast` rolled up to 16 fish and then filled the fractional remainder from
+the expected distribution across *every* species, and `accumulate` did the same for
+deckhands. Fractional fish were the root of all three complaints.
+
+Fixed by replacing the catch model outright — see **Stage 3**, which owns that decision.
+Doing it here rather than later was deliberate: three separately-reported bugs share
+this one root cause, and the brief is explicit that features should not be built on top
+of broken code. Stage 3 documents the reasoning and adds the statistical proof.
+
+**B2 — `formatNumber` rendered nonzero values as `0`.** Reproduced: `formatNumber(0.004)`
+→ `"0"`, `formatNumber(1e-6)` → `"0"`. Below 0.05 the `toFixed(1)` path produced `"0.0"`
+and `trimTrailingZeros` turned it into `"0"`. This is what made a sub-unit Erotic count
+render as a red-flagged zero. Now anything in `(0, 0.01)` renders `<0.01`, and a value
+that would round to `"0"` is caught and rendered the same way. A real zero still reads
+`0`. Four tests cover it.
+
+**B3 — toasts only dismissed; they did not go anywhere.** Reproduced live: clicking a
+"New in the Fishdex" toast left the active tab on Water. Toasts now have two targets —
+the body navigates (`selectTab(tab, focusTarget)`), and a separate `×` dismisses. The
+Fishdex opens and scrolls to the species; the Records panel scrolls to and outlines the
+achievement. Verified live: tapping the toast switched to Fishdex, expanded *Giant
+Gourami*, and set `location.hash` to `#dex`.
+
+**B4 — every source stocked almost every species, all at identical rarity.**
+*(the user's "verify if it's a bug" item — it was one.)* Reproduced: the Pond catch
+table held **31 species**, including all 12 Medium fish, and every species inside a
+category had `baseChance: 10`, giving a flat 7.08e-2 each. There was no reason to fish
+anywhere else and nothing to hunt for.
+
+Rewrote the rosters and the rarity spread across all 43 catalogue species. Sources now
+hold **8 to 14** species each, with `baseChance` ranging 1–24 inside a category
+(Guppy 24 down to Betta Fish 2; Nurse Shark 16 down to Whale Shark 1). Bull sharks are
+in the river, whale sharks only in the ocean, and the Pond's Giant Gourami is a rare
+surprise rather than a certainty.
+
+**This has zero economic impact by construction** — `averageValue` depends only on the
+per-type probabilities in `SOURCE_CONFIG`, which were not touched, and every source
+still stocks every type it is configured to pay out. That invariant is now a test.
+
+**B5 — a large crew overflowed a double and could destroy the save.**
+`autoCastsPerSecond` returned a plain `number` via `crew.times(rate).toNumber()`.
+Reproduced with a crew of 1e320: the result was `Infinity`, which flowed into
+`holdValue`, then `coins`, then the save file — where `parseDecimal` correctly rejects
+`Infinity` and the field silently falls back to **zero**. A player at that scale would
+have lost everything on reload. `autoCastsPerSecond` now returns a `Decimal`. The
+regression test runs a 1e320 crew through accumulate → sell → serialise → load and
+asserts the coins come back intact.
+
+**B6 — bulk-buying deckhands cost more than buying them one at a time.** Reproduced:
+ten Pond deckhands cost 112,938 singly and 112,943.47 in bulk, because `deckhandCost`
+floored and `deckhandBulkCost` summed the exact geometric series. Dropped the floor;
+the two now agree to nine decimal places.
+
+**B7 — a save from a newer build loaded silently and was then overwritten.** Reproduced:
+a save with `version: 99` and unknown fields loaded as if it were current, and the next
+autosave wrote the truncated version back. `deserialize` now throws `FutureSaveError`,
+`loadFromStorage` returns a tagged outcome, and the game refuses to save at all while a
+save problem is outstanding. Verified live: the banner appears and the file still reads
+`v99 mystery=keep me coins=5555` after a full 12-second autosave window.
+
+**B8 — hand-edited saves were trusted.** Reproduced: `coins: '-1e30'` loaded as negative
+money; `upgrades.rod: '1e30'` loaded a rod 1e30 levels above its own maximum. Currencies
+and counts are now clamped non-negative and floored, levels are clamped to `maxLevel`,
+and the new remainder bank rejects anything outside `[0, 1)`.
+
+**B9 — two tabs on one save clobbered each other.** Both autosaved, last writer won.
+A `storage` listener now detects another tab writing, stops this tab saving, and offers
+a reload. Chosen over merging or locking because it is the only option that cannot lose
+data.
+
+### Hardening that was not a reproducible bug
+
+- `#settleOffline` was called with the raw loaded object in `init()` and `importBlob()`
+  rather than with `this.state`. Assigning to a `$state` field wraps the value in a
+  proxy, so those mutations bypassed reactivity. No visible failure could be produced —
+  nothing had subscribed yet at that point — but the code was wrong and is now correct.
+
+### Hypotheses that could not be reproduced
+
+- **Log-rounding overshoot in `affordableUpgradeLevels` / `affordableDeckhands`** driving
+  coins negative. Brute-forced 1,120 upgrade cases and 1,000 deckhand cases across five
+  upgrades, eight sources, 40 levels and coin piles from exactly-affordable to 97×:
+  **zero overshoots, zero negative balances.** 500 spam-clicks of every buy button in a
+  live browser also produced no negative balance.
+- **Timer leak on unmount.** `stop()` clears all three handles and `onMount` returns it.
+- **Duplicate keys in the toast `{#each}` crashing the renderer.** Guarded on both paths.
+- **`parseDecimal` rejecting a legitimate value.** It rejects non-canonical forms like
+  `1e1e300`, which break_eternity accepts as *input* but never *emits*. Saves only ever
+  contain `toJSON()` output, and `decimal.test.ts` round-trips 40 escalating magnitudes.
+  Only reachable by hand-writing a save in a form the game never produces.
+
+### Runtime pass
+
+Full playthrough on the production build over CDP: fresh save → manual fishing →
+mid-cast source switch (cast correctly cancelled) → refresh mid-cast → toasts →
+seeded mid-game → prestige → offline settlement at 3 hours, at one year (correctly
+capped at 8h with the explanatory line) and with the clock set 90 days *forward*
+(no modal, no negative earnings) → layer-2 Decimals through every panel → 1,000
+spam clicks. **No console errors or warnings at any point, before or after the fixes.**
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 163 passing · `pnpm audit:ui` 1.00 / 1.00 / 1.00 / 1.00.

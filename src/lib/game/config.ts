@@ -315,5 +315,5 @@ export const MAX_OFFLINE_SECONDS = 8 * 60 * 60;
 export const OFFLINE_EFFICIENCY = 0.75;
 
 export const SAVE_KEY = 'fishcrimental.save';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const AUTOSAVE_MS = 10_000;

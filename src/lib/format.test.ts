@@ -114,3 +114,26 @@ describe('scientific notation mode', () => {
 		expect(formatNumber(1.5e18, { notation: 'scientific' })).toBe(formatNumber(1.5e18));
 	});
 });
+
+describe('small nonzero values', () => {
+	it('never renders something the player has as a flat zero', () => {
+		for (const value of [1e-9, 2.09e-7, 1e-6, 0.001, 0.004, 0.0099]) {
+			expect(formatNumber(value)).toBe('<0.01');
+		}
+	});
+
+	it('still renders a real zero as zero', () => {
+		expect(formatNumber(0)).toBe('0');
+		expect(formatNumber(D(0))).toBe('0');
+	});
+
+	it('shows values it can render honestly', () => {
+		expect(formatNumber(0.01)).toBe('0.01');
+		expect(formatNumber(0.04)).toBe('0.04');
+		expect(formatNumber(0.5)).toBe('0.5');
+	});
+
+	it('keeps the sign on tiny negatives', () => {
+		expect(formatNumber(-0.004)).toBe('-<0.01');
+	});
+});
