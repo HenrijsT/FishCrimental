@@ -11,8 +11,8 @@
 	const maxed = $derived(level.gte(MAP_MAX_LEVEL));
 	const accuracy = $derived(mapAccuracy(level));
 
-	/** Home sits where the mud pool is, because that is the whole story. */
-	const HOME = { x: 0.06, y: 0.9 };
+	/** Home sits beside the mud pool, because that is the whole story. */
+	const HOME = { x: 0.04, y: 0.9 };
 
 	const charted = $derived(
 		chartedSources(g).map((source) => {
@@ -44,27 +44,54 @@
 		</span>
 	</div>
 
-	<svg viewBox="0 0 100 60" role="img" aria-label="A chart of the water you know about">
-		<rect x="0" y="0" width="100" height="60" class="paper" />
+	<!-- The viewBox carries 10 units of bleed on each side. Places are plotted
+	     in 0-100, but their labels are centred on them, so a place near the edge
+	     would otherwise have its name cut in half by the frame. -->
+	<svg viewBox="-10 -3 120 58" role="img" aria-label="A chart of the water you know about">
+		<defs>
+			<!-- Hatching for the part of the coast the paper does not cover. Not
+			     empty — deliberately unsurveyed. -->
+			<pattern
+				id="unsurveyed"
+				width="6"
+				height="6"
+				patternUnits="userSpaceOnUse"
+				patternTransform="rotate(35)"
+			>
+				<line x1="0" y1="0" x2="0" y2="6" class="hatch" />
+			</pattern>
+		</defs>
+		<rect x="-10" y="-3" width="120" height="58" class="paper" />
+
+		<!-- Depth contours. A chart of water should look like one even before
+		     there is much on it. -->
+		<g class="contours" aria-hidden="true">
+			<path d="M -5 40 Q 25 33 52 38 T 105 31" />
+			<path d="M -5 47 Q 30 41 58 45 T 105 39" />
+			<path d="M -5 33 Q 20 27 44 31 T 105 23" />
+		</g>
 
 		<!-- Beyond the edge of the paper there is nothing drawn, because as far
 		     as this chart is concerned there is nothing there. -->
 		{#if edge < 1}
-			<rect x={edge * 100} y="0" width={(1 - edge) * 100} height="60" class="unknown" />
-			<line x1={edge * 100} y1="0" x2={edge * 100} y2="60" class="edge" />
-			<text x={Math.min(97, edge * 100 + 2)} y="30" class="edge-label">?</text>
+			<rect x={edge * 100} y="-3" width={110 - edge * 100} height="58" class="unknown" />
+			<rect x={edge * 100} y="-3" width={110 - edge * 100} height="58" fill="url(#unsurveyed)" />
+			<line x1={edge * 100} y1="-3" x2={edge * 100} y2="55" class="edge" />
+			<text x={Math.min(104, edge * 100 + 4)} y="26" class="edge-label">?</text>
 		{/if}
 
-		<!-- Home. -->
-		<g class="place home" transform="translate({HOME.x * 100} {HOME.y * 60})">
+		<!-- Home. Labelled above the roof so it cannot fall off the sheet. -->
+		<g class="place home" transform="translate({HOME.x * 100} {HOME.y * 52})">
 			<path d="M -2.6 1.6 L 0 -1.4 L 2.6 1.6 Z" />
 			<rect x="-1.8" y="1.4" width="3.6" height="2.4" />
-			<text y="7">Home</text>
+			<!-- Beside the roof, not above it: the mud pool sits directly over
+			     home and the two labels collided. -->
+			<text x="4.6" y="3" class="home-label">Home</text>
 		</g>
 
 		{#each charted as place (place.source)}
 			{@const cx = place.x * 100}
-			{@const cy = place.y * 60}
+			{@const cy = place.y * 52}
 			<g
 				class="place"
 				class:open={place.open}
@@ -152,6 +179,17 @@
 		fill: #12283f;
 	}
 
+	.contours path {
+		fill: none;
+		stroke: #1c3b5b;
+		stroke-width: 0.35;
+	}
+
+	.hatch {
+		stroke: #16304c;
+		stroke-width: 0.6;
+	}
+
 	.unknown {
 		fill: #0a1a2a;
 	}
@@ -202,6 +240,13 @@
 
 	.home path,
 	.home rect {
+		fill: var(--ink-dim);
+	}
+
+	/* `.place text` is (0,1,1) and sets text-anchor: middle, so this has to
+	   out-specify it or Home is drawn centred on its own roof. */
+	.place .home-label {
+		text-anchor: start;
 		fill: var(--ink-dim);
 	}
 

@@ -1,4 +1,7 @@
 <script lang="ts">
+	// The panel theme belongs to this route, not to the layout: /logbook is a
+	// different front-end onto the same game and must not inherit it.
+	import '../app.css';
 	import { onMount } from 'svelte';
 	import { game } from '$lib/game/state.svelte';
 	import { AUTO_FISHER } from '$lib/game/config';

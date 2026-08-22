@@ -1,0 +1,116 @@
+/* ---------------------------------------------------------------------------
+   THE LOGBOOK — a second front-end for the same game.
+
+   Deliberately not a reskin of the instrument panel. That screen is a dark
+   machine you read; this one is a paper ledger you keep. Everything follows
+   from that: warm stock instead of black glass, ink instead of backlight, a
+   single ruled scroll instead of tabs, and one red stamp doing all the shouting
+   so the page can otherwise stay quiet.
+
+   Type: Young Serif for the masthead — a chunky, slightly agricultural slab
+   that looks printed rather than rendered. Spectral for prose, because it was
+   drawn for long reading on screen and keeps its colour at small sizes. Courier
+   Prime for every figure, because a ledger's numbers are typewritten and must
+   sit in perfect columns.
+
+   Self-hosted, latin subset, OFL. See THIRD-PARTY-NOTICES.md.
+   --------------------------------------------------------------------------- */
+
+@font-face {
+	font-family: 'Young Serif';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/young-serif-400.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Spectral';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/spectral-400.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Spectral';
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url('/fonts/spectral-600.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Courier Prime';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/courier-prime-400.woff2') format('woff2');
+}
+
+.logbook {
+	/* Paper, warmed and slightly dirty. Never pure white — nothing a fisherman
+	   owns is pure white. */
+	--paper: #e9dfc9;
+	--paper-lit: #f2ebda;
+	--paper-shade: #ddd0b4;
+	--rule: #c2b192;
+	--rule-faint: #d3c5a8;
+
+	/* Ink, and ink that has faded. */
+	--ink: #221c15;
+	--ink-soft: #4b4034;
+	/* Measured, not trusted to a score. #6b5c4a was 4.23:1 against the lit
+	   paper — an AA failure on every margin note, table note and level tag,
+	   which Lighthouse rated 100 because axe cannot see it. #5f503f is 5.08:1
+	   at worst and still reads as a lighter tier than --ink-soft. */
+	--ink-faded: #5f503f;
+
+	/* One accent. It is a rubber stamp and it is the only red on the page. */
+	--stamp: #a12a1d;
+	--stamp-soft: rgba(161, 42, 29, 0.13);
+
+	--sea: #2c4f5e;
+
+	--display: 'Young Serif', Georgia, 'Times New Roman', serif;
+	--body: 'Spectral', Georgia, 'Times New Roman', serif;
+	--figure: 'Courier Prime', ui-monospace, 'Cascadia Mono', Menlo, monospace;
+
+	/* The ruled grid every line sits on. */
+	--line: 1.6rem;
+
+	color: var(--ink);
+	font-family: var(--body);
+	font-size: 17px;
+	line-height: var(--line);
+	min-height: 100vh;
+	position: relative;
+	isolation: isolate;
+
+	/* Ruled paper. The horizontal hairlines are the page, not decoration on it,
+	   so every baseline in the document is expected to land on one. */
+	background-color: var(--paper);
+	background-image:
+		repeating-linear-gradient(
+			180deg,
+			transparent 0,
+			transparent calc(var(--line) - 1px),
+			var(--rule-faint) calc(var(--line) - 1px),
+			var(--rule-faint) var(--line)
+		),
+		radial-gradient(120% 70% at 12% 0%, rgba(255, 252, 242, 0.75), transparent 60%),
+		radial-gradient(90% 60% at 100% 100%, rgba(120, 98, 66, 0.16), transparent 70%);
+}
+
+/* Paper tooth. Fibre, not film grain — coarser and weaker than the dark
+   screen's, because paper scatters light instead of reflecting it. */
+.logbook::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+	opacity: 0.5;
+	mix-blend-mode: multiply;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23p)' opacity='0.35'/%3E%3C/svg%3E");
+}
