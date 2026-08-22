@@ -128,3 +128,25 @@ export function formatMultiplier(value: DecimalSource): string {
 export function formatPercent(fraction: number, precision = 0): string {
 	return `${(fraction * 100).toFixed(precision)}%`;
 }
+
+/**
+ * Explain a fractional per-cast rate in words.
+ *
+ * Catches are always whole fish, and a rate like 1.19 is paid out as mostly
+ * ones with the occasional two. Saying that plainly is the difference between
+ * a number the player trusts and one they think is broken.
+ */
+export function describePerCast(rate: DecimalSource): string {
+	const d = rate instanceof Decimal ? rate : D(rate);
+
+	if (d.layer > 0 || d.mag >= 1000) return `${formatNumber(d)} fish a cast`;
+
+	const value = d.mag;
+	const low = Math.floor(value);
+	const chance = value - low;
+
+	if (chance < 0.005) return `${low} fish a cast`;
+	if (chance > 0.995) return `${low + 1} fish a cast`;
+
+	return `${trimTrailingZeros(value.toFixed(2))} fish a cast — ${low === 0 ? 'nothing' : `${low}`} most casts, ${low + 1} about ${Math.round(chance * 100)}% of the time`;
+}
