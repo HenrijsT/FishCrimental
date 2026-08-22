@@ -1755,3 +1755,212 @@ The brief said not to re-investigate the six refuted findings and to say so with
 a reproduction if I disagreed. **I found nothing to disagree with.** The
 remaining 17 confirmed defects are carried into `Goals/PLAN.md` Part 2 with a
 recommended order, grouped by what blocks other work.
+
+### Stage 2 addendum — the verification finished, and it changed the documents
+
+The Stage 2 section above was written while six of the seven verifiers were
+still running. All fourteen agents have now finished. Final tally across
+**155 findings judged**:
+
+| Verdict                 | Count  | Share  |
+| ----------------------- | ------ | ------ |
+| CONFIRMED               | 91     | 59%    |
+| UNSUPPORTED             | 31     | 20%    |
+| RECLASSIFY AS JUDGEMENT | 19     | 12%    |
+| **FALSE**               | **14** | **9%** |
+
+Two of the fourteen were quotations in quote marks that do not exist in the
+cited article. One verifier re-harvested a 5,186-review Steam corpus from
+scratch and falsified four superlatives with counts. **And two were confident
+claims about this codebase**, which I then checked in the source myself rather
+than taking either side on trust:
+
+- **"The tail of a run is a buy-one-more-upgrade versus bank-toward-the-
+  threshold decision."** False. `lifetimeCoins` is only ever incremented
+  (`engine.ts:981`) and never decremented on spend, and `pearlsFor` reads it
+  directly — so spending cannot reduce Pearl yield and there is nothing to bank.
+  I had repeated a softened version of this in `PLAN.md`; it is now corrected
+  in place, with the honest narrower argument left standing (a random trigger
+  destroys the ability to plan the _next_ purchase, which is a planning loss,
+  not a banking one).
+- **"The Fishdex is 56 free unwritten story beats."** False, and it was one of
+  my own roadmap items. `description: string` is mandatory on the `Fish`
+  interface, all 47 species carry one, `index.test.ts` asserts every one exceeds
+  20 characters, and I measured them: **median 226, min 171, max 256**. The
+  surfaces are full of neutral encyclopaedia copy. The task is _rewriting
+  ~12,000 characters in voice_, which is a different and better-defined job.
+
+A third correction reversed a conclusion outright. The claim that **"writing is
+a net liability more often than an asset"** fails twice over: it was inferred
+from a corpus of negative reviews only, where "net" cannot be established by
+construction, and the single empirical study located (Hwang, UCSC 2025) reports
+the **opposite** — participants marked "Storyline" negatively _because idle
+games lack one_. What survives is that bad writing is resented.
+
+Four superlatives were downgraded to measured shares: "spreadsheet" appears in
+25 of 5,186 negative reviews (0.5%), not as the top readability complaint;
+offline caps in 37 (0.7%); cloud sync is named in about a quarter of the 78
+save-loss reviews rather than being the leading cause; and "automation ships at
+human speed in every game examined" rests on three games.
+
+**All of this is now corrected in `RESEARCH.md` and `PLAN.md`**, with the killed
+claims recorded rather than deleted, so nobody re-derives them. None of the
+corrections changed a keep/change/cut verdict. They changed how strongly several
+of them can be argued, and they replaced one roadmap item with a more accurate
+version of itself.
+
+The lesson worth keeping: **the single most useful thing in this pass was the
+instruction to verify adversarially rather than self-assess.** Nine per cent of
+a careful agent's cited findings were false, and two of the falsehoods were
+about code sitting on this disk.
+
+---
+
+## Closing summary
+
+Five stages, all complete. Branch `feat/going-ham`, nothing pushed.
+
+### What was fixed, and how it was reproduced
+
+Stage 0, on `fix/audit`, merged with `--no-ff` as `d789326`. All six mandatory
+defects, each **reproduced before being fixed**: 8 of 15 new lifecycle tests and
+10 of 12 new routing tests failed against the original code, then passed.
+
+The offline settle paid for the hold you already had and handed it back — three
+resumes with a 1e6 hold took coins to 1e6, 2e6, 3e6 with the hold intact each
+time, silently when there were no deckhands, and it minted Pearls out of the
+inflated `lifetimeCoins`. The multi-tab guard muted the tab the player was
+using, which refutes B9 from the second pass. A refused write was completely
+silent. Dismiss destroyed the save it protected. The headline coins/s ignored
+the boat gate — 5.03× overstatement measured here, and the audit's
+deeper-deckhand claim reproduced to the digit at 22,339/s advertised against
+5,958/s real. Seven of eight tabs were unreachable by keyboard.
+
+**The new tests are the point.** `lifecycle.test.ts` is the first thing in the
+repo to import `state.svelte.ts` — the layer the audit found held all 23
+confirmed defects and zero tests. Coverage went 260 → **321** across 17 → 20
+files.
+
+Fixing #5 turned up a defect nobody had named: the stranded-cast fallback used
+`reachableSource`, which consults the fuel tank, so estimating before a trip and
+settling after gave two different answers for the same trip. `shoreSource` is
+order-independent.
+
+### Licensing and visibility
+
+The repo **is** public — but `origin/main` is 6 prototype commits with **zero
+files under `src/lib/game/`**. Everything of value has never been pushed.
+`ideas.txt`, `Goals/` and `USER-REQUIREMENTS.md` are untracked, so the design
+backlog is not exposed; `DECISIONS.md` is tracked and would go public on the
+first push. There is a second contributor in the history with **0 surviving
+lines**. All 651 installed packages were scanned: **no GPL, LGPL or AGPL
+anywhere**, and exactly one third-party package ships to the player
+(`break_eternity.js`, MIT).
+
+**Changed GPL-3.0 → proprietary source-available, repo stays public.** The
+deciding argument is asymmetry: you can open-source later, you can never un-GPL
+what you published. GPL and a paid Steam release are compatible only in the
+Mindustry sense — legal to sell, but any buyer may lawfully repost the build
+with source attached — and nothing in the requirements says the owner chose
+that. `package.json` and `LICENSE` now agree; `THIRD-PARTY-NOTICES.md` is new.
+
+### What the research concluded, and what I would cut
+
+Three findings reshaped the plan: **`pearlMultiplier` is applied twice** so
+income scales as its square while the panel shows the unsquared figure — that,
+not the cost curves, is why runs collapse to 4 seconds; **nothing in the genre
+ships a random-timing deep reset**; and **"paradigm shift" already means a
+phase of completely distinct gameplay**, so players will expect the loop
+replaced, not multiplied.
+
+**Cut:** police fines (inverted into a value penalty on unlicensed water —
+every fix that makes the fine safe removes the idea, and it contradicts the
+project's own never-a-fail-state rule); two thirds of "knowledge-based profit",
+already shipped as `DEX_BONUS_PER_SPECIES`; a real fluctuating market, which
+needs the hold rebuilt from 6 type buckets to 47 species buckets behind an
+information-destroying migration.
+
+**Changed:** the probabilistic trigger becomes a visible Tide meter arming a
+player-pressed button — the owner's escalating curve kept exactly, the agency
+kept too.
+
+**The strongest ideas in the file** are the bicycle-and-cooldown (real economic
+design, and it touches nothing in the engine because the manual and automatic
+paths are already separate), the one-time story beats, and nested reset layers.
+**The weakest** are the map (a reskin of `SourcePicker` until it has something
+to contain) and shopkeeper gating (half of it already ships as
+`LICENCES.requires`).
+
+### The auto-fisher
+
+**0.20 of human speed at level 1 — 5× slower.** Not a round number: the anchor
+is `DECKHAND_BASE_EFFICIENCY = 0.42`. At 0.42 or faster the rig strictly
+dominates the crew track, out-casting a deckhand while needing no per-source
+purchase, so nobody would hire anyone. Below about 0.15 the game's own
+cheapest-thing-first advice would never buy it. 0.20 is just under half a
+deckhand.
+
+Level 12 is `START^0` — **exactly** 1, by construction rather than by a
+multiplier that lands near it, so the test asserts `toBe(1)`. It stands down
+while the player holds the rod, so it can match a hand but never stack with one.
+
+Pacing: **100% uptime 2h25m44s → 2h28m13s (+1.7%); 50% uptime 3h30m39s →
+2h43m03s (−22.5%).** No retune needed. It raises the floor rather than the
+ceiling: the gap between attentive and casual play narrows from 45 minutes to
+15, and the attentive player still finishes first.
+
+### SvelteKit 3
+
+**Green on all five gates at 3.0.0-next.25, and deliberately not merged.** I ran
+the migration rather than reasoning about it. There is no dependency wall —
+every peer was already satisfied. The codemod left floating `next` dist-tags,
+which I pinned, and one inapplicable migration task, which I deleted.
+
+Not merged because the project imports three build-time SvelteKit symbols and
+zero runtime APIs, so 3.x buys nothing measurable — the Vite 8 win it is famous
+for is already in hand on Kit 2 — against a 64-file diff landing immediately
+before the roadmap. Branch kept green and pinned so it is a one-command merge.
+Revisit when `latest` is `3.0.0`.
+
+### Compromises, with the real figures
+
+- **No quality gate was relaxed.** `check` 0 errors, `lint` clean, `build` ok,
+  `test` 321 passing, `audit:ui` 100/100/100/100 — on every commit that touched
+  code.
+- **One commit briefly failed lint.** The Stage 1 write-up was committed before
+  prettier ran on `DECISIONS.md`; fixed forward in `91fb5c3` rather than by
+  amending, because the rules forbid rewriting history.
+- **`Goals/RESEARCH.md` and `Goals/PLAN.md` are not committed.** `Goals/` is in
+  `.git/info/exclude` and the brief forbids editing it; force-adding would
+  defeat the same intention. They exist on disk and this file is the tracked
+  record.
+- **The first research workflow lost 7 of 9 agents to a session limit
+  mid-flight.** Resuming replayed the two survivors from cache and re-ran the
+  rest — the only reason the research survived.
+- **A research subagent wrote a 132 KB TV Tropes page into the repo root**,
+  which broke `pnpm lint`. Moved to the scratchpad, not committed.
+- **`npx sv` left pnpm 8.15.9 shadowing 9.4.0 on `PATH`**, and 8.x cannot read a
+  `lockfileVersion: '9.0'` lockfile. If installs start refusing the lockfile,
+  check `pnpm --version` first.
+
+### Nothing was cut
+
+All five stages were completed, including Stage 4, which the brief nominated as
+the first thing to drop.
+
+### What to read first
+
+1. **`Goals/PLAN.md`, Part 4** — the five questions only the owner can answer.
+   The first one, whether the pearl bonus keeps being squared, gates the whole
+   second-layer roadmap and is a pacing decision rather than a bug fix.
+2. **`Goals/PLAN.md`, Part 1 §1** — why the probabilistic paradigm shift becomes
+   a meter. It is the biggest change to the owner's stated intent in this pass,
+   and the reasoning is the part most worth disagreeing with.
+3. **`Goals/RESEARCH.md`, the method section** — the 91/31/19/14 tally. It is
+   the reason to trust the rest of that document, and the reason not to trust
+   any single unverified research pass.
+4. **`src/lib/game/lifecycle.test.ts`** — the first test in this repo that
+   drives the `Game` class. The audit's central point was that every confirmed
+   defect lived in the one layer with no tests; this is the start of closing
+   that.
+5. **The licensing section of this file**, if a Steam release is still the plan.
