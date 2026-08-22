@@ -1,26 +1,22 @@
 import { get, writable } from 'svelte/store';
 import Decimal from 'break_eternity.js';
-import { FishType, fishTypeBaseValue, fishTypeCurrentCount } from '$lib/fish_types';
+import { fishTypeBaseValue, fishTypeCurrentCount } from '$lib/fish_types';
 
 export const marketCoinCount = writable(new Decimal('0'));
 
 export function sellFish() {
-	const currentMarketcoinCount = get(marketCoinCount);
+	const before = get(marketCoinCount);
 
-	fishTypeCurrentCount.forEach((value, key) => {
-		marketCoinCount.set(get(marketCoinCount).plus(get(value).times(fishTypeBaseValue[key])));
-		value.set(new Decimal(0));
-		console.log('Total', FishType[key], 'count:', get(value).toFixed(0));
+	let earned = new Decimal(0);
+	fishTypeCurrentCount.forEach((store, type) => {
+		const sold = get(store);
+		if (sold.lte(0)) return;
+
+		earned = earned.plus(sold.times(fishTypeBaseValue[type]));
+		store.set(new Decimal(0));
 	});
 
-	const profit = get(marketCoinCount).minus(currentMarketcoinCount);
+	marketCoinCount.set(before.plus(earned));
 
-	console.log('Fishes sold! Total profit:', profit.toFixed(0));
+	return earned;
 }
-
-// data.forEach(([key, val]) => {
-//     for (let i = total; i < val + total; i++) {
-//       this.map[i] = key;
-//     }
-//     total += val;
-//   });

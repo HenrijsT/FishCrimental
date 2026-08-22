@@ -6,4 +6,4 @@
 </script>
 
 <slot />
-{$count} /
+{$count.toFixed(0)}
