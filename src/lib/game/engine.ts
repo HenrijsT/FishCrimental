@@ -298,6 +298,10 @@ export function computeModifiers(state: GameState): Modifiers {
 
 /** A neglected boat is slow, never dead. */
 export function boatEfficiency(condition: number): number {
+	// Everything downstream divides by this, so a NaN here would blank the
+	// whole game. Treat anything that is not a number as a wrecked boat.
+	if (!Number.isFinite(condition)) return BOAT_MIN_EFFICIENCY;
+
 	const health = Math.max(0, Math.min(100, condition)) / 100;
 	return BOAT_MIN_EFFICIENCY + (1 - BOAT_MIN_EFFICIENCY) * health;
 }
@@ -468,7 +472,7 @@ export function autoCastsPerSecond(
 	modifiers: Modifiers,
 	source: FishingSources
 ): Decimal {
-	if (!state.unlocked[source]) return d0();
+	if (!state.unlocked[source] || missingLicence(state, source)) return d0();
 	const crew = state.deckhands[source];
 	if (crew.lte(0)) return d0();
 	return crew.times(modifiers.deckhandCastsPerSecond[source]);
@@ -686,6 +690,11 @@ export function accumulate(
 	if (seconds <= 0) return { fish: fishTotal, value: valueTotal, fellBack };
 
 	for (const source of SOURCE_ORDER) {
+		// Unlicensed water pays nothing, however it came to be unlocked. Without
+		// this, `accumulate` and `reachableSource` disagree about where the crew
+		// are allowed to work.
+		if (missingLicence(state, source)) continue;
+
 		const extra = state.unlocked[source] ? (extraCastsPerSecond?.[source] ?? 0) : 0;
 		const castsPerSecond = autoCastsPerSecond(state, modifiers, source).plus(extra);
 		if (castsPerSecond.lte(0)) continue;
@@ -942,16 +951,6 @@ function zeroDeckhands(): Record<FishingSources, Decimal> {
 	);
 }
 
-function zeroLicences(): Record<LicenceId, boolean> {
-	return LICENCE_IDS.reduce(
-		(acc, id) => {
-			acc[id] = false;
-			return acc;
-		},
-		{} as Record<LicenceId, boolean>
-	);
-}
-
 function freshBoat(): GameState['boat'] {
 	return {
 		owned: false,
@@ -993,6 +992,21 @@ function unlockedFor(headstartLevel: Decimal): Record<FishingSources, boolean> {
 	);
 }
 
+/**
+ * Licences reset with the run — they belonged to the operation you sold. But
+ * the Standing Charter cannot hand you water you are not allowed to fish, so
+ * anything it opens comes with the paperwork already done.
+ */
+function licencesFor(unlocked: Record<FishingSources, boolean>): Record<LicenceId, boolean> {
+	return LICENCE_IDS.reduce(
+		(acc, id) => {
+			acc[id] = LICENCES[id].covers.some((source) => unlocked[source]);
+			return acc;
+		},
+		{} as Record<LicenceId, boolean>
+	);
+}
+
 export interface CarryOver {
 	dex: Record<string, Decimal>;
 	pearls: Decimal;
@@ -1013,8 +1027,12 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 	const now = Date.now();
 	const prestigeUpgrades = keep?.prestigeUpgrades ?? zeroPrestigeUpgrades();
 	const unlocked = unlockedFor(prestigeUpgrades.pearl_headstart ?? d0());
+
+	// A fresh run has no boat, so never start the player standing over water
+	// they cannot work.
 	const activeSource =
-		SOURCE_ORDER.filter((source) => unlocked[source]).pop() ?? FishingSources.Pond;
+		SOURCE_ORDER.filter((source) => unlocked[source] && !needsBoat(source)).pop() ??
+		FishingSources.Pond;
 
 	return {
 		version: SAVE_VERSION,
@@ -1033,7 +1051,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		unlocked,
 		activeSource,
 
-		licences: zeroLicences(),
+		licences: licencesFor(unlocked),
 		boat: freshBoat(),
 
 		upgrades: zeroUpgrades(),

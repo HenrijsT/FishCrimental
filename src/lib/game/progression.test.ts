@@ -27,6 +27,7 @@ import {
 	missingLicence,
 	performCast,
 	reachableSource,
+	performPrestige,
 	repairBoat,
 	repairCost,
 	runBoat,
@@ -444,5 +445,82 @@ describe('an empty tank with a standing order is not stranded', () => {
 			expect(run.shortfall.eq(0), `${casts} casts stranded ${run.shortfall}`).toBe(true);
 			expect(run.sailed.eq(casts)).toBe(true);
 		}
+	});
+});
+
+describe('prestige and the new gates', () => {
+	it('resets licences with the run', () => {
+		const state = createInitialState();
+		for (const source of SOURCE_ORDER) state.unlocked[source] = true;
+		for (const id of LICENCE_IDS) state.licences[id] = true;
+		state.boat.owned = true;
+		state.boat.upgrades.engine = D(4);
+		state.lifetimeCoins = D('1e16');
+
+		performPrestige(state);
+
+		expect(state.licences.lakes).toBe(false);
+		expect(state.licences.deep).toBe(false);
+		expect(state.boat.owned).toBe(false);
+		expect(state.boat.upgrades.engine.eq(0)).toBe(true);
+	});
+
+	it('never hands the Standing Charter water it has no licence for', () => {
+		const state = createInitialState();
+		for (const source of SOURCE_ORDER) state.unlocked[source] = true;
+		for (const id of LICENCE_IDS) state.licences[id] = true;
+		state.lifetimeCoins = D('1e16');
+		state.prestigeUpgrades.pearl_headstart = D(5);
+
+		performPrestige(state);
+
+		for (const source of SOURCE_ORDER) {
+			if (!state.unlocked[source]) continue;
+			expect(missingLicence(state, source), `${source} unlocked but unlicensed`).toBeNull();
+		}
+	});
+
+	it('never starts a run standing over water with no boat under it', () => {
+		for (let headstart = 0; headstart <= 7; headstart++) {
+			const state = createInitialState();
+			for (const source of SOURCE_ORDER) state.unlocked[source] = true;
+			for (const id of LICENCE_IDS) state.licences[id] = true;
+			state.lifetimeCoins = D('1e16');
+			state.prestigeUpgrades.pearl_headstart = D(headstart);
+
+			performPrestige(state);
+
+			expect(needsBoat(state.activeSource), `headstart ${headstart}`).toBe(false);
+			expect(
+				sourceBlocker(state, state.activeSource, computeModifiers(state)),
+				`headstart ${headstart}`
+			).toBeNull();
+		}
+	});
+
+	it('earns from the first tick of a headstart run', () => {
+		const state = createInitialState();
+		for (const source of SOURCE_ORDER) state.unlocked[source] = true;
+		for (const id of LICENCE_IDS) state.licences[id] = true;
+		state.lifetimeCoins = D('1e16');
+		state.prestigeUpgrades.pearl_headstart = D(4);
+		performPrestige(state);
+
+		state.deckhands[state.activeSource] = D(5);
+		const result = accumulate(state, computeModifiers(state), 120);
+		expect(result.value.gt(0)).toBe(true);
+	});
+});
+
+describe('unlicensed water pays nothing', () => {
+	it('however it came to be unlocked', () => {
+		const state = createInitialState();
+		state.unlocked[FishingSources.Stream] = true;
+		state.deckhands[FishingSources.Stream] = D(50);
+
+		expect(accumulate(state, computeModifiers(state), 600).fish.eq(0)).toBe(true);
+
+		state.licences.inland = true;
+		expect(accumulate(state, computeModifiers(state), 600).fish.gt(0)).toBe(true);
 	});
 });

@@ -158,7 +158,7 @@ export function nextStep(state: GameState): NextStep | null {
 		};
 	}
 
-	if (state.boat.owned && state.boat.fuel.lte(0) && state.unlocked[SOURCE_ORDER[6]]) {
+	if (state.boat.owned && state.boat.fuel.lte(0) && state.unlocked[FishingSources.Offshore]) {
 		return { text: 'The tank is empty, so the crew are working inshore. Fuel up.', tab: 'harbour' };
 	}
 

@@ -27,6 +27,7 @@ describe('deckhands', () => {
 	it('work every unlocked source at once', () => {
 		const state = createInitialState();
 		state.unlocked[FishingSources.Stream] = true;
+		state.licences.inland = true;
 		state.deckhands[FishingSources.Pond] = D(3);
 		state.deckhands[FishingSources.Stream] = D(3);
 

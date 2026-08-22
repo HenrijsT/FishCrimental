@@ -190,6 +190,9 @@ describe('accumulation', () => {
 		unlocked.deckhands[FishingSources.Pond] = D(10);
 		unlocked.deckhands[FishingSources.Ocean] = D(1000);
 		unlocked.unlocked[FishingSources.Ocean] = true;
+		unlocked.licences.deep = true;
+		unlocked.boat.owned = true;
+		unlocked.boat.fuel = D(1e9);
 		accumulate(unlocked, computeModifiers(unlocked), 10);
 
 		expect(unlocked.totalFish.gt(withLockedOcean)).toBe(true);
