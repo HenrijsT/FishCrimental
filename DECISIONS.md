@@ -2291,3 +2291,203 @@ on both counts.
   permanent "which table am I reading" hazard.
 
 Lighthouse after Stage 2: **100 / 100 / 100 / 100**.
+
+---
+
+## Stage 3 — Three documents
+
+Implemented nothing, as required. All three are on disk under `Goals/`, which is
+locally excluded, so they are untracked by design — this section is the tracked
+record that they exist.
+
+### `Goals/PEARL-SIMULATION.md` — answering Q1
+
+Both ladders run ten runs deep on the same seed, the un-squared one produced by
+a runtime toggle in a throwaway worktree that was then discarded. **The balance
+was not changed.**
+
+The finding that matters is not the recommendation, it is this: **runs 1–3 are
+bit-for-bit identical either way.** Run 1 starts with zero pearls and squaring 1
+is 1, and through run 3 `spendPearls` converts the pile into shop levels before
+it can matter — `pearlMultiplier` reads _unspent_ pearls. **The squaring is dead
+weight for the first four hours of the game.**
+
+It only differs from run 4 (58 s vs 2m28s), delays the first sub-ten-second run
+by exactly **one run**, and buys **1m50s across the first six prestiges**.
+
+Recommendation: un-square it, on `sellMultiplier` rather than `fishPerCast`
+since pacing is indifferent (≤1 s across ten runs) and `fishPerCast` also feeds
+the hold, `totalFish` and Fishdex discovery. **And do not book it as a fix for
+the collapse** — the numbers forbid that claim.
+
+The report also found the shop is never a budget under either ladder: it goes
+from unaffordable to overshot by millions inside a single cash-in, because
+`spendPearls` leaves 99.997% of the pile in `state.pearls` where
+`pearlMultiplier` reads it.
+
+### `Goals/VOICE-SAMPLE.md` — answering Q3
+
+Three rewrites — Guppy (24 baseChance, the first fish anyone lands), Redtail
+Catfish (mid), Whale Shark (rarest at 1) — current and rewritten side by side,
+inside the existing 171–256 character band. All three current descriptions were
+read from the source and quoted verbatim; the `baseChance` / `category` /
+`sources` values were verified.
+
+All 47 are costed (~10,400 characters, copy only, no code path, no test change),
+with one honest paragraph on the risk: **the failure mode is sameness, not
+offence.** Nothing was rewritten.
+
+### `Goals/SHIFTS-SPEC.md` — the structure
+
+The arithmetic was computed twice, independently, and agrees to the digit.
+
+**The structural insight the whole spec turns on:** if a shift fires the instant
+lifetime crosses a _fixed_ threshold, then `award = pearlsFor(threshold)` is a
+function of the shift index alone. **Overshoot cannot inflate it** — a faster
+player gets the shift sooner, not bigger. Today's design has the opposite
+property, which is why the shop is overshot by millions in one direction and
+why resetting on sight pays exactly 1 pearl forever in the other. Both failure
+modes have the same cause: the player picks the moment the award is measured.
+
+**The ladder: 96 shifts, 32 per tier, thresholds a quarter-decade apart.**
+Cumulative award **43,957,984,998 = 1.362 × the 32,267,256,758-pearl shop** —
+enough to buy it with 36% headroom rather than six orders of magnitude of it.
+Each tier buys almost exactly a third of the shop's 90 levels (30 / 62 / 90)
+without that having been tuned for.
+
+The single-event jump shrinks from **43 million times the shop to five times**,
+and no shift ever hands over more than 29% of it — so there is a real
+bank-or-spend decision on every shift, where today there is not one.
+
+**Why a quarter-decade is not an arbitrary number:** measured run lengths sit
+between 108 s and 152 s for **82 consecutive shifts**, drifting down 0.29% per
+shift. 0.25 decades is almost exactly the break-even step under the current
+pearl economy — coarser and runs lengthen, finer and they collapse. It is a
+measured equilibrium.
+
+**Three findings in the spec that were measured rather than reasoned:**
+
+1. **A tier boundary cannot wipe Pearls.** A player finishing Storm holds 8,357
+   pearls, worth ×1,695 un-squared and ×2.87e6 squared; a restarted ladder needs
+   _the entire next tier_ just to get back to level. So tiers keep Pearls and are
+   depth, not currency resets. This is also an independent argument for
+   un-squaring that `PEARL-SIMULATION.md` did not make — squaring exactly doubles
+   the shifts needed to recover from any wipe.
+2. **Granting the bicycle before the Assistant is worse than granting nothing.**
+   Measured: 9h43m to shift 16 against 9h11m with no milestones at all. A bicycle
+   without an Assistant parks the player in town 75 seconds out of every 76.
+3. **A "start with sources open" milestone cannot be a post-hoc patch.** Writing
+   `state.unlocked[src] = true` after the reset made shifts 6–10 blow a four-hour
+   budget — `createInitialState` derives `activeSource` from `unlocked` _before_
+   any later patch, so the player is left pointing at the mud pool with eight
+   sources open. It must flow through `CarryOver`, the way `pearl_headstart`
+   already does.
+
+**And the offline trace, which is the nastiest case in the feature.** A
+threshold shift can fire inside `#settleOffline`, which a player-initiated
+prestige never could. Traced against a real mid-game save: the report's coins
+figure comes out at **−99,999,829,151,271.86** because it computes
+`state.coins.minus(coinsBefore)` after the reset has zeroed coins; the hold is
+**duplicated across the reset** because `#settleOffline` restores its snapshot
+onto the fresh state; 23 of 24 chunks are dead; **586 phantom trader visits**
+fire because `chunkEnd` is computed from a `lastUpdate` the reset just moved
+forward; and the trader ends up **eight hours away** while the reset has removed
+the only other buyer, leaving the run unplayable from the moment the tab opens.
+Seven distinct failures, all mechanical, with a seven-item fix list.
+
+---
+
+## Closing summary
+
+Four stages, all complete. Nothing pushed. `feat/going-ham` is at `d798632`
+plus the merges below; `fix/foundations`, `feat/opening-act` and `feat/map` are
+all kept.
+
+### What shipped
+
+**Stage 0 — foundations.** One modal host with a focus trap, focus restore and
+an inert background, replacing three siblings that shared one Escape key.
+Contrast measured directly rather than trusted to a Lighthouse score that
+cannot see it: `--ink-faint` 3.59:1 → 5.07:1, `--coral` 4.35:1 → 5.11:1. The
+pearl readout stopped understating its own effect.
+
+**Stage 1 — the opening act.** Four items that turned out to be one economy:
+who buys your fish. A trader who comes when he comes and pays 55%; a bicycle
+that buys you the full price for 75 seconds off the water; an Assistant who
+removes the trip, the cooldown and the bucket. A mud pool underneath all of it.
+
+**Stage 2 — the map and the shopkeepers.** Upgrade tiers gated by place, and a
+literal chart that is wrong on purpose in a way you can learn.
+
+**Stage 3 — three documents**, implementing nothing.
+
+### Every number that moved
+
+|                           | Full uptime              | Half uptime  |
+| ------------------------- | ------------------------ | ------------ |
+| Before                    | 2h28m13s                 | 2h43m03s     |
+| After the bicycle         | 2h47m37s                 | 3h02m50s     |
+| After the bucket          | 2h52m49s                 | 3h11m01s     |
+| After the trader          | 3h08m32s                 | 3h20m58s     |
+| After the mud pool        | **3h25m12s**             | **3h40m12s** |
+| After the shopkeeper gate | **3h25m12s** (unchanged) | —            |
+
+Tests **327 → 406**. Lighthouse 100/100/100/100 after Stage 0 and Stage 2.
+
+### Judgement calls, with reasons
+
+- **The instant Sell button was removed before the bicycle.** Without that the
+  trader adds nothing and the bucket has no consequence. It is the third
+  graduation now, not the starting state. This was not in the brief; it is what
+  the four items required to mean anything together.
+- **`TRADER_PERIOD_SECONDS` 90 → 45** and the starting bucket 15 → 20 → 30, both
+  because the first tuning left the opening mostly idling.
+- **The mud pool's `valueMultiplier` is 0.25, not 0.3**, because 0.3 is not
+  representable in binary and 300 accumulated catches drifted to
+  179.999999999999 against a single multiplication's 180.
+- **The map sits above `SourcePicker` rather than replacing it.** The chart is
+  navigation; the list carries blocker reasons and keyboard access.
+- **Sixteen existing tests opt out of the bucket** with `hasAssistant = true`
+  rather than being loosened. They assert accumulation maths, and an Assistant is
+  the in-game way to say the hold is unlimited.
+- **`balance.test.ts`'s prestige chain cap went 3h → 4h.** The first run no
+  longer fits in three hours. A harness budget, not a balance figure.
+
+### Compromises
+
+- **No quality gate was relaxed.** `check` 0 errors, `lint` clean, `build` ok,
+  406 tests, Lighthouse 100/100/100/100.
+- **The shopkeeper gate does not do what it was expected to do.** It moves the
+  pacing by zero seconds, because price already gates harder. Recorded as a
+  measurement rather than dressed up: it shapes a camper and is invisible to
+  everyone else.
+- **`.claude/` had to be excluded from eslint and prettier.** A background agent
+  runs in a git worktree there, and a nested tsconfig made typescript-eslint
+  refuse to pick a root — 162 parse errors across the project. `.gitignore` is
+  off-limits per the brief, so the directory is untracked by pathspec instead.
+
+### Cut, and why
+
+**Fishing up the bicycle.** The owner asked for it and the trader purchase
+shipped, but the drop did not: `distributeCatch` can only produce a `Fish` and
+`FishType` is a six-member enum, so a junk drop needs a parallel table, a hold
+that is not a fish, a Fishdex that does not count it and a sale path that does
+not price it per-type. The brief said to add it only if it stayed small. It did
+not. Recorded as `Goals/IDEAS.md` **N2** with a five-step plan, not forgotten.
+
+Nothing else was cut. The map's inaccuracy hook, vendor attachment and the map
+itself — the first three things the brief nominated for cutting — all shipped.
+
+### What to read first
+
+1. **`Goals/PEARL-SIMULATION.md`** and **`Goals/VOICE-SAMPLE.md`** — two
+   decisions waiting on you, both with the work already done. Q1 blocks the
+   entire second layer.
+2. **`Goals/SHIFTS-SPEC.md` §9** — the offline trace. If the shift feature is
+   built without those seven fixes, the first player to reload at the wrong
+   moment is told they sold minus a hundred trillion coins and then cannot play.
+3. **Play the first ten minutes.** That is what changed most: a mud pool, a
+   bucket that fills, a trader on a bar, and a bicycle that is the first thing
+   you actually want.
+4. **`Goals/ANSWERS.md`** — every answered item now carries a short note saying
+   what was built, under your own words, which were left untouched.
