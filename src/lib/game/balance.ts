@@ -55,6 +55,24 @@ export interface SimulationOptions {
 	initialState?: GameState;
 	/** Stop the moment prestige becomes available. Off means play the clock out. */
 	stopOnPrestige?: boolean;
+	/** Seed for the deterministic RNG, so runs are reproducible. */
+	seed?: number;
+}
+
+/**
+ * A small deterministic PRNG (mulberry32). Catches are rolled for real now, so
+ * the simulation needs a reproducible stream or the balance assertions would
+ * be flaky.
+ */
+export function seededRandom(seed: number): () => number {
+	let a = seed >>> 0;
+	return () => {
+		a = (a + 0x6d2b79f5) >>> 0;
+		let t = a;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
 }
 
 interface Purchase {
@@ -76,6 +94,7 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 	const manualUptime = options.manualUptime ?? 1;
 	const spendRatio = options.spendRatio ?? 0.5;
 
+	const random = seededRandom(options.seed ?? 0x5eed_f15e);
 	const state = options.initialState ?? createInitialState();
 	const unlockedAt: Partial<Record<FishingSources, number>> = { [state.activeSource]: 0 };
 
@@ -97,7 +116,7 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 			if (totalIncomePerSecond(state, modifiers).gt(manualIncome)) idleCrossoverAt = elapsed;
 		}
 
-		accumulate(state, modifiers, step, 1, { [state.activeSource]: manual * manualUptime });
+		accumulate(state, modifiers, step, 1, { [state.activeSource]: manual * manualUptime }, random);
 		sellHold(state, modifiers);
 
 		elapsed += step;

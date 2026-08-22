@@ -7,6 +7,7 @@ import {
 	AUTOSAVE_MS,
 	MAX_OFFLINE_SECONDS,
 	OFFLINE_EFFICIENCY,
+	SAVE_KEY,
 	SOURCE_CONFIG,
 	TICK_MS,
 	UPGRADES,
@@ -43,6 +44,11 @@ import type { GameState, Modifiers, OfflineReport } from './types';
  */
 const RESUME_THRESHOLD_SECONDS = 120;
 
+export interface SaveProblem {
+	kind: 'future' | 'corrupt' | 'conflict';
+	message: string;
+}
+
 export type BuyAmount = 1 | 10 | 25 | 'max';
 
 export const BUY_AMOUNTS: BuyAmount[] = [1, 10, 25, 'max'];
@@ -78,6 +84,7 @@ class Game {
 	lipfishReveal = $state(false);
 
 	loaded = $state(false);
+	saveProblem = $state<SaveProblem | null>(null);
 
 	/** How many levels the buy buttons purchase at once. */
 	buyAmount = $state<BuyAmount>(1);
@@ -105,15 +112,52 @@ class Game {
 	init(): void {
 		if (this.loaded) return;
 
-		const saved = loadFromStorage();
-		if (saved) {
-			this.state = saved;
-			this.offlineReport = this.#settleOffline(saved);
+		const outcome = loadFromStorage();
+
+		if (outcome.kind === 'loaded') {
+			this.state = outcome.state;
+			// Settle through `this.state`, not the object that was passed in:
+			// assigning to a `$state` field wraps the value in a proxy, and
+			// mutating the raw object afterwards would bypass reactivity.
+			this.offlineReport = this.#settleOffline(this.state);
+		} else if (outcome.kind === 'future') {
+			this.saveProblem = {
+				kind: 'future',
+				message: `This save was written by a newer version of FishCrimental (save format ${outcome.version}). It has been left untouched — update the game, or export it and start fresh.`
+			};
+		} else if (outcome.kind === 'corrupt') {
+			this.saveProblem = {
+				kind: 'corrupt',
+				message:
+					'The stored save could not be read, so a new game was started. The unreadable save is still in this browser and has not been overwritten.'
+			};
 		}
 
 		this.state.lastUpdate = Date.now();
 		this.loaded = true;
+		this.#watchOtherTabs();
 		this.start();
+	}
+
+	/**
+	 * Two tabs on one save clobber each other: both autosave, and the last
+	 * writer wins. When another tab writes, this one stops saving and says so
+	 * rather than quietly overwriting whichever tab the player is actually
+	 * using.
+	 */
+	#watchOtherTabs(): void {
+		if (typeof window === 'undefined') return;
+
+		window.addEventListener('storage', (event) => {
+			if (event.key !== SAVE_KEY || event.newValue === null) return;
+			if (this.saveProblem?.kind === 'conflict') return;
+
+			this.saveProblem = {
+				kind: 'conflict',
+				message:
+					'FishCrimental is open in another tab, which is now the one being saved. This tab has stopped saving so it cannot overwrite it. Reload to pick up where the other tab is.'
+			};
+		});
 	}
 
 	start(): void {
@@ -162,8 +206,16 @@ class Game {
 	}
 
 	save(): boolean {
+		// Refusing to write is the whole point of the save-problem states: a
+		// save this build could not read must not be replaced by one it made up.
+		if (this.saveProblem) return false;
+
 		this.state.lastUpdate = Date.now();
 		return saveToStorage(this.state);
+	}
+
+	dismissSaveProblem(): void {
+		this.saveProblem = null;
 	}
 
 	// -----------------------------------------------------------------------
@@ -399,8 +451,9 @@ class Game {
 		if (!imported) return false;
 
 		this.endCast();
+		this.saveProblem = null;
 		this.state = imported;
-		this.offlineReport = this.#settleOffline(imported);
+		this.offlineReport = this.#settleOffline(this.state);
 		this.state.lastUpdate = Date.now();
 		this.recentCatches = [];
 		this.save();
@@ -409,6 +462,7 @@ class Game {
 
 	hardReset(): void {
 		this.endCast();
+		this.saveProblem = null;
 		this.state = createInitialState();
 		this.recentCatches = [];
 		this.offlineReport = null;

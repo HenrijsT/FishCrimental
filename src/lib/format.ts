@@ -62,12 +62,16 @@ export function formatNumber(value: DecimalSource, options: FormatOptions = {}):
 
 	const magnitude = d.mag;
 
-	if (magnitude < 1e-6) return `${magnitude.toExponential(precision)}`;
-
 	if (magnitude < 1000) {
+		// Never render a value the player actually has as a flat "0". Rounding
+		// 0.004 down to "0" reads as "you have none of this", which is a lie —
+		// and it is how a sub-unit jellyfish count used to look on screen.
+		if (magnitude < 0.01) return '<0.01';
+
 		const smallPrecision =
 			options.smallPrecision ?? (Number.isInteger(magnitude) ? 0 : Math.max(precision, 1));
-		return trimTrailingZeros(magnitude.toFixed(smallPrecision));
+		const text = trimTrailingZeros(magnitude.toFixed(smallPrecision));
+		return text === '0' ? '<0.01' : text;
 	}
 
 	const exponent = Math.floor(Math.log10(magnitude));

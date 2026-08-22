@@ -1,13 +1,15 @@
-import type Decimal from 'break_eternity.js';
 import { d0, parseDecimal } from '$lib/decimal';
 import { FISH_TYPES, type FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
 import { fishes } from '$lib/fishes';
+import Decimal from 'break_eternity.js';
 import {
+	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
 	SAVE_KEY,
 	SAVE_VERSION,
 	SOURCE_ORDER,
+	UPGRADES,
 	UPGRADE_IDS,
 	type PrestigeUpgradeId,
 	type UpgradeId
@@ -35,6 +37,16 @@ function dec(value: unknown, fallback: Decimal = d0()): Decimal {
 	return parseDecimal(value) ?? fallback;
 }
 
+/** Currencies and counts can never be negative, whatever the file says. */
+function positive(value: unknown, fallback: Decimal = d0()): Decimal {
+	return dec(value, fallback).max(0);
+}
+
+/** Whole, non-negative, and never above the ceiling the game defines. */
+function level(value: unknown, max: number): Decimal {
+	return Decimal.min(dec(value).floor().max(0), max);
+}
+
 // ---------------------------------------------------------------------------
 // Migrations
 // ---------------------------------------------------------------------------
@@ -46,8 +58,50 @@ function dec(value: unknown, fallback: Decimal = d0()): Decimal {
  */
 export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 	// 0 → 1: pre-release saves had no version field and no `dex`.
-	0: (data) => ({ ...data, dex: isRecord(data.dex) ? data.dex : {}, version: 1 })
+	0: (data) => ({ ...data, dex: isRecord(data.dex) ? data.dex : {}, version: 1 }),
+	// 1 → 2: catches became whole fish, backed by the `carry` remainder bank.
+	// Version 1 holds could contain fractional fish; round them down so nothing
+	// in the game is ever a fraction of a fish again.
+	1: (data) => ({
+		...data,
+		carry: {},
+		hold: floorHold(data.hold),
+		dex: floorDex(data.dex),
+		version: 2
+	})
 };
+
+function floorHold(raw: unknown): Raw {
+	const source = isRecord(raw) ? raw : {};
+	const out: Raw = {};
+	for (const [type, value] of Object.entries(source)) {
+		const parsed = parseDecimal(value);
+		out[type] = (parsed ?? d0()).floor().toJSON();
+	}
+	return out;
+}
+
+function floorDex(raw: unknown): Raw {
+	const source = isRecord(raw) ? raw : {};
+	const out: Raw = {};
+	for (const [name, value] of Object.entries(source)) {
+		const parsed = parseDecimal(value);
+		if (parsed && parsed.gte(1)) out[name] = parsed.floor().toJSON();
+	}
+	return out;
+}
+
+/** A save written by a newer build than this one. */
+export class FutureSaveError extends Error {
+	constructor(public readonly version: number) {
+		super(`save version ${version} is newer than this build (${SAVE_VERSION})`);
+		this.name = 'FutureSaveError';
+	}
+}
+
+export function isFutureSave(data: Raw): boolean {
+	return num(data.version, 0) > SAVE_VERSION;
+}
 
 export function migrate(data: Raw): Raw {
 	let current = data;
@@ -83,11 +137,26 @@ function readHold(raw: unknown): Record<FishType, Decimal> {
 	const source = isRecord(raw) ? raw : {};
 	return FISH_TYPES.reduce(
 		(acc, type) => {
-			acc[type] = dec(source[type]);
+			acc[type] = positive(source[type]).floor();
 			return acc;
 		},
 		{} as Record<FishType, Decimal>
 	);
+}
+
+/**
+ * The remainder bank. Every entry is a fraction of a unit, so anything outside
+ * `[0, 1)` is corruption and is dropped rather than trusted.
+ */
+function readCarry(raw: unknown): Record<string, number> {
+	const source = isRecord(raw) ? raw : {};
+	const carry: Record<string, number> = {};
+	for (const [key, value] of Object.entries(source)) {
+		if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+		if (value <= 0 || value >= 1) continue;
+		carry[key] = value;
+	}
+	return carry;
 }
 
 function readDex(raw: unknown): Record<string, Decimal> {
@@ -98,7 +167,7 @@ function readDex(raw: unknown): Record<string, Decimal> {
 		// content that no longer exists.
 		if (!KNOWN_SPECIES.has(name)) continue;
 		const parsed = parseDecimal(value);
-		if (parsed && parsed.gt(0)) dex[name] = parsed;
+		if (parsed && parsed.gte(1)) dex[name] = parsed.floor();
 	}
 	return dex;
 }
@@ -107,7 +176,7 @@ function readUpgrades(raw: unknown): Record<UpgradeId, Decimal> {
 	const source = isRecord(raw) ? raw : {};
 	return UPGRADE_IDS.reduce(
 		(acc, id) => {
-			acc[id] = dec(source[id]).floor().max(0);
+			acc[id] = level(source[id], UPGRADES[id].maxLevel);
 			return acc;
 		},
 		{} as Record<UpgradeId, Decimal>
@@ -118,7 +187,7 @@ function readPrestigeUpgrades(raw: unknown): Record<PrestigeUpgradeId, Decimal> 
 	const source = isRecord(raw) ? raw : {};
 	return PRESTIGE_UPGRADE_IDS.reduce(
 		(acc, id) => {
-			acc[id] = dec(source[id]).floor().max(0);
+			acc[id] = level(source[id], PRESTIGE_UPGRADES[id].maxLevel);
 			return acc;
 		},
 		{} as Record<PrestigeUpgradeId, Decimal>
@@ -129,7 +198,7 @@ function readDeckhands(raw: unknown): Record<FishingSources, Decimal> {
 	const source = isRecord(raw) ? raw : {};
 	return SOURCE_ORDER.reduce(
 		(acc, name) => {
-			acc[name] = dec(source[name]).floor().max(0);
+			acc[name] = positive(source[name]).floor();
 			return acc;
 		},
 		{} as Record<FishingSources, Decimal>
@@ -179,16 +248,17 @@ export function fromRaw(data: Raw): GameState {
 	return {
 		version: SAVE_VERSION,
 
-		coins: dec(migrated.coins),
-		lifetimeCoins: dec(migrated.lifetimeCoins),
-		allTimeCoins: dec(migrated.allTimeCoins),
+		coins: positive(migrated.coins),
+		lifetimeCoins: positive(migrated.lifetimeCoins),
+		allTimeCoins: positive(migrated.allTimeCoins),
 
 		hold: readHold(migrated.hold),
-		holdValue: dec(migrated.holdValue),
+		holdValue: positive(migrated.holdValue),
 
 		dex: readDex(migrated.dex),
-		totalCasts: dec(migrated.totalCasts),
-		totalFish: dec(migrated.totalFish),
+		carry: readCarry(migrated.carry),
+		totalCasts: positive(migrated.totalCasts).floor(),
+		totalFish: positive(migrated.totalFish).floor(),
 
 		unlocked,
 		activeSource,
@@ -196,10 +266,10 @@ export function fromRaw(data: Raw): GameState {
 		upgrades: readUpgrades(migrated.upgrades),
 		deckhands: readDeckhands(migrated.deckhands),
 
-		pearls: dec(migrated.pearls).floor().max(0),
-		allTimePearls: dec(migrated.allTimePearls).floor().max(0),
+		pearls: positive(migrated.pearls).floor(),
+		allTimePearls: positive(migrated.allTimePearls).floor(),
 		prestigeUpgrades,
-		prestigeCount: dec(migrated.prestigeCount).floor().max(0),
+		prestigeCount: positive(migrated.prestigeCount).floor(),
 
 		achievements: readAchievements(migrated.achievements),
 		completed: bool(migrated.completed, false),
@@ -218,6 +288,11 @@ export function fromRaw(data: Raw): GameState {
 	};
 }
 
+/**
+ * A save written by a newer build is left strictly alone. Loading it would
+ * drop whatever fields this build does not know about, and the next autosave
+ * would write the truncated version back over the player's real progress.
+ */
 export function deserialize(raw: string): GameState | null {
 	let parsed: unknown;
 	try {
@@ -226,6 +301,7 @@ export function deserialize(raw: string): GameState | null {
 		return null;
 	}
 	if (!isRecord(parsed)) return null;
+	if (isFutureSave(parsed)) throw new FutureSaveError(num(parsed.version, 0));
 	return fromRaw(parsed);
 }
 
@@ -253,14 +329,30 @@ export function saveToStorage(state: GameState): boolean {
 	}
 }
 
-export function loadFromStorage(): GameState | null {
+export type LoadOutcome =
+	| { kind: 'loaded'; state: GameState }
+	| { kind: 'empty' }
+	| { kind: 'corrupt' }
+	| { kind: 'future'; version: number };
+
+/**
+ * Never throws and never guesses. A save this build cannot safely read comes
+ * back labelled so the caller can refuse to overwrite it.
+ */
+export function loadFromStorage(): LoadOutcome {
 	const store = storage();
-	if (!store) return null;
+	if (!store) return { kind: 'empty' };
 
 	const raw = store.getItem(SAVE_KEY);
-	if (!raw) return null;
+	if (!raw) return { kind: 'empty' };
 
-	return deserialize(raw);
+	try {
+		const state = deserialize(raw);
+		return state ? { kind: 'loaded', state } : { kind: 'corrupt' };
+	} catch (error) {
+		if (error instanceof FutureSaveError) return { kind: 'future', version: error.version };
+		return { kind: 'corrupt' };
+	}
 }
 
 export function clearStorage(): void {
@@ -293,6 +385,7 @@ export function exportSave(state: GameState): string {
 	return `${EXPORT_PREFIX}${SAVE_VERSION}.${toBase64(serialize(state))}`;
 }
 
+/** Returns null for anything this build cannot safely read, including future saves. */
 export function importSave(blob: string): GameState | null {
 	const trimmed = blob.trim();
 	if (!trimmed.startsWith(EXPORT_PREFIX)) return null;
@@ -306,5 +399,9 @@ export function importSave(blob: string): GameState | null {
 	const decoded = fromBase64(trimmed.slice(separator + 1));
 	if (decoded === null) return null;
 
-	return deserialize(decoded);
+	try {
+		return deserialize(decoded);
+	} catch {
+		return null;
+	}
 }
