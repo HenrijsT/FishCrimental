@@ -1537,3 +1537,111 @@ remainder bank actually guarantees, and those match to within one cast.
 
 `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok · `pnpm test`
 **321 passing** across 20 files · `pnpm audit:ui` 100/100/100/100 across 3 runs.
+
+---
+
+## Stage 4 — SvelteKit 3
+
+**Verdict: green, and deliberately not merged.** Branch `chore/sveltekit-3`,
+commit `e362b8f`, left in place.
+
+I evaluated it by doing it rather than by reading about it, because the report
+I had said the trial was cheap and fully reversible — and that turned out to be
+true.
+
+### Everything checked, not assumed
+
+|                            |                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `@sveltejs/kit`            | latest **2.70.3**, next **3.0.0-next.25**                                                    |
+| `@sveltejs/adapter-static` | latest **3.0.10**, next **4.0.0-next.4**, peer `^3.0.0-next.0`                               |
+| `kit@next` engines         | `node >=22.17`                                                                               |
+| `kit@next` peers           | `vite ^8.0.12`, `svelte ^5.56.4`, `typescript ^6.0.0`, `@sveltejs/vite-plugin-svelte ^7.0.0` |
+| installed here             | node 26.7.0, vite 8.2.2, svelte 5.56.10, ts 6.0.3, vps 7.3.0                                 |
+
+**There is no dependency wall.** Every peer requirement was already satisfied
+before the upgrade. That is the surprising finding, and it is the reason the
+trial was worth running rather than reasoning about.
+
+A trap worth recording: for `@sveltejs/vite-plugin-svelte` and
+`eslint-plugin-svelte` the `next` dist-tag points at an **older** version than
+`latest` (7.0.0-next.1 vs 7.3.0; 3.0.0-next.18 vs 3.23.0). Installing either
+with `@next` would silently downgrade. Neither needs touching.
+
+### The trial
+
+`npx sv@next migrate sveltekit-3 --tasks all --confirm` ran clean. 64 files
+changed: `svelte.config.js` deleted and folded into the `sveltekit()` call in
+`vite.config.ts`, `tsconfig.json` re-pointed at `$app/tsconfig`, and the bulk of
+it `$lib` -> `#lib` Node subpath imports with explicit extensions.
+
+All five gates pass on the result:
+
+```
+pnpm check     0 errors, 398 files
+pnpm test      321 passing, 20 files
+pnpm lint      clean
+pnpm build     ok — 15,486 bytes of real prerendered HTML, not an empty shell
+pnpm audit:ui  100 / 100 / 100 / 100 across 3 runs
+```
+
+The codemod even handled `'$lib/game/state.svelte'` -> `'#lib/game/state.svelte.js'`
+correctly, which was the case I expected to break.
+
+### Two things I had to fix on top of the codemod
+
+- **It wrote floating dist-tags.** `"@sveltejs/kit": "next"` and
+  `"@sveltejs/adapter-static": "next"` are not version ranges — every
+  `pnpm install` would pull whatever `next` pointed at that day. Pinned to
+  `^3.0.0-next.25` and `^4.0.0-next.4`, which still adopt stable 3.0.0/4.0.0
+  automatically when they land. **This is a real defect in the codemod's
+  output and anyone repeating this should check for it.**
+- **`MIGRATION_TASKS.md` listed one task**, dev-server CORS for static assets.
+  Inapplicable — there is no `fetch()` anywhere in `src/` and `static/` holds a
+  favicon. Deleted, per the file's own instructions.
+
+One non-fatal wrinkle: `adapter-static@4.0.0-next.4` still reads the removed
+`builder.config.kit`, so `pnpm build` prints a deprecation warning. Kit next.25
+ships a compatibility getter, so it warns rather than breaks. It will go when
+the adapter is re-cut for stable.
+
+### Why green is not the same as merge
+
+The brief said to merge only if genuinely green. It is genuinely green. It is
+still the wrong thing to merge today, for three reasons:
+
+1. **The upgrade buys nothing measurable.** The entire SvelteKit surface this
+   project uses is three build-time imports — `sveltekit` from
+   `@sveltejs/kit/vite`, `adapterStatic`, and `vitePreprocess` — plus a
+   two-line `+layout.ts`. Zero runtime APIs: no `$app/*`, no `$env/*`, no
+   `goto`, no hooks, no `+server.ts`, no service worker. Remote functions,
+   tracing and the error-boundary work are all irrelevant to a client-only
+   static single-route game. The one thing 3.x is genuinely faster at —
+   Vite 8 and rolldown — **this project already has on Kit 2.70.3.**
+2. **The diff is 64 files of blame churn for zero functional change**, landing
+   immediately before the large roadmap Stage 2 produces. Every planned
+   feature would then be written against a pre-release API during the exact
+   window it might still shift.
+3. **A pre-release has no advisory coverage.** `pnpm audit` and GitHub
+   advisories key on released ranges; a `3.0.0-next.N` pin can fall in a gap,
+   and I found no published security-backport policy for the 2.x line either
+   way.
+
+Against all that: waiting costs **nothing**, because this commit proves the
+migration is one codemod away. The branch is kept green and pinned so it is a
+one-command merge whenever the owner wants it — and if they disagree with this
+call, acting on that disagreement is `git merge chore/sveltekit-3`.
+
+**Revisit trigger:** `pnpm view @sveltejs/kit dist-tags` shows `latest: 3.0.0`.
+Expect the migration at stable to be identical or easier, with a re-cut adapter
+that drops the deprecation warning.
+
+### Two environment notes, because they cost time
+
+- `npx sv` left `~/.local/bin/pnpm` (8.15.9) shadowing `/usr/bin/pnpm` (9.4.0)
+  on `PATH`, and 8.x cannot read a `lockfileVersion: '9.0'` lockfile. If
+  `pnpm install` starts refusing the lockfile, check `pnpm --version` before
+  anything else.
+- A research subagent fetched a 132 KB TV Tropes page to `tv.html` in the repo
+  root, which broke `pnpm lint`. Moved out, not committed. Worth watching for
+  when agents have web access and a working directory.
