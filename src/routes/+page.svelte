@@ -11,10 +11,8 @@
 	import Fishdex from '$lib/components/Fishdex.svelte';
 	import HarbourPanel from '$lib/components/HarbourPanel.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
-	import LipfishModal from '$lib/components/LipfishModal.svelte';
+	import ModalHost from '$lib/components/ModalHost.svelte';
 	import NextStep from '$lib/components/NextStep.svelte';
-	import OfflineModal from '$lib/components/OfflineModal.svelte';
-	import PrestigeModal from '$lib/components/PrestigeModal.svelte';
 	import PrestigePanel from '$lib/components/PrestigePanel.svelte';
 	import SaveProblemBanner from '$lib/components/SaveProblemBanner.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
@@ -94,7 +92,13 @@
 	/>
 </svelte:head>
 
-<div class="shell" class:reduce-motion={game.state.settings.reduceMotion}>
+<!-- Everything behind an open dialog is inert: not focusable, not clickable,
+     and hidden from the accessibility tree. -->
+<div
+	class="shell"
+	class:reduce-motion={game.state.settings.reduceMotion}
+	inert={game.activeModal !== null}
+>
 	<TopBar />
 	<SaveProblemBanner />
 	<StrandedBanner onnavigate={(tab) => selectTab(tab)} />
@@ -143,12 +147,17 @@
 	</div>
 </div>
 
-<OfflineModal />
-<PrestigeModal />
-<LipfishModal />
-<Toasts onnavigate={(tab, target) => selectTab(tab, target ?? null)} />
+<ModalHost />
+
+<div inert={game.activeModal !== null} class="contents">
+	<Toasts onnavigate={(tab, target) => selectTab(tab, target ?? null)} />
+</div>
 
 <style>
+	.contents {
+		display: contents;
+	}
+
 	.shell {
 		max-width: 66rem;
 		margin: 0 auto;

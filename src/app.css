@@ -7,11 +7,20 @@
 	--edge: #21486e;
 	--ink: #e8f1f8;
 	--ink-dim: #9db4c8;
-	--ink-faint: #6d89a1;
+	/* Measured, not guessed. #6d89a1 bottomed out at 3.59:1 against
+	   --hull-raised and 3.60:1 against a panel over the page's top highlight —
+	   four of the six real composited backgrounds failed AA. #8aa4bb is 5.07:1
+	   at worst. It stops here rather than going lighter because #9db4c8 is
+	   --ink-dim, and matching it would collapse two type tiers into one.
+	   Lighthouse scores this 1.00 either way: axe cannot resolve the gradient
+	   backgrounds and returns colour-contrast as *incomplete*. */
+	--ink-faint: #8aa4bb;
 	--brass: #f2b544;
 	--brass-dim: #b3831f;
 	--foam: #4fd1c5;
-	--coral: #f2695c;
+	/* 4.35:1 at #f2695c — the "Wipe the save" button and the save-problem
+	   banner both failed. #f57f73 is 5.11:1 at worst. */
+	--coral: #f57f73;
 	--pearl: #d8c7ee;
 
 	--radius: 0.6rem;
