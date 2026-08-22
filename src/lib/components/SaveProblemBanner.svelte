@@ -2,6 +2,23 @@
 	import { game } from '$lib/game/state.svelte';
 
 	const problem = $derived(game.saveProblem);
+
+	let copied = $state('');
+
+	/**
+	 * Every one of these states ends with the player possibly losing a save, so
+	 * the banner carries the backup rather than pointing at Settings — which,
+	 * for a corrupt or future save, would have exported the blank replacement.
+	 */
+	async function copyBackup() {
+		const blob = game.exportBlob();
+		try {
+			await navigator.clipboard.writeText(blob);
+			copied = 'Copied. Paste it somewhere safe.';
+		} catch {
+			copied = 'Clipboard blocked — use Export in Settings instead.';
+		}
+	}
 </script>
 
 {#if problem}
@@ -12,13 +29,17 @@
 					Save from a newer version
 				{:else if problem.kind === 'conflict'}
 					Open in another tab
+				{:else if problem.kind === 'write-failed'}
+					This browser is not storing your save
 				{:else}
 					Save could not be read
 				{/if}
 			</strong>
 			<p>{problem.message}</p>
+			{#if copied}<p class="copied">{copied}</p>{/if}
 		</div>
 		<div class="actions">
+			<button onclick={copyBackup}>Copy backup</button>
 			{#if problem.kind === 'conflict'}
 				<button onclick={() => location.reload()}>Reload</button>
 			{/if}
@@ -53,8 +74,14 @@
 		margin-top: 0.15rem;
 	}
 
+	.copied {
+		color: var(--ink);
+		margin-top: 0.3rem;
+	}
+
 	.actions {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.4rem;
 	}
 </style>

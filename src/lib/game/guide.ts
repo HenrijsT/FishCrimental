@@ -19,8 +19,28 @@ import {
 } from './engine';
 import type { GameState } from './types';
 
+/**
+ * Every tab in the game, in the order they appear.
+ *
+ * The ids used to be bare strings written out independently in five files, so
+ * a typo navigated nowhere and nothing caught it at build time. `TabId` is the
+ * single source; anything that routes to a tab takes it.
+ */
+export const TAB_IDS = [
+	'water',
+	'gear',
+	'harbour',
+	'crew',
+	'dex',
+	'pearls',
+	'records',
+	'settings'
+] as const;
+
+export type TabId = (typeof TAB_IDS)[number];
+
 export interface TabDefinition {
-	id: string;
+	id: TabId;
 	label: string;
 	/** Shown the first time the tab appears. */
 	blurb: string;
@@ -100,7 +120,35 @@ export interface NextStep {
 	/** The one thing to do now. */
 	text: string;
 	/** Where to do it. */
-	tab?: string;
+	tab?: TabId;
+}
+
+/**
+ * Where an arrow key moves along the tab strip.
+ *
+ * A roving tabindex shipped without the key handler it requires, which left
+ * seven of the eight tabs unreachable by keyboard — Settings, and everything
+ * in it, was not reachable at all. Kept out of the component so it can be
+ * tested without a DOM.
+ */
+export function nextTabIndex(key: string, index: number, count: number): number | null {
+	if (count <= 0 || index < 0) return null;
+	const last = count - 1;
+
+	switch (key) {
+		case 'ArrowRight':
+		case 'ArrowDown':
+			return index === last ? 0 : index + 1;
+		case 'ArrowLeft':
+		case 'ArrowUp':
+			return index === 0 ? last : index - 1;
+		case 'Home':
+			return 0;
+		case 'End':
+			return last;
+		default:
+			return null;
+	}
 }
 
 /**

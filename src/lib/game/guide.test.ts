@@ -3,7 +3,7 @@ import { D } from '$lib/decimal';
 import { FishingSources } from '$lib/fishing_sources';
 import { SCENES } from './scenes';
 import { SOURCE_ORDER } from './config';
-import { availableTabs, nextStep, TABS } from './guide';
+import { availableTabs, nextStep, nextTabIndex, TABS, TAB_IDS } from './guide';
 import { ALL_SPECIES, createInitialState, rarityOf, rarityAt, RARITY_ORDER } from './engine';
 
 describe('scenes', () => {
@@ -146,6 +146,75 @@ describe('onboarding', () => {
 			mutate();
 			const step = nextStep(state);
 			if (step?.tab) expect(ids.has(step.tab)).toBe(true);
+		}
+	});
+});
+
+describe('tab ids', () => {
+	it('TAB_IDS and TABS describe the same set, in the same order', () => {
+		expect(TABS.map((tab) => tab.id)).toEqual([...TAB_IDS]);
+	});
+
+	it('every nextStep destination is a real tab', () => {
+		// The ids used to be bare strings in five files; this is the type made
+		// executable, for the states the union alone cannot see.
+		const state = createInitialState();
+		const seen = new Set<string>();
+
+		for (const coins of ['0', '1', '1e3', '1e6', '1e9', '1e12', '1e15', '1e20']) {
+			state.coins = D(coins);
+			state.lifetimeCoins = D(coins);
+			const step = nextStep(state);
+			if (step?.tab) seen.add(step.tab);
+		}
+
+		for (const tab of seen) expect(TAB_IDS).toContain(tab);
+	});
+});
+
+describe('nextTabIndex', () => {
+	const count = 8;
+
+	it('walks right and wraps', () => {
+		expect(nextTabIndex('ArrowRight', 0, count)).toBe(1);
+		expect(nextTabIndex('ArrowRight', 7, count)).toBe(0);
+	});
+
+	it('walks left and wraps', () => {
+		expect(nextTabIndex('ArrowLeft', 3, count)).toBe(2);
+		expect(nextTabIndex('ArrowLeft', 0, count)).toBe(7);
+	});
+
+	it('treats the vertical arrows the same way', () => {
+		expect(nextTabIndex('ArrowDown', 2, count)).toBe(nextTabIndex('ArrowRight', 2, count));
+		expect(nextTabIndex('ArrowUp', 2, count)).toBe(nextTabIndex('ArrowLeft', 2, count));
+	});
+
+	it('jumps to the ends', () => {
+		expect(nextTabIndex('Home', 5, count)).toBe(0);
+		expect(nextTabIndex('End', 5, count)).toBe(7);
+	});
+
+	it('ignores every other key, so typing still works', () => {
+		for (const key of ['Enter', ' ', 'Tab', 'a', 'Escape', 'PageDown']) {
+			expect(nextTabIndex(key, 3, count)).toBeNull();
+		}
+	});
+
+	it('stays in range for one tab and for none', () => {
+		expect(nextTabIndex('ArrowRight', 0, 1)).toBe(0);
+		expect(nextTabIndex('End', 0, 1)).toBe(0);
+		expect(nextTabIndex('ArrowRight', 0, 0)).toBeNull();
+		expect(nextTabIndex('ArrowRight', -1, count)).toBeNull();
+	});
+
+	it('never returns an index outside the strip', () => {
+		for (const key of ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Home', 'End']) {
+			for (let i = 0; i < count; i++) {
+				const next = nextTabIndex(key, i, count)!;
+				expect(next).toBeGreaterThanOrEqual(0);
+				expect(next).toBeLessThan(count);
+			}
 		}
 	});
 });

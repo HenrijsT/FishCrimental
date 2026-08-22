@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { nextStep } from '$lib/game/guide';
+	import { nextStep, type TabId } from '$lib/game/guide';
 	import { game } from '$lib/game/state.svelte';
 
 	interface Props {
-		onnavigate: (tab: string) => void;
+		onnavigate: (tab: TabId) => void;
 	}
 
 	let { onnavigate }: Props = $props();
