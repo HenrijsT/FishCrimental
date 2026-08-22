@@ -61,6 +61,17 @@ export interface GameState {
 	upgrades: Record<UpgradeId, Decimal>;
 	deckhands: Record<FishingSources, Decimal>;
 
+	/**
+	 * Absolute wall-clock deadline, in ms, of the next trader's arrival.
+	 *
+	 * A deadline and not a countdown, for the same reason as the town trip: a
+	 * hidden tab throttles timers and the offline settle never calls `tick()`,
+	 * so a counted-down trader would simply never arrive while you were away.
+	 */
+	nextTraderAt: number;
+	/** How many traders have been past. Rotates what they carry. */
+	traderVisits: number;
+
 	/** How big the bucket is. Level 0 is the one you started with. */
 	bucketLevel: Decimal;
 	/** Bought or fished up. Unlocks riding to town for the full price. */
@@ -144,4 +155,8 @@ export interface OfflineReport {
 	fuelSpent: Decimal;
 	/** True if the boat ran dry and the crew worked inshore instead. */
 	fellBack: boolean;
+	/** How many traders came past while you were away. */
+	traderVisits: number;
+	/** What they paid, in total. Part of `coins`, not on top of it. */
+	traderEarned: Decimal;
 }

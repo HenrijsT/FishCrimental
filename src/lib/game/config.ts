@@ -249,6 +249,21 @@ export const TOWN_TRIP_SECONDS = 75;
  */
 export const ASSISTANT_COST = 26_000;
 
+/** How often a trader comes past. */
+/**
+ * Short enough that the opening is not spent waiting. A starting bucket fills
+ * in roughly half this, so the rhythm is fish-a-while, wait-a-little.
+ */
+export const TRADER_PERIOD_SECONDS = 45;
+
+/** How many offers he carries at a time. */
+export const TRADER_STOCK_SIZE = 2;
+
+/** Everything a trader will ever sell. Two of these are in stock per visit. */
+export type TraderOfferId = 'bicycle' | 'bucket' | 'assistant';
+
+export const TRADER_CATALOGUE: TraderOfferId[] = ['bicycle', 'bucket', 'assistant'];
+
 /**
  * The bucket.
  *
@@ -261,7 +276,7 @@ export const ASSISTANT_COST = 26_000;
  * would turn an implementation detail into the game's offline income ceiling,
  * so capacity has to outrun the crew until the Assistant retires it.
  */
-export const BUCKET_BASE_CAPACITY = 15;
+export const BUCKET_BASE_CAPACITY = 20;
 /**
  * Capacity has to climb faster than the cost, or the bucket falls behind the
  * crew and the cap becomes the offline ceiling.

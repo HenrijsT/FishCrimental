@@ -13,7 +13,10 @@ import {
 	OFFLINE_EFFICIENCY,
 	SOURCE_ORDER,
 	TOWN_TRIP_SECONDS,
-	TRADER_RATE
+	TRADER_CATALOGUE,
+	TRADER_PERIOD_SECONDS,
+	TRADER_RATE,
+	TRADER_STOCK_SIZE
 } from './config';
 import {
 	accumulate,
@@ -29,9 +32,11 @@ import {
 	holdRoom,
 	inTown,
 	rideToTown,
+	runTrader,
 	saleRate,
 	sellHold,
-	townSecondsLeft
+	townSecondsLeft,
+	traderStock
 } from './engine';
 import { fromRaw, serialize } from './save';
 import { Game } from './state.svelte';
@@ -475,5 +480,146 @@ describe('a night offline still scales with the crew', () => {
 		expect(nightEarnings(20, 0, true)).toBeGreaterThanOrEqual(
 			nightEarnings(20, BUCKET_MAX_LEVEL, false) * 0.999
 		);
+	});
+});
+
+describe('the trader', () => {
+	function ready(): GameState {
+		const state = createInitialState();
+		state.hold[FishType.Small] = D(10);
+		state.holdValue = D(1000);
+		state.nextTraderAt = 1_000_000;
+		return state;
+	}
+
+	it('makes an appointment on a fresh save rather than arriving at once', () => {
+		const state = createInitialState();
+		expect(state.nextTraderAt).toBe(0);
+
+		const result = runTrader(state, computeModifiers(state), 5_000_000);
+		expect(result.visits).toBe(0);
+		expect(state.nextTraderAt).toBe(5_000_000 + TRADER_PERIOD_SECONDS * 1000);
+	});
+
+	it('buys the whole hold, at his own price', () => {
+		const state = ready();
+		const result = runTrader(state, computeModifiers(state), 1_000_000);
+
+		expect(result.visits).toBe(1);
+		expect(result.earned.toNumber()).toBeCloseTo(1000 * TRADER_RATE, 6);
+		expect(state.holdValue.eq(0)).toBe(true);
+	});
+
+	it('does not come early', () => {
+		const state = ready();
+		expect(runTrader(state, computeModifiers(state), 999_999).visits).toBe(0);
+		expect(state.holdValue.eq(1000)).toBe(true);
+	});
+
+	it('resolves floor(gap / period) visits after a long absence', () => {
+		const state = ready();
+		const hours = 8;
+		const now = 1_000_000 + hours * 3600 * 1000;
+
+		const result = runTrader(state, computeModifiers(state), now);
+		// The appointment was already due, so it is that one plus every period
+		// that elapsed after it.
+		expect(result.visits).toBe(1 + Math.floor((hours * 3600) / TRADER_PERIOD_SECONDS));
+	});
+
+	it('resolves the same number of visits in one step as in many', () => {
+		const period = TRADER_PERIOD_SECONDS * 1000;
+		const start = 1_000_000;
+		const span = 40 * period;
+
+		const oneStep = ready();
+		const oneStepVisits = runTrader(oneStep, computeModifiers(oneStep), start + span).visits;
+
+		const chunked = ready();
+		let chunkedVisits = 0;
+		for (let i = 1; i <= 24; i++) {
+			chunkedVisits += runTrader(
+				chunked,
+				computeModifiers(chunked),
+				start + (span * i) / 24
+			).visits;
+		}
+
+		expect(chunkedVisits).toBe(oneStepVisits);
+	});
+
+	it('keeps his schedule rather than resetting it on every arrival', () => {
+		const state = ready();
+		const period = TRADER_PERIOD_SECONDS * 1000;
+		runTrader(state, computeModifiers(state), 1_000_000);
+		expect(state.nextTraderAt).toBe(1_000_000 + period);
+	});
+
+	it('rotates what he carries', () => {
+		const state = createInitialState();
+		const seen = new Set<string>();
+		for (let i = 0; i < 6; i++) {
+			state.traderVisits = i;
+			for (const id of traderStock(state)) seen.add(id);
+		}
+		expect(seen.size).toBe(TRADER_CATALOGUE.length);
+	});
+
+	it('never carries more than his stock size', () => {
+		const state = createInitialState();
+		for (let i = 0; i < 10; i++) {
+			state.traderVisits = i;
+			expect(traderStock(state).length).toBeLessThanOrEqual(TRADER_STOCK_SIZE);
+		}
+	});
+
+	it('always carries everything still open when there is little left', () => {
+		const state = createInitialState();
+		state.hasBicycle = true;
+		// Only bucket and assistant remain — both fit, so neither can be missed.
+		for (let i = 0; i < 6; i++) {
+			state.traderVisits = i;
+			expect(traderStock(state)).toEqual(['bucket', 'assistant']);
+		}
+	});
+
+	it('will not sell what he is not carrying', () => {
+		const state = createInitialState();
+		state.coins = D('1e9');
+		// Force a rotation that excludes the bicycle.
+		while (traderStock(state).includes('bicycle')) state.traderVisits += 1;
+
+		expect(buyBicycle(state)).toBe(false);
+		expect(state.hasBicycle).toBe(false);
+	});
+
+	it('sells it when he is', () => {
+		const state = createInitialState();
+		state.coins = D('1e9');
+		while (!traderStock(state).includes('bicycle')) state.traderVisits += 1;
+
+		expect(buyBicycle(state)).toBe(true);
+	});
+
+	it('has a deadline that survives a save and cannot run away', () => {
+		const state = ready();
+		const loaded = fromRaw(JSON.parse(serialize(state)))!;
+		expect(loaded.nextTraderAt).toBeGreaterThan(0);
+
+		const absurd = fromRaw({ version: 4, nextTraderAt: Date.now() + 1e15 })!;
+		expect(absurd.nextTraderAt).toBeLessThanOrEqual(Date.now() + TRADER_PERIOD_SECONDS * 1000 + 5);
+	});
+
+	it('does not survive a prestige', () => {
+		const fresh = createInitialState({
+			pearls: D(5),
+			dex: {},
+			allTimePearls: D(5),
+			allTimeCoins: D('1e18'),
+			prestigeCount: D(1),
+			achievements: []
+		});
+		expect(fresh.nextTraderAt).toBe(0);
+		expect(fresh.traderVisits).toBe(0);
 	});
 });

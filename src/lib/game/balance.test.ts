@@ -153,7 +153,11 @@ describe('first run pacing', () => {
 });
 
 describe('prestige scaling', () => {
-	const chain = simulatePrestigeChain(6, { maxSeconds: 3 * HOUR });
+	// Four hours, not three. The opening act — the trader's price, the bucket
+	// and the town trip — moved the first prestige from 2h28m to 3h08m, so a
+	// three-hour session no longer reaches it and the whole chain reported a
+	// single unfinished run. The cap is a harness budget, not a balance figure.
+	const chain = simulatePrestigeChain(6, { maxSeconds: 4 * HOUR });
 
 	it('completes six runs', () => {
 		expect(chain.history).toHaveLength(6);
