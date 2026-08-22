@@ -11,39 +11,37 @@
 	const pondSource = FishingSources.Pond;
 </script>
 
-<body>
-
+<svelte:body />
 <!--	<progress value={$progressBar} max="100" />-->
 
 <ProgressBars />
 
-	<button
-		on:mousedown={handleMouseDown}
-		on:mouseup={handleMouseUp}
-		on:touchstart={handleMouseDown}
-		on:touchend={handleMouseUp}
-	>
-		Fish
-	</button>
+<button
+	on:mousedown={handleMouseDown}
+	on:mouseup={handleMouseUp}
+	on:touchstart={handleMouseDown}
+	on:touchend={handleMouseUp}
+>
+	Fish
+</button>
 
-	{#each [...fishTypeCurrentCount.entries()] as [key, val]}
-		{#if [FishType.Small, FishType.Medium, FishType.Large, FishType.Shark].indexOf(key) >= 0}
-			<FishCount count={val}>/ {FishType[key]} Fish:</FishCount>
-		{/if}
-	{/each}
+{#each [...fishTypeCurrentCount.entries()] as [key, val] (key)}
+	{#if [FishType.Small, FishType.Medium, FishType.Large, FishType.Shark].indexOf(key) >= 0}
+		<FishCount count={val}>/ {FishType[key]} Fish:</FishCount>
+	{/if}
+{/each}
 
-	- market Coins: {$marketCoinCount.toFixed(0)} -
+- market Coins: {$marketCoinCount.toFixed(0)} -
 
-	<button on:click={sellFish}> Sell </button>
-	<div id="foo">
-		<button on:click={() => marketCoinCount.set($marketCoinCount.plus(10000))}> Add Coins </button>
-		<br />
-		<button on:click={() => fishAction(pondSource)}>Test Fishing</button>
-	</div>
-</body>
+<button on:click={sellFish}> Sell </button>
+<div id="foo">
+	<button on:click={() => marketCoinCount.set($marketCoinCount.plus(10000))}> Add Coins </button>
+	<br />
+	<button on:click={() => fishAction(pondSource)}>Test Fishing</button>
+</div>
 
 <!-- EXAMPLES. TODO: REMOVE -->
-<!--   {#each [...fishTypeCurrentCount.entries()] as [key, val]}
+<!--   {#each [...fishTypeCurrentCount.entries()] as [key, val] (key)}
     {#if key != FishType.Erotic}
       <FishCount count={val}>{FishType[key]}:</FishCount>
     {:else if key == 3 && testCheck }
