@@ -1,4 +1,5 @@
-import type Decimal from 'break_eternity.js';
+import Decimal from 'break_eternity.js';
+import { D, d0 } from '$lib/decimal';
 import { FISH_TYPES, fishTypeBaseValue } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
 import type { Fish } from '$lib/fishes/fish';
@@ -7,10 +8,14 @@ import {
 	MAX_OFFLINE_SECONDS,
 	OFFLINE_EFFICIENCY,
 	SOURCE_CONFIG,
-	TICK_MS
+	TICK_MS,
+	UPGRADES,
+	type UpgradeId
 } from './config';
 import {
 	accumulate,
+	affordableDeckhands,
+	affordableUpgradeLevels,
 	buyDeckhand,
 	buyPrestigeUpgrade,
 	buyUpgrade,
@@ -31,6 +36,10 @@ import {
 import { evaluateAchievements } from './achievements';
 import { exportSave, importSave, loadFromStorage, saveToStorage } from './save';
 import type { GameState, Modifiers, OfflineReport } from './types';
+
+export type BuyAmount = 1 | 10 | 25 | 'max';
+
+export const BUY_AMOUNTS: BuyAmount[] = [1, 10, 25, 'max'];
 
 export interface CastFeedback {
 	id: number;
@@ -61,6 +70,9 @@ class Game {
 	newAchievements = $state<string[]>([]);
 
 	loaded = $state(false);
+
+	/** How many levels the buy buttons purchase at once. */
+	buyAmount = $state<BuyAmount>(1);
 
 	modifiers = $derived<Modifiers>(computeModifiers(this.state));
 	incomePerSecond = $derived(totalIncomePerSecond(this.state, this.modifiers));
@@ -256,14 +268,34 @@ class Game {
 		return done;
 	}
 
-	buy(id: Parameters<typeof buyUpgrade>[1], count: Decimal | number = 1): Decimal {
-		const bought = buyUpgrade(this.state, id, count);
+	/** Levels a buy button would purchase right now, given the selected amount. */
+	upgradeStep(id: UpgradeId): Decimal {
+		const remaining = D(UPGRADES[id].maxLevel).minus(this.state.upgrades[id]);
+		if (remaining.lte(0)) return d0();
+
+		const wanted =
+			this.buyAmount === 'max'
+				? affordableUpgradeLevels(id, this.state.upgrades[id], this.state.coins)
+				: D(this.buyAmount);
+
+		return Decimal.max(d0(), Decimal.min(wanted, remaining));
+	}
+
+	deckhandStep(source: FishingSources): Decimal {
+		if (this.buyAmount !== 'max') return D(this.buyAmount);
+		return affordableDeckhands(source, this.state.deckhands[source], this.state.coins);
+	}
+
+	buy(id: UpgradeId, count?: Decimal | number): Decimal {
+		const amount = count ?? (this.buyAmount === 'max' ? this.upgradeStep(id) : this.buyAmount);
+		const bought = buyUpgrade(this.state, id, amount);
 		if (bought.gt(0)) this.#checkAchievements();
 		return bought;
 	}
 
-	hire(source: FishingSources, count: Decimal | number = 1): Decimal {
-		const hired = buyDeckhand(this.state, source, count);
+	hire(source: FishingSources, count?: Decimal | number): Decimal {
+		const amount = count ?? (this.buyAmount === 'max' ? this.deckhandStep(source) : this.buyAmount);
+		const hired = buyDeckhand(this.state, source, amount);
 		if (hired.gt(0)) this.#checkAchievements();
 		return hired;
 	}

@@ -170,3 +170,25 @@ markup and logs no console errors.
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 102 passing · `pnpm audit:ui` all categories 1.00.
+
+## Phase 3 — Economy
+
+- **Tab shell.** The layout is now a persistent rig column (cast bar, hold, catch
+  ticker — always visible and sticky on desktop) beside a tabbed content column.
+  Keeping the rod on screen while browsing upgrades is the whole point of the genre;
+  hiding it behind a tab would make the game feel like a spreadsheet. Tabs use proper
+  `role="tablist"` / `aria-selected` / `aria-controls` wiring.
+- **`UpgradePanel`** shows all five gear upgrades with the current effect, the effect
+  after the pending purchase, and the bulk price. The **buy amount is global**
+  (`game.buyAmount`, ×1 / ×10 / ×25 / Max) and shared with the crew panel, so the
+  player sets it once.
+- **Bulk buys use a closed-form geometric series**, not a loop:
+  `affordableUpgradeLevels` inverts `base·gⁿ` with logs to find how many levels the
+  coin pile covers, and `upgradeBulkCost` sums the series directly. At Max with 1e40
+  coins a loop would run for millions of iterations; this is two Decimal logs.
+  Tests assert the closed form matches level-by-level summation and never overshoots.
+- **Source unlocks are strictly sequential** (`canUnlock` refuses anything but
+  `nextLockedSource`), so no amount of coin hoarding lets a player skip the Lagoon.
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 111 passing · `pnpm audit:ui` all thresholds met.
