@@ -84,6 +84,17 @@ export interface SaveProblem {
  */
 const BLOCKING_SAVE_PROBLEMS: ReadonlySet<SaveProblem['kind']> = new Set(['future', 'corrupt']);
 
+/**
+ * The modals the game can raise, in the order they get the screen.
+ *
+ * Offline comes first because it is the only one carrying information the
+ * player cannot get back: it reports up to eight hours of crew work and is
+ * gone once dismissed. The joke reveals can wait their turn.
+ */
+export const MODAL_ORDER = ['offline', 'prestige', 'lipfish'] as const;
+
+export type ModalId = (typeof MODAL_ORDER)[number];
+
 export type BuyAmount = 1 | 10 | 25 | 'max';
 
 export const BUY_AMOUNTS: BuyAmount[] = [1, 10, 25, 'max'];
@@ -615,6 +626,25 @@ export class Game {
 	buyRigOffline(): boolean {
 		return buyAutoFisherOffline(this.state);
 	}
+
+	/**
+	 * The one modal that is allowed on screen right now.
+	 *
+	 * The three modals used to be siblings, each mounting its own Escape
+	 * handler, so one Escape closed all of them and a natural save — an offline
+	 * report landing at the same moment as the lipfish reveal — lost the payment
+	 * report entirely. Rendering at most one is what makes a single Escape
+	 * handler correct.
+	 */
+	activeModal = $derived<ModalId | null>(
+		this.offlineReport !== null
+			? 'offline'
+			: this.prestigeResult !== null
+				? 'prestige'
+				: this.lipfishReveal
+					? 'lipfish'
+					: null
+	);
 
 	boatBlocker = $derived(sourceBlocker(this.state, this.state.activeSource, this.modifiers));
 
