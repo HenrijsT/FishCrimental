@@ -2,6 +2,7 @@
 	import { game } from '$lib/game/state.svelte';
 	import { sources } from '$lib/fishing_sources';
 	import { RARITY_LABEL } from '$lib/game/engine';
+	import { describePerCast } from '$lib/format';
 	import { SCENES } from '$lib/game/scenes';
 	import CastBar from './CastBar.svelte';
 	import Num from './Num.svelte';
@@ -111,6 +112,8 @@
 	<p class="mood faint">{scene.mood}</p>
 
 	<CastBar progress={game.castProgress} {label} active={game.casting} />
+
+	<p class="rate faint">{describePerCast(game.modifiers.fishPerCast)}</p>
 
 	<button
 		class="rod"
@@ -252,6 +255,11 @@
 	.mood {
 		font-size: 0.75rem;
 		margin-top: -0.15rem;
+	}
+
+	.rate {
+		font-size: 0.73rem;
+		margin-top: -0.3rem;
 	}
 
 	.rod {

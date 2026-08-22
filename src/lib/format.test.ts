@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import Decimal from 'break_eternity.js';
-import { formatDuration, formatInteger, formatNumber, formatRate } from './format';
+import { describePerCast, formatDuration, formatInteger, formatNumber, formatRate } from './format';
 import { D } from './decimal';
 
 describe('formatNumber', () => {
@@ -135,5 +135,28 @@ describe('small nonzero values', () => {
 
 	it('keeps the sign on tiny negatives', () => {
 		expect(formatNumber(-0.004)).toBe('-<0.01');
+	});
+});
+
+describe('describePerCast', () => {
+	it('says a whole rate plainly', () => {
+		expect(describePerCast(1)).toBe('1 fish a cast');
+		expect(describePerCast(4)).toBe('4 fish a cast');
+	});
+
+	it('explains a fractional rate instead of showing a fraction of a fish', () => {
+		expect(describePerCast(1.19)).toBe('1.19 fish a cast — 1 most casts, 2 about 19% of the time');
+		expect(describePerCast(2.5)).toBe('2.5 fish a cast — 2 most casts, 3 about 50% of the time');
+	});
+
+	it('stops explaining once the number is big enough not to need it', () => {
+		expect(describePerCast(1500)).toBe('1.50K fish a cast');
+		expect(describePerCast(D('1e40'))).toBe('1.00e40 fish a cast');
+	});
+
+	it('never claims a fraction of a fish', () => {
+		for (const rate of [1, 1.01, 1.19, 1.5, 1.99, 2, 7.77, 999.9]) {
+			expect(describePerCast(rate)).not.toMatch(/\d\.\d+ fish\b(?! a cast)/);
+		}
 	});
 });

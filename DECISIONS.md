@@ -647,12 +647,12 @@ a player with one big payday buy a Deep Sea Charter before they had ever fished 
 stream, which reads wrong and flattens the progression. A chain gives four ordered
 beats and a natural place for flavour.
 
-| Licence | Covers | Cost |
-|---|---|---|
-| Inland Angling Licence | Stream, River | 360 |
-| Lake & Lagoon Permit | Lake, Lagoon | 14,000 |
-| Coastal Waters Licence | Sea, Offshore | 640,000 |
-| Deep Sea Charter | Ocean | 38,000,000 |
+| Licence                | Covers        | Cost       |
+| ---------------------- | ------------- | ---------- |
+| Inland Angling Licence | Stream, River | 360        |
+| Lake & Lagoon Permit   | Lake, Lagoon  | 14,000     |
+| Coastal Waters Licence | Sea, Offshore | 640,000    |
+| Deep Sea Charter       | Ocean         | 38,000,000 |
 
 The Pond needs nothing — the first two minutes of the game must not have a form to
 fill in. A licence is separate from the source's coin cost, so opening new water has
@@ -661,9 +661,9 @@ two beats: qualify, then afford.
 ### The boat
 
 **Decision: Offshore and Ocean need it; the Sea does not.** The brief left the Sea to
-judgement. Keeping it shore-accessible means the boat arrives *after* the player has
+judgement. Keeping it shore-accessible means the boat arrives _after_ the player has
 met licences, deckhands, upgrades and the Fishdex, rather than piling a fifth system on
-top of a fourth. It also gives the fallback somewhere real to fall back *to* — the Sea
+top of a fourth. It also gives the fallback somewhere real to fall back _to_ — the Sea
 is a genuinely productive place to be stranded, not a punishment.
 
 - **Boat** — 1,950,000 coins, bought once.
@@ -677,25 +677,25 @@ is a genuinely productive place to be stranded, not a punishment.
 The brief's hard constraint drove four separate design choices, each with a test:
 
 1. **Condition never stops the boat.** `boatEfficiency` maps 0–100 onto 0.4–1.0 and is
-   applied as *drag on cast time*. A completely neglected boat is 60% slower. It is
+   applied as _drag on cast time_. A completely neglected boat is 60% slower. It is
    never 0, and it costs nothing to leave broken except speed.
 2. **An empty tank falls back, it does not halt.** `reachableSource` walks back to the
    deepest water that is unlocked, licensed and shore-accessible. In `accumulate`, the
-   casts the boat could not cover are *worked inshore instead* and still pay. A test
+   casts the boat could not cover are _worked inshore instead_ and still pay. A test
    runs eight hours with an empty tank, zero condition and no money and asserts the
    value earned is greater than zero and nothing was destroyed.
 3. **The player is told, in plain words.** A persistent banner names the water they were
    moved from and to, says nothing was lost, and offers a jump to the harbour. The
    offline summary carries the same line when it happened while they were away.
-4. **A standing order removes the chore entirely.** It is a *delivery*, not a tank
+4. **A standing order removes the chore entirely.** It is a _delivery_, not a tank
    top-up — it buys exactly what the trip needs, capped only by coins, and bills for it.
    An empty tank with a standing order and coins in hand counts as able to sail.
 
 **Two bugs came out of playtesting this, not out of the type checker:**
 
 - The stranded banner cleared itself on the very next 200 ms tick, because
-  `#keepFishable` tested the source the player had just been *moved to* rather than the
-  one they were moved *from*. Reproduced live: the banner never appeared at all.
+  `#keepFishable` tested the source the player had just been _moved to_ rather than the
+  one they were moved _from_. Reproduced live: the banner never appeared at all.
 - With a standing order the tank ended each trip at exactly zero, and
   `fuel / fuelPerCast` then floored to one cast short — so every trip reported a
   fallback and the player was flagged as stranded despite a paid-up standing order.
@@ -715,15 +715,15 @@ sitting in front of each tier, not the money. The lever that actually worked was
 `market` upgrade cost growth, **3.71 → 3.62**, which brought it back to **2 h 25 m** —
 within 5% of where it was before this stage.
 
-| | before Stage 2 | after |
-|---|---|---|
-| First prestige | 2 h 18 m at 1.00e15 | **2 h 25 m at 1.00e15** |
-| Mostly-idle player | 3 h 08 m | 3 h 30 m |
-| Sources open at | 5/12/18/27/37/49/67 m | 6/14/21/30/39/53/71 m |
-| Licences taken at | — | 3 / 14 / 23 / 33 m |
-| Boat bought at | — | 39 m |
-| Run 2 / 3 / 4 | 1 h 02 m / 24 m / 1 m 25 s | 1 h 03 m / 24 m / 57 s |
-| Run 6 lifetime (3 h) | 1.18e45 | **1.79e55** |
+|                      | before Stage 2             | after                   |
+| -------------------- | -------------------------- | ----------------------- |
+| First prestige       | 2 h 18 m at 1.00e15        | **2 h 25 m at 1.00e15** |
+| Mostly-idle player   | 3 h 08 m                   | 3 h 30 m                |
+| Sources open at      | 5/12/18/27/37/49/67 m      | 6/14/21/30/39/53/71 m   |
+| Licences taken at    | —                          | 3 / 14 / 23 / 33 m      |
+| Boat bought at       | —                          | 39 m                    |
+| Run 2 / 3 / 4        | 1 h 02 m / 24 m / 1 m 25 s | 1 h 03 m / 24 m / 57 s  |
+| Run 6 lifetime (3 h) | 1.18e45                    | **1.79e55**             |
 
 Source unlock costs were also cut 20% to soften the double charge of licence-plus-price
 at each tier.
@@ -734,3 +734,87 @@ open water is handed a boat. Nobody loses access to water mid-run.
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 213 passing · `pnpm audit:ui` 1.00 / 1.00 / 1.00 / 1.00.
+
+## Stage 3 — the fractional catch question
+
+### The decision
+
+**Every count in the game is a whole number. Fractional rates are resolved by banking
+the remainder — not by rounding, and not by rolling dice.**
+
+A rate of 1.19 fish per cast pays 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 2 … and the long-run
+average is 1.19 to the last digit. `takeWhole(state, key, amount)` adds the amount to a
+banked remainder, pays out the whole part, and keeps the fraction for next time. The
+bank lives in `state.carry`, keyed by `source#thing`, and is saved.
+
+### Why not the other two options
+
+**Keep fractions and show them honestly.** This is what the first build did, and it is
+what produced three of the five bugs the user reported. A cast wrote 0.51 of a Guppy,
+0.34 of a Tetra and a two-hundred-thousandth of a Lipfish into the hold, the ticker and
+the Fishdex *simultaneously*, because the only honest way to hand out 1.19 fish drawn
+from a 31-species distribution is to hand out a slice of all 31. The result: the catch
+ticker showed the same list every cast, the hold displayed `Erotic 0 !`, and a player
+with three deckhands had "caught" every species in the pond within seconds. Fractional
+fish are not a display problem. They are a modelling problem that surfaces everywhere.
+
+**Resolve stochastically — 1.19 means 2 fish 19% of the time, by coin flip.** Correct
+in expectation, and it was the strong contender. Rejected for three reasons:
+
+1. It is only unbiased *in expectation*. Remainder banking is unbiased **exactly**: at
+   any moment, everything the player is owed has either been paid out or is sitting in
+   the bank. A test asserts `paid + banked === rate × draws` to three decimal places
+   over 100,000 draws at seven different rates.
+2. It adds variance to a number the player is watching go up. Idle-game income is a
+   ratchet; noise on it reads as a bug.
+3. Offline it would need either a binomial sample per species per window (fine) or a
+   normal approximation (an approximation). Banking needs neither.
+
+### How it satisfies each requirement
+
+**Unbiased.** Proved, not asserted. `takeWhole` is tested at rates 0.1 through 7.77 over
+100,000 draws each; the error never exceeds the un-banked remainder, and a drift test
+samples the error every 20,000 draws over 200,000 and shows it flat rather than growing.
+Species proportions are checked against the catch table on both code paths — within
+0.006 on the rolled path over 120,000 casts and within 0.002 on the bulk path over
+500,000 fish. The one-in-a-million Lipfish comes up within ±10% of its true rate over
+50 million fish.
+
+**Consistent.** Manual and automatic fishing call **the same function**.
+`performCast` passes `fishPerCast`; `accumulate` passes `casts × fishPerCast`. There is
+no separate automatic economy. A test drives 10,000 casts by hand and the same number by
+crew and asserts both land within 0.1% of the quoted rate and of each other. A second
+test asserts both functions still route through `distributeCatch`, so the two cannot
+quietly drift apart.
+
+**The one seam, and where it sits.** Inside `distributeCatch`, hauls of **24 fish or
+fewer are rolled one fish at a time** against the weighted table; larger hauls are split
+across species by expected share with the same banking applied per species. The seam is
+on *haul size*, not on *who is fishing* — a player with a huge net gets the bulk path
+too, and a one-deckhand crew gets rolled fish. This is deliberate: a small haul is a
+moment the player is watching, and it should be a real draw with real surprise; a
+haul of ten billion is a number, and rolling it is not possible. Both are unbiased.
+
+**Offline-computable.** Eight hours resolves in one call per source. A test gives every
+source a billion deckhands, runs eight hours, and asserts it returns in under 250 ms —
+it completes in single-digit milliseconds. A second test checks one eight-hour call
+against 480 one-minute calls and gets the same answer within 1%.
+
+**Legible.** The cast panel now says, in words: *"1.19 fish a cast — 1 most casts, 2
+about 19% of the time"*. Above 1,000 it drops the explanation and just shows the number.
+No screen anywhere can be asked to display a fraction of a fish — a test asserts every
+hold entry is either exactly zero or at least one.
+
+**Tested.** `catch_model.test.ts`, 19 tests, plus four on the wording in
+`format.test.ts` and the round-two regressions that this replaced.
+
+### One implementation note
+
+`state.carry` values are plain `number`, not `Decimal`, and that is deliberate rather
+than an oversight of the Decimal rule. They are always in `[0, 1)`: they are fractions
+of a unit, never counts, never compounded and never spent. Above 2^53 there is no
+representable fractional part left to bank, so `takeWhole` floors and returns. The save
+loader throws away any carry entry outside `[0, 1)`.
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 236 passing · `pnpm audit:ui` 1.00 / 1.00 / 1.00 / 1.00.
