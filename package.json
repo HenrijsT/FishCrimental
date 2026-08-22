@@ -12,7 +12,7 @@
 		"format": "prettier --write .",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"audit:ui": "vite build && lhci autorun --config=./lighthouserc.cjs"
+		"audit:ui": "vite build && lhci autorun --config=./lighthouserc.cjs; status=$?; rm -rf .lighthouseci; exit $status"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
