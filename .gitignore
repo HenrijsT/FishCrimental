@@ -9,3 +9,9 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .idea
+
+# Lighthouse CI working files
+.lighthouseci
+
+# Claude Code harness scratch (agent worktrees, local settings)
+.claude
