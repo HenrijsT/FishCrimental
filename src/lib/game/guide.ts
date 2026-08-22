@@ -29,6 +29,7 @@ import type { GameState } from './types';
  */
 export const TAB_IDS = [
 	'water',
+	'shore',
 	'gear',
 	'harbour',
 	'crew',
@@ -62,6 +63,13 @@ export const TABS: TabDefinition[] = [
 		available: () => true
 	},
 	{
+		id: 'shore',
+		label: 'Shore',
+		blurb:
+			'Where the catch turns into coins. The trader pays badly; getting to town yourself pays properly.',
+		available: (state) => state.totalCasts.gte(3)
+	},
+	{
 		id: 'gear',
 		label: 'Gear',
 		blurb: 'Five pieces of kit. Every one of them multiplies, and they stack.',
@@ -81,7 +89,7 @@ export const TABS: TabDefinition[] = [
 		label: 'Crew',
 		blurb: 'Deckhands fish for you, including while the game is closed.',
 		available: (state) =>
-			state.coins.gte(deckhandCost(FishingSources.Pond, 0).times(0.6)) ||
+			state.coins.gte(deckhandCost(SOURCE_ORDER[0], 0).times(0.6)) ||
 			SOURCE_ORDER.some((source) => state.deckhands[source].gt(0))
 	},
 	{
@@ -185,7 +193,7 @@ export function nextStep(state: GameState): NextStep | null {
 	}
 
 	const anyCrew = SOURCE_ORDER.some((source) => state.deckhands[source].gt(0));
-	if (!anyCrew && state.coins.gte(deckhandCost(FishingSources.Pond, 0))) {
+	if (!anyCrew && state.coins.gte(deckhandCost(SOURCE_ORDER[0], 0))) {
 		return {
 			text: 'You can afford a deckhand. They fish for you, even while the game is closed.',
 			tab: 'crew'

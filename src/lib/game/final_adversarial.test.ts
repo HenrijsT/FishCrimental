@@ -132,14 +132,14 @@ describe('prestige at every boundary', () => {
 describe('the clock', () => {
 	it('going backwards earns nothing rather than owing something', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(20);
+		state.deckhands[SOURCE_ORDER[0]] = D(20);
 		expect(accumulate(state, computeModifiers(state), -99999).fish.eq(0)).toBe(true);
 		expect(accumulate(state, computeModifiers(state), 0).fish.eq(0)).toBe(true);
 	});
 
 	it('jumping a decade forward is finite and integral', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(20);
+		state.deckhands[SOURCE_ORDER[0]] = D(20);
 		const result = accumulate(state, computeModifiers(state), 10 * 365 * 24 * 3600);
 		expect(result.fish.isFinite()).toBe(true);
 		expect(result.fish.eq(result.fish.floor())).toBe(true);

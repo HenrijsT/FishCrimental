@@ -70,7 +70,7 @@ describe('licences', () => {
 
 	it('gate the water they cover, and nothing else', () => {
 		const state = createInitialState();
-		expect(missingLicence(state, FishingSources.Pond)).toBeNull();
+		expect(missingLicence(state, SOURCE_ORDER[0])).toBeNull();
 
 		for (const source of SOURCE_ORDER) {
 			const required = SOURCE_LICENCE[source];
@@ -81,6 +81,10 @@ describe('licences', () => {
 	it('stop a source being unlocked however much money is on the table', () => {
 		const state = createInitialState();
 		state.coins = D('1e30');
+		// The Pond is licence-free and is now the first purchase; the Stream is
+		// the first thing paper actually gates.
+		unlockSource(state, FishingSources.Pond);
+
 		expect(canUnlock(state, FishingSources.Stream)).toBe(false);
 
 		buyLicence(state, 'inland');
@@ -93,11 +97,18 @@ describe('licences', () => {
 		}
 	});
 
-	it('cover every source except the Pond exactly once', () => {
+	it('cover every source except the two free ones, exactly once', () => {
+		// Two sources are licence-free now: the mud pool you start in, and the
+		// Pond it pays for. Licences are deliberately untouched by the opening
+		// act, so the Pond simply moved from "the free one" to "the second free
+		// one" and the licence table did not change at all.
 		const covered = LICENCE_IDS.flatMap((id) => LICENCES[id].covers);
+		const free = SOURCE_ORDER.filter((source) => !covered.includes(source));
+
 		expect(new Set(covered).size).toBe(covered.length);
-		expect(covered).toHaveLength(SOURCE_ORDER.length - 1);
-		expect(covered).not.toContain(FishingSources.Pond);
+		expect(covered).toHaveLength(SOURCE_ORDER.length - 2);
+		expect(free).toEqual([SOURCE_ORDER[0], SOURCE_ORDER[1]]);
+		for (const source of free) expect(SOURCE_LICENCE[source]).toBeUndefined();
 	});
 });
 
@@ -208,6 +219,10 @@ describe('running dry is never a fail state', () => {
 		state.boat.condition = 0;
 		state.activeSource = FishingSources.Ocean;
 		for (const source of SOURCE_ORDER) state.deckhands[source] = D(10);
+		// These are boat tests, not bucket tests: an Assistant means the hold
+		// never runs out of room, so a fallback that earns nothing can only mean
+		// the boat logic is wrong.
+		state.hasAssistant = true;
 		return state;
 	}
 

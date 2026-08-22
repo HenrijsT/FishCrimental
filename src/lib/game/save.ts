@@ -12,7 +12,10 @@ import {
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
 	AUTO_FISHER,
+	BUCKET_MAX_LEVEL,
 	SAVE_BACKUP_KEY,
+	TOWN_TRIP_SECONDS,
+	TRADER_PERIOD_SECONDS,
 	SAVE_KEY,
 	SAVE_VERSION,
 	SOURCE_ORDER,
@@ -49,6 +52,23 @@ function dec(value: unknown, fallback: Decimal = d0()): Decimal {
 /** Currencies and counts can never be negative, whatever the file says. */
 function positive(value: unknown, fallback: Decimal = d0()): Decimal {
 	return dec(value, fallback).max(0);
+}
+
+/**
+ * A wall-clock deadline that can never be further away than one trip.
+ *
+ * Also catches a clock that has moved backwards since the save was written.
+ */
+function clampDeadline(value: unknown): number {
+	const parsed = num(value, 0);
+	if (parsed <= 0) return 0;
+	return Math.min(parsed, Date.now() + TOWN_TRIP_SECONDS * 1000);
+}
+
+function clampTraderDeadline(value: unknown): number {
+	const parsed = num(value, 0);
+	if (parsed <= 0) return 0;
+	return Math.min(parsed, Date.now() + TRADER_PERIOD_SECONDS * 1000);
 }
 
 /** Whole, non-negative, and never above the ceiling the game defines. */
@@ -91,7 +111,21 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 	// 3 → 4: the auto-fisher. Purely additive — a version 3 save simply has not
 	// bought one, which is what the defaults below already say. The step exists
 	// so the version is stamped explicitly rather than by `fromRaw`'s fallback.
-	3: (data) => ({ ...data, autoFisher: '0', autoFisherOffline: false, version: 4 })
+	3: (data) => ({ ...data, autoFisher: '0', autoFisherOffline: false, version: 4 }),
+	// 4 → 5: the mud pool became the first source, and the opening act arrived.
+	// Purely additive — every new field reads its default — but the version is
+	// stamped explicitly rather than left to `fromRaw`'s fallback, and the bump
+	// makes an older build refuse the save instead of dropping the new source.
+	4: (data) => ({
+		...data,
+		bucketLevel: '0',
+		hasBicycle: false,
+		hasAssistant: false,
+		fishingBlockedUntil: 0,
+		nextTraderAt: 0,
+		traderVisits: 0,
+		version: 5
+	})
 };
 
 function grandfatherLicences(unlocked: unknown): Raw {
@@ -252,8 +286,12 @@ function readUnlocked(raw: unknown, fallback: Record<FishingSources, boolean>) {
 		},
 		{} as Record<FishingSources, boolean>
 	);
-	// The Pond is always open — otherwise a corrupt save is unplayable.
-	unlocked[FishingSources.Pond] = true;
+	// The first source is always open — otherwise a corrupt save is unplayable.
+	//
+	// This MUST be `SOURCE_ORDER[0]` and not a named source. With a literal
+	// here, prepending a new first source silently hands every reloading player
+	// the old first source for free, permanently, bypassing its unlock cost.
+	unlocked[SOURCE_ORDER[0]] = true;
 	return unlocked;
 }
 
@@ -311,7 +349,7 @@ export function fromRaw(data: Raw): GameState {
 		(SOURCE_ORDER as string[]).includes(migrated.activeSource) &&
 		unlocked[migrated.activeSource as FishingSources]
 			? (migrated.activeSource as FishingSources)
-			: FishingSources.Pond;
+			: SOURCE_ORDER[0];
 
 	return {
 		version: SAVE_VERSION,
@@ -336,6 +374,17 @@ export function fromRaw(data: Raw): GameState {
 
 		upgrades: readUpgrades(migrated.upgrades),
 		deckhands: readDeckhands(migrated.deckhands),
+		// Clamped like the town trip: a deadline far in the future would stop the
+		// trader ever arriving again.
+		nextTraderAt: clampTraderDeadline(migrated.nextTraderAt),
+		traderVisits: Math.max(0, Math.floor(num(migrated.traderVisits, 0))),
+		bucketLevel: level(migrated.bucketLevel, BUCKET_MAX_LEVEL),
+		hasBicycle: bool(migrated.hasBicycle, false),
+		// Clamped, not just parsed. `num()` only checks finiteness, so a
+		// hand-edited or clock-skewed `Date.now() + 1e15` would refuse manual
+		// casting forever with no way back.
+		fishingBlockedUntil: clampDeadline(migrated.fishingBlockedUntil),
+		hasAssistant: bool(migrated.hasAssistant, false),
 		autoFisher: level(migrated.autoFisher, AUTO_FISHER.maxLevel),
 		// The rig cannot be running offline if it does not exist.
 		autoFisherOffline:

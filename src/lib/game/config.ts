@@ -22,9 +22,26 @@ export interface SourceConfig {
  * Deliberately un-round so the curve does not read as hand-placed.
  */
 export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
-	[FishingSources.Pond]: {
+	[FishingSources.MudPool]: {
 		order: 0,
 		unlockCost: 0,
+		// Quick and worthless: a cast takes no time because there is no depth to
+		// it, and nothing in there is worth anything. Small fish only.
+		castSeconds: 0.95,
+		// Exactly a quarter of a Pond fish — and exactly representable in binary,
+		// which matters: `holdValue` accumulates per catch while the hold is
+		// priced in one multiplication, and a multiplier like 0.3 makes those two
+		// drift apart in the twelfth decimal place.
+		valueMultiplier: 0.25,
+		deckhandBaseCost: 70,
+		typeWeights: {
+			[FishType.Small]: 100
+		}
+	},
+	[FishingSources.Pond]: {
+		order: 1,
+		// No longer free — it is the first thing the mud pool pays for.
+		unlockCost: 75,
 		castSeconds: 1.15,
 		valueMultiplier: 1,
 		deckhandBaseCost: 265,
@@ -36,7 +53,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Stream]: {
-		order: 1,
+		order: 2,
 		unlockCost: 530,
 		castSeconds: 1.55,
 		valueMultiplier: 4.6,
@@ -48,7 +65,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.River]: {
-		order: 2,
+		order: 3,
 		unlockCost: 13900,
 		castSeconds: 2.05,
 		valueMultiplier: 13.4,
@@ -62,7 +79,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Lake]: {
-		order: 3,
+		order: 4,
 		unlockCost: 356000,
 		castSeconds: 2.7,
 		valueMultiplier: 79,
@@ -75,7 +92,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Lagoon]: {
-		order: 4,
+		order: 5,
 		unlockCost: 9450000,
 		castSeconds: 3.55,
 		valueMultiplier: 308,
@@ -89,7 +106,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Sea]: {
-		order: 5,
+		order: 6,
 		unlockCost: 244000000,
 		castSeconds: 4.65,
 		valueMultiplier: 84,
@@ -103,7 +120,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Offshore]: {
-		order: 6,
+		order: 7,
 		unlockCost: 6310000000,
 		castSeconds: 6.1,
 		valueMultiplier: 237,
@@ -116,7 +133,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Ocean]: {
-		order: 7,
+		order: 8,
 		unlockCost: 164000000000,
 		castSeconds: 8,
 		valueMultiplier: 1010,
@@ -217,6 +234,82 @@ export const DECKHAND_BASE_EFFICIENCY = 0.42;
 
 /** A cast can never get faster than this, however much rod you buy. */
 export const MIN_CAST_SECONDS = 0.05;
+
+// ---------------------------------------------------------------------------
+// Selling: the trader, the bicycle, the Assistant
+// ---------------------------------------------------------------------------
+
+/**
+ * What a passing trader pays, as a fraction of what the catch is worth.
+ *
+ * The trader is the only buyer a fisherman with no transport has, and he knows
+ * it. Everything before the bicycle sells at this rate.
+ */
+export const TRADER_RATE = 0.55;
+
+/** Riding into town yourself gets the full price. That is the whole point. */
+export const TOWN_RATE = 1;
+
+/** Coins for the bicycle, bought from the trader. */
+export const BICYCLE_COST = 900;
+
+/** How long a trip into town keeps you off the water. */
+export const TOWN_TRIP_SECONDS = 75;
+
+/**
+ * The Assistant minds the shop: no trip, no cooldown, full price — and no
+ * bucket, because someone is there to empty it.
+ *
+ * Priced above the first Pond deckhand (`deckhandBaseCost` 46) by a wide
+ * margin, per the owner: "costs more than first deckhand, not too early but
+ * also not too far in the game."
+ */
+export const ASSISTANT_COST = 26_000;
+
+/** How often a trader comes past. */
+/**
+ * Short enough that the opening is not spent waiting. A starting bucket fills
+ * in roughly half this, so the rhythm is fish-a-while, wait-a-little.
+ */
+export const TRADER_PERIOD_SECONDS = 45;
+
+/** How many offers he carries at a time. */
+export const TRADER_STOCK_SIZE = 2;
+
+/** Everything a trader will ever sell. Two of these are in stock per visit. */
+export type TraderOfferId = 'bicycle' | 'bucket' | 'assistant';
+
+export const TRADER_CATALOGUE: TraderOfferId[] = ['bicycle', 'bucket', 'assistant'];
+
+/**
+ * The bucket.
+ *
+ * A poor fisherman carries what he can carry. The bucket filling is the whole
+ * reason the trader matters, and the reason the Assistant is worth hiring.
+ *
+ * It is upgradeable for a reason that is not flavour: `#settleOffline` sells
+ * between chunks, so offline throughput is `chunks x capacity` — at most
+ * `OFFLINE_CHUNKS` bucketfuls a night, whatever the crew size. A fixed cap
+ * would turn an implementation detail into the game's offline income ceiling,
+ * so capacity has to outrun the crew until the Assistant retires it.
+ */
+export const BUCKET_BASE_CAPACITY = 30;
+/**
+ * Capacity has to climb faster than the cost, or the bucket falls behind the
+ * crew and the cap becomes the offline ceiling.
+ *
+ * Measured: 20 Pond deckhands land 6,574 fish per offline chunk. At the first
+ * tuning (capacity x2.6, cost x3.15) the level that covered that cost 78,697
+ * cumulative — three times the Assistant — so the player would always retire
+ * the bucket before ever upgrading it, and doubling the crew produced only
+ * 1.41x the night instead of 2x. At x3.4 against x2.9, level 5 holds 6,817 for
+ * 17,190 cumulative, which is inside the Assistant's price. The two now
+ * genuinely compete.
+ */
+export const BUCKET_GROWTH = 3.4;
+export const BUCKET_BASE_COST = 55;
+export const BUCKET_COST_GROWTH = 2.9;
+export const BUCKET_MAX_LEVEL = 12;
 
 // ---------------------------------------------------------------------------
 // The auto-fisher
@@ -380,7 +473,15 @@ export const SAVE_KEY = 'fishcrimental.save';
  * dismisses the banner protecting it.
  */
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}.bak`;
-export const SAVE_VERSION = 4;
+/**
+ * 5: the mud pool became `SOURCE_ORDER[0]`.
+ *
+ * No migration is required — `readUnlocked` reads each source against
+ * `createInitialState().unlocked`, so the mud pool defaults to open and the
+ * Pond keeps whatever it had. The bump exists so an OLDER build refuses this
+ * save outright instead of silently dropping a source key it does not know.
+ */
+export const SAVE_VERSION = 5;
 export const AUTOSAVE_MS = 10_000;
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { D } from '$lib/decimal';
-import { FishingSources } from '$lib/fishing_sources';
 import {
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
@@ -109,10 +108,10 @@ describe('deckhands', () => {
 
 	it('add income linearly at a single source', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(1);
+		state.deckhands[SOURCE_ORDER[0]] = D(1);
 		const one = totalIncomePerSecond(state, computeModifiers(state));
 
-		state.deckhands[FishingSources.Pond] = D(10);
+		state.deckhands[SOURCE_ORDER[0]] = D(10);
 		const ten = totalIncomePerSecond(state, computeModifiers(state));
 
 		expect(ten.div(one).toNumber()).toBeCloseTo(10, 6);

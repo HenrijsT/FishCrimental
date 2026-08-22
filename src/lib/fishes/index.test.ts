@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SOURCE_ORDER } from '$lib/game/config';
 import {
 	fishes,
 	sourceToAllFishChanceIndex,
@@ -56,7 +57,7 @@ describe('per-source catch distribution', () => {
 	});
 
 	it('keeps rarer fish types rarer than common ones in the Pond', () => {
-		const index = sourceToFishTypeChanceIndex[FishingSources.Pond];
+		const index = sourceToFishTypeChanceIndex[SOURCE_ORDER[0]];
 		const counts = new Map<string, number>();
 		const samples = 20_000;
 

@@ -16,6 +16,7 @@
 	import PrestigePanel from '$lib/components/PrestigePanel.svelte';
 	import SaveProblemBanner from '$lib/components/SaveProblemBanner.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
+	import ShorePanel from '$lib/components/ShorePanel.svelte';
 	import SourcePicker from '$lib/components/SourcePicker.svelte';
 	import StrandedBanner from '$lib/components/StrandedBanner.svelte';
 	import Tabs from '$lib/components/Tabs.svelte';
@@ -124,6 +125,8 @@
 
 				{#if active === 'water'}
 					<SourcePicker />
+				{:else if active === 'shore'}
+					<ShorePanel />
 				{:else if active === 'gear'}
 					<UpgradePanel />
 					{#if showRig}

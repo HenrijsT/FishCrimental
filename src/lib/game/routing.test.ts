@@ -31,6 +31,9 @@ function drydocked(): GameState {
 	state.boat.fuel = d0();
 	state.coins = d0();
 	state.deckhands[FishingSources.Offshore] = D(10);
+	// Not a bucket test: an Assistant is the in-game way to say the hold is
+	// unlimited, so these assertions are about accumulation and nothing else.
+	state.hasAssistant = true;
 	return state;
 }
 
@@ -135,7 +138,7 @@ describe('the advertised rate and the earned rate', () => {
 describe('routeCasts', () => {
 	it('sends shore work straight through', () => {
 		const state = drydocked();
-		const route = routeCasts(state, computeModifiers(state), FishingSources.Pond, D(100));
+		const route = routeCasts(state, computeModifiers(state), SOURCE_ORDER[0], D(100));
 
 		expect(route.sailed.toNumber()).toBe(100);
 		expect(route.stranded.toNumber()).toBe(0);

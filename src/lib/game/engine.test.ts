@@ -28,7 +28,11 @@ import type { GameState } from './types';
 
 function fresh(): GameState {
 	clearCatchTableCache();
-	return createInitialState();
+	const state = createInitialState();
+	// Not a bucket test: an Assistant is the in-game way to say the hold is
+	// unlimited, so these assertions are about accumulation and nothing else.
+	state.hasAssistant = true;
+	return state;
 }
 
 describe('catch tables', () => {
@@ -72,11 +76,14 @@ describe('catch tables', () => {
 		expect(lucky.averageValue).toBeGreaterThan(plain.averageValue);
 	});
 
-	it('makes the Lovestruck Lipfish absurdly rare everywhere', () => {
+	it('makes the Lovestruck Lipfish absurdly rare everywhere it lives', () => {
+		// The mud pool is the exception, and deliberately so: it pays out Small
+		// fish and nothing else. There is no romance in a puddle.
 		for (const source of SOURCE_ORDER) {
+			if (!SOURCE_CONFIG[source].typeWeights[FishType.Erotic]) continue;
 			const table = catchTable(source, 1);
 			const lipfish = table.species.find((entry) => entry.fish.category === FishType.Erotic);
-			expect(lipfish).toBeDefined();
+			expect(lipfish, `${source} pays Erotic but stocks none`).toBeDefined();
 			expect(lipfish!.probability).toBeLessThan(1e-5);
 			expect(lipfish!.probability).toBeGreaterThan(0);
 		}
@@ -87,7 +94,7 @@ describe('catch tables', () => {
 	});
 
 	it('gets deeper water paying far better per cast', () => {
-		const pond = catchTable(FishingSources.Pond, 1).averageSourceValue;
+		const pond = catchTable(SOURCE_ORDER[0], 1).averageSourceValue;
 		const ocean = catchTable(FishingSources.Ocean, 1).averageSourceValue;
 		expect(ocean / pond).toBeGreaterThan(1000);
 	});
@@ -101,7 +108,7 @@ describe('casting', () => {
 
 	it('lands fish, fills the hold and credits the Fishdex', () => {
 		const modifiers = computeModifiers(state);
-		performCast(state, FishingSources.Pond, modifiers, () => 0.5);
+		performCast(state, SOURCE_ORDER[0], modifiers, () => 0.5);
 
 		expect(state.totalCasts.eq(1)).toBe(true);
 		expect(state.totalFish.gte(1)).toBe(true);
@@ -112,8 +119,8 @@ describe('casting', () => {
 
 	it('is deterministic for a fixed roll', () => {
 		const modifiers = computeModifiers(state);
-		const a = performCast(state, FishingSources.Pond, modifiers, () => 0.25);
-		const b = performCast(fresh(), FishingSources.Pond, modifiers, () => 0.25);
+		const a = performCast(state, SOURCE_ORDER[0], modifiers, () => 0.25);
+		const b = performCast(fresh(), SOURCE_ORDER[0], modifiers, () => 0.25);
 		expect([...a.caught.keys()][0].name).toBe([...b.caught.keys()][0].name);
 	});
 });
@@ -122,7 +129,7 @@ describe('accumulation', () => {
 	let state: GameState;
 	beforeEach(() => {
 		state = fresh();
-		state.deckhands[FishingSources.Pond] = D(10);
+		state.deckhands[SOURCE_ORDER[0]] = D(10);
 	});
 
 	it('produces nothing without a crew', () => {
@@ -149,7 +156,7 @@ describe('accumulation', () => {
 		const oneStep = accumulate(state, modifiers, 1000);
 
 		const stepwise = fresh();
-		stepwise.deckhands[FishingSources.Pond] = D(10);
+		stepwise.deckhands[SOURCE_ORDER[0]] = D(10);
 		let total = d0();
 		for (let i = 0; i < 1000; i++) {
 			total = total.plus(accumulate(stepwise, modifiers, 1).fish);
@@ -187,7 +194,7 @@ describe('accumulation', () => {
 		const withLockedOcean = state.totalFish.minus(before);
 
 		const unlocked = fresh();
-		unlocked.deckhands[FishingSources.Pond] = D(10);
+		unlocked.deckhands[SOURCE_ORDER[0]] = D(10);
 		unlocked.deckhands[FishingSources.Ocean] = D(1000);
 		unlocked.unlocked[FishingSources.Ocean] = true;
 		unlocked.licences.deep = true;
@@ -202,7 +209,7 @@ describe('accumulation', () => {
 describe('selling', () => {
 	it('converts the hold into coins and empties it', () => {
 		const state = fresh();
-		state.deckhands[FishingSources.Pond] = D(5);
+		state.deckhands[SOURCE_ORDER[0]] = D(5);
 		const modifiers = computeModifiers(state);
 		accumulate(state, modifiers, 120);
 
@@ -263,9 +270,7 @@ describe('buying', () => {
 		buyUpgrade(state, 'net', 10);
 		const after = computeModifiers(state);
 
-		expect(after.castSeconds[FishingSources.Pond]).toBeLessThan(
-			before.castSeconds[FishingSources.Pond]
-		);
+		expect(after.castSeconds[SOURCE_ORDER[0]]).toBeLessThan(before.castSeconds[SOURCE_ORDER[0]]);
 		expect(after.fishPerCast.gt(before.fishPerCast)).toBe(true);
 	});
 });
@@ -275,6 +280,9 @@ describe('sources', () => {
 		const state = fresh();
 		state.coins = D('1e30');
 		state.licences.inland = true;
+		// The Pond is the first purchase now, so nothing past it can be skipped.
+		expect(unlockSource(state, FishingSources.Stream)).toBe(false);
+		expect(unlockSource(state, FishingSources.Pond)).toBe(true);
 		expect(unlockSource(state, FishingSources.River)).toBe(false);
 		expect(unlockSource(state, FishingSources.Stream)).toBe(true);
 		expect(unlockSource(state, FishingSources.River)).toBe(true);
@@ -342,7 +350,7 @@ describe('prestige', () => {
 		state.lifetimeCoins = D('1e18');
 		state.coins = D('1e17');
 		state.upgrades.rod = D(30);
-		state.deckhands[FishingSources.Pond] = D(50);
+		state.deckhands[SOURCE_ORDER[0]] = D(50);
 		state.dex[ALL_SPECIES[0].name] = D(12);
 		state.achievements = ['first_cast'];
 
@@ -353,7 +361,7 @@ describe('prestige', () => {
 		expect(state.coins.eq(0)).toBe(true);
 		expect(state.lifetimeCoins.eq(0)).toBe(true);
 		expect(state.upgrades.rod.eq(0)).toBe(true);
-		expect(state.deckhands[FishingSources.Pond].eq(0)).toBe(true);
+		expect(state.deckhands[SOURCE_ORDER[0]].eq(0)).toBe(true);
 		expect(state.unlocked[FishingSources.Ocean]).toBe(false);
 		expect(state.dex[ALL_SPECIES[0].name].eq(12)).toBe(true);
 		expect(state.pearls.gt(0)).toBe(true);

@@ -20,6 +20,15 @@
 		<ul class="lines">
 			<li><span>Fish landed</span><Num value={report.fish} /></li>
 			<li><span>Sold on the dock</span><Num value={report.coins} tone="coin" /></li>
+			{#if report.traderVisits > 0}
+				<li class="trader">
+					<span>
+						{report.traderVisits}
+						{report.traderVisits === 1 ? 'trader came' : 'traders came'} past
+					</span>
+					<Num value={report.traderEarned} tone="coin" />
+				</li>
+			{/if}
 			{#if report.fuelSpent.gt(0)}
 				<li class="expense">
 					<span>Fuel, billed by the yard</span>−<Num value={report.fuelSpent} tone="coin" />
@@ -62,6 +71,10 @@
 
 	.small {
 		font-size: 0.78rem;
+	}
+
+	.trader span {
+		color: var(--ink-dim);
 	}
 
 	.expense {

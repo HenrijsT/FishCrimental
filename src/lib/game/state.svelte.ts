@@ -21,8 +21,22 @@ import {
 	affordableDeckhands,
 	autoFisherCastsPerSecond,
 	autoFisherFraction,
+	bucketCapacity,
+	bucketCost,
+	buyAssistant,
 	buyAutoFisher,
 	buyAutoFisherOffline,
+	buyBicycle,
+	buyBucket,
+	holdRoom,
+	inTown,
+	runTrader,
+	traderProgress,
+	traderSecondsLeft,
+	traderStock,
+	rideToTown,
+	saleRate,
+	townSecondsLeft,
 	buyBoat,
 	buyBoatUpgrade,
 	buyFuel,
@@ -146,6 +160,12 @@ export class Game {
 	/** How many levels the buy buttons purchase at once. */
 	buyAmount = $state<BuyAmount>(1);
 
+	/**
+	 * Wall clock, refreshed every tick. Deadlines are absolute timestamps, so
+	 * anything counting down to one needs a reactive `now` to re-read.
+	 */
+	now = $state(Date.now());
+
 	modifiers = $derived<Modifiers>(computeModifiers(this.state));
 	incomePerSecond = $derived(totalIncomePerSecond(this.state, this.modifiers));
 	holdSize = $derived(holdCount(this.state));
@@ -242,9 +262,14 @@ export class Game {
 	}
 
 	tick(now = Date.now()): void {
+		this.now = now;
 		const elapsed = Math.min((now - this.state.lastUpdate) / 1000, RESUME_THRESHOLD_SECONDS);
 		this.state.lastUpdate = now;
 		if (elapsed <= 0) return;
+
+		// The trader keeps his own appointment; the tick just notices he is due.
+		const visit = runTrader(this.state, this.modifiers, now);
+		if (visit.visits > 0) this.lastTraderEarned = visit.earned;
 
 		this.state.playTime += elapsed;
 		// The rig holds the rod *for* you. While you are holding it yourself it
@@ -360,6 +385,8 @@ export class Game {
 		let value = d0();
 		let fellBack = false;
 		let fuelSpent = d0();
+		let traderVisits = 0;
+		let traderEarned = d0();
 
 		const chunks = Math.max(1, Math.min(OFFLINE_CHUNKS, Math.ceil(capped / 60)));
 		const chunkSeconds = capped / chunks;
@@ -377,6 +404,7 @@ export class Game {
 				Math.random,
 				state.autoFisherOffline ? 1 : 0
 			);
+
 			fish = fish.plus(step.fish);
 			value = value.plus(step.value);
 			fellBack = fellBack || step.fellBack;
@@ -385,7 +413,27 @@ export class Game {
 			const spent = coinsAtChunkStart.minus(state.coins);
 			if (spent.gt(0)) fuelSpent = fuelSpent.plus(spent);
 
-			sellHold(state, modifiers);
+			// Who empties the hold while the game is shut.
+			//
+			// With an Assistant it is sold as it lands, at full price, once per
+			// chunk — which is also what keeps `runBoat`'s standing fuel order
+			// funded, since that buys fuel out of coins and coins only arrive on
+			// a sale.
+			//
+			// Without one it is the trader, and he keeps his own schedule: the
+			// visits due inside this chunk are resolved by walking his deadline
+			// forward, so a settle split into twenty-four chunks and one done in
+			// a single step resolve the same number of arrivals. At a 90-second
+			// period there is at least one arrival in every chunk of any real
+			// length, so the fuel order stays funded either way.
+			if (state.hasAssistant) {
+				sellHold(state, modifiers, saleRate(state));
+			} else {
+				const chunkEnd = state.lastUpdate + (i + 1) * chunkSeconds * 1000;
+				const visit = runTrader(state, modifiers, chunkEnd);
+				traderVisits += visit.visits;
+				traderEarned = traderEarned.plus(visit.earned);
+			}
 		}
 
 		if (fish.lte(0) && fuelSpent.lte(0)) {
@@ -409,7 +457,9 @@ export class Game {
 			coins: state.coins.minus(coinsBefore).plus(fuelSpent),
 			autoSold: true,
 			fuelSpent,
-			fellBack
+			fellBack,
+			traderVisits,
+			traderEarned
 		};
 	}
 
@@ -423,6 +473,8 @@ export class Game {
 
 	beginCast(): void {
 		if (this.casting) return;
+		// In town selling. The crew are unaffected — `accumulate` never reads this.
+		if (inTown(this.state)) return;
 		this.casting = true;
 		this.#castStartedAt = performance.now();
 		this.castProgress = 0;
@@ -439,6 +491,14 @@ export class Game {
 
 	#frame = (now: number) => {
 		if (!this.casting) return;
+
+		// The trip can start mid-hold. Bailing out of the frame is not enough:
+		// the catch-up loop below lands up to 25 casts at a time, so the cast
+		// has to actually be ended.
+		if (inTown(this.state)) {
+			this.endCast();
+			return;
+		}
 
 		const duration = this.activeCastSeconds * 1000;
 		const elapsed = now - this.#castStartedAt;
@@ -529,10 +589,43 @@ export class Game {
 	// Actions
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Sell on demand.
+	 *
+	 * Only possible once you can get to town yourself. Before the bicycle there
+	 * is no on-demand sale at all — the trader comes when he comes, and that is
+	 * the whole reason the bucket and the bicycle matter.
+	 */
 	sell(): Decimal {
-		const earned = sellHold(this.state, this.modifiers);
+		return this.ride();
+	}
+
+	/** Full price, at the cost of staying off the water while you are gone. */
+	ride(): Decimal {
+		const result = rideToTown(this.state, this.modifiers);
+		if (!result) return d0();
+
+		this.endCast();
 		this.#checkAchievements();
-		return earned;
+		return result.earned;
+	}
+
+	purchaseBicycle(): boolean {
+		const bought = buyBicycle(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
+	upgradeBucket(): boolean {
+		const bought = buyBucket(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
+	purchaseAssistant(): boolean {
+		const bought = buyAssistant(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
 	}
 
 	setSource(source: FishingSources): void {
@@ -612,6 +705,23 @@ export class Game {
 	buyPearlUpgrade(id: Parameters<typeof buyPrestigeUpgrade>[1]): boolean {
 		return buyPrestigeUpgrade(this.state, id);
 	}
+
+	/** What the last trader paid, for a one-line note on the Shore. */
+	lastTraderEarned = $state<Decimal | null>(null);
+
+	traderStock = $derived(traderStock(this.state));
+	traderLeft = $derived(traderSecondsLeft(this.state, this.now));
+	traderFill = $derived(traderProgress(this.state, this.now));
+
+	/** Null once an Assistant is minding the catch — nothing limits the hold. */
+	holdRoom = $derived(holdRoom(this.state));
+	bucketSize = $derived(bucketCapacity(this.state.bucketLevel));
+	bucketPrice = $derived(bucketCost(this.state.bucketLevel));
+
+	/** Manual casting is refused while the trip is running. */
+	inTown = $derived(inTown(this.state, this.now));
+	townLeft = $derived(townSecondsLeft(this.state, this.now));
+	saleRate = $derived(saleRate(this.state));
 
 	/** 0 to 1 — how close the rig is to a human hand. */
 	autoFisherSpeed = $derived(autoFisherFraction(this.state.autoFisher));

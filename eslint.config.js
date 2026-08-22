@@ -30,6 +30,9 @@ export default [
 		}
 	},
 	{
-		ignores: ['build/', '.svelte-kit/', 'dist/']
+		// `.claude/` is harness scratch space — agent worktrees land there, and a
+		// nested repo brings its own tsconfig, which makes the TS parser refuse
+		// to pick a root. It is not project source.
+		ignores: ['build/', '.svelte-kit/', 'dist/', '.claude/']
 	}
 ];

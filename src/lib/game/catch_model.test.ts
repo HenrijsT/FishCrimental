@@ -110,12 +110,12 @@ describe('species come out in the right proportion', () => {
 		clearCatchTableCache();
 		const state = createInitialState();
 		const modifiers = computeModifiers(state);
-		const table = catchTable(FishingSources.Pond, modifiers.luck);
+		const table = catchTable(SOURCE_ORDER[0], modifiers.luck);
 		const random = seededRandom(20260822);
 
 		const casts = 120_000;
 		for (let i = 0; i < casts; i++) {
-			distributeCatch(state, FishingSources.Pond, D(1), modifiers, random);
+			distributeCatch(state, SOURCE_ORDER[0], D(1), modifiers, random);
 		}
 
 		for (const { fish, probability } of table.species) {
@@ -129,10 +129,10 @@ describe('species come out in the right proportion', () => {
 		clearCatchTableCache();
 		const state = createInitialState();
 		const modifiers = computeModifiers(state);
-		const table = catchTable(FishingSources.Pond, modifiers.luck);
+		const table = catchTable(SOURCE_ORDER[0], modifiers.luck);
 
 		const fish = 500_000;
-		distributeCatch(state, FishingSources.Pond, D(fish), modifiers, () => 0.5);
+		distributeCatch(state, SOURCE_ORDER[0], D(fish), modifiers, () => 0.5);
 
 		for (const { fish: species, probability } of table.species) {
 			if (probability < 0.005) continue;
@@ -145,6 +145,8 @@ describe('species come out in the right proportion', () => {
 		clearCatchTableCache();
 		const state = createInitialState();
 		const modifiers = computeModifiers(state);
+		// The Pond, not the mud pool: the mud pool pays out Small fish only, so
+		// there is no Lipfish in it to be rare.
 		const table = catchTable(FishingSources.Pond, modifiers.luck);
 		const lipfish = table.species.find((entry) => entry.fish.category === 'Erotic')!;
 
@@ -162,6 +164,8 @@ describe('manual and automatic fishing pay the same', () => {
 		state.coins = D('1e12');
 		buyUpgrade(state, 'net', levels);
 		state.coins = d0();
+		// Not a bucket test — the hold is unlimited so the maths is visible.
+		state.hasAssistant = true;
 		return state;
 	}
 
@@ -172,14 +176,14 @@ describe('manual and automatic fishing pay the same', () => {
 		const manualModifiers = computeModifiers(manual);
 		const random = seededRandom(99);
 		for (let i = 0; i < 10_000; i++) {
-			performCast(manual, FishingSources.Pond, manualModifiers, random);
+			performCast(manual, SOURCE_ORDER[0], manualModifiers, random);
 		}
 
 		// The same number of casts, delivered by a crew in one accumulate call.
 		const auto = withNet(4);
-		auto.deckhands[FishingSources.Pond] = D(1);
+		auto.deckhands[SOURCE_ORDER[0]] = D(1);
 		const autoModifiers = computeModifiers(auto);
-		const castsPerSecond = autoModifiers.deckhandCastsPerSecond[FishingSources.Pond];
+		const castsPerSecond = autoModifiers.deckhandCastsPerSecond[SOURCE_ORDER[0]];
 		accumulate(auto, autoModifiers, 10_000 / castsPerSecond, 1, undefined, seededRandom(99));
 
 		const expected = manualModifiers.fishPerCast.times(10_000);
@@ -195,12 +199,12 @@ describe('manual and automatic fishing pay the same', () => {
 		const manualModifiers = computeModifiers(manual);
 		const random = seededRandom(7);
 		for (let i = 0; i < 20_000; i++) {
-			performCast(manual, FishingSources.Pond, manualModifiers, random);
+			performCast(manual, SOURCE_ORDER[0], manualModifiers, random);
 		}
 		const manualPerCast = manual.holdValue.div(manual.totalCasts).toNumber();
 
 		const auto = withNet(2);
-		auto.deckhands[FishingSources.Pond] = D(20);
+		auto.deckhands[SOURCE_ORDER[0]] = D(20);
 		const autoModifiers = computeModifiers(auto);
 		accumulate(auto, autoModifiers, 20_000, 1, undefined, seededRandom(7));
 		const autoPerCast = auto.holdValue.div(auto.totalCasts).toNumber();
@@ -233,6 +237,8 @@ describe('eight hours away resolves in one step', () => {
 		state.licences.deep = true;
 		state.boat.owned = true;
 		state.boat.fuel = D('1e30');
+		// Not a bucket test — a billion fish need somewhere to go.
+		state.hasAssistant = true;
 
 		const modifiers = computeModifiers(state);
 		const started = performance.now();
@@ -246,7 +252,10 @@ describe('eight hours away resolves in one step', () => {
 	it('gives the same answer as the same time in small pieces', () => {
 		const build = () => {
 			const state = createInitialState();
-			state.deckhands[FishingSources.Pond] = D(25);
+			// Not a bucket test: both runs must be free to land everything, or
+			// they are only being compared on where the cap bit.
+			state.hasAssistant = true;
+			state.deckhands[SOURCE_ORDER[0]] = D(25);
 			return state;
 		};
 
@@ -269,13 +278,13 @@ describe('nothing anywhere is a fraction of a fish', () => {
 		const state = createInitialState();
 		state.coins = D('1e12');
 		buyUpgrade(state, 'net', 6);
-		state.deckhands[FishingSources.Pond] = D(7);
+		state.deckhands[SOURCE_ORDER[0]] = D(7);
 
 		const modifiers = computeModifiers(state);
 		const random = seededRandom(4242);
 
 		for (let i = 0; i < 400; i++) {
-			performCast(state, FishingSources.Pond, modifiers, random);
+			performCast(state, SOURCE_ORDER[0], modifiers, random);
 			accumulate(state, modifiers, 0.2, 1, undefined, random);
 		}
 
@@ -292,17 +301,19 @@ describe('nothing anywhere is a fraction of a fish', () => {
 	it('and the hold value is exactly what the hold is worth', () => {
 		clearCatchTableCache();
 		const state = createInitialState();
+		// Not a bucket test — 300 casts must all land so the sum is comparable.
+		state.hasAssistant = true;
 		const modifiers = computeModifiers(state);
 		const random = seededRandom(11);
 
-		for (let i = 0; i < 300; i++) performCast(state, FishingSources.Pond, modifiers, random);
+		for (let i = 0; i < 300; i++) performCast(state, SOURCE_ORDER[0], modifiers, random);
 
 		const priced = FISH_TYPES.reduce(
 			(sum, type) =>
 				sum.plus(
 					state.hold[type]
 						.times(fishTypeBaseValue[type])
-						.times(SOURCE_CONFIG[FishingSources.Pond].valueMultiplier)
+						.times(SOURCE_CONFIG[SOURCE_ORDER[0]].valueMultiplier)
 				),
 			d0()
 		);
@@ -317,13 +328,15 @@ describe('the numbers a player sees', () => {
 		const state = createInitialState();
 		state.coins = D('1e12');
 		buyUpgrade(state, 'net', 3);
+		// The quoted rate is per cast; 5000 casts must not hit a bucket.
+		state.hasAssistant = true;
 
 		const modifiers = computeModifiers(state);
 		const quoted = modifiers.fishPerCast;
 		expect(quoted.toNumber()).toBeCloseTo(Math.pow(1.19, 3), 6);
 
 		const random = seededRandom(3);
-		for (let i = 0; i < 5000; i++) performCast(state, FishingSources.Pond, modifiers, random);
+		for (let i = 0; i < 5000; i++) performCast(state, SOURCE_ORDER[0], modifiers, random);
 
 		expect(state.totalFish.div(5000).toNumber()).toBeCloseTo(quoted.toNumber(), 2);
 	});
@@ -335,7 +348,7 @@ describe('the numbers a player sees', () => {
 		buyUpgrade(state, 'net', 1);
 
 		const modifiers = computeModifiers(state);
-		performCast(state, FishingSources.Pond, modifiers, () => 0.5);
+		performCast(state, SOURCE_ORDER[0], modifiers, () => 0.5);
 
 		for (const type of FISH_TYPES) {
 			const held = state.hold[type];
@@ -349,7 +362,7 @@ describe('the carry bank survives a save', () => {
 		const { fromRaw, serialize } = await import('./save');
 
 		const state = createInitialState();
-		takeWhole(state, `${FishingSources.Pond}#fish`, D(0.6));
+		takeWhole(state, `${SOURCE_ORDER[0]}#fish`, D(0.6));
 		expect(Object.keys(state.carry).length).toBe(1);
 
 		const restored = fromRaw(JSON.parse(serialize(state)));

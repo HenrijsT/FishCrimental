@@ -4,8 +4,11 @@ import type { FishingSources } from '$lib/fishing_sources';
 import {
 	BOAT_COST,
 	BOAT_UPGRADES,
+	ASSISTANT_COST,
 	AUTO_FISHER,
+	BUCKET_MAX_LEVEL,
 	AUTO_FISHER_OFFLINE_COST,
+	BICYCLE_COST,
 	BOAT_UPGRADE_IDS,
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
@@ -21,9 +24,16 @@ import {
 	accumulate,
 	buyBoat,
 	autoFisherCost,
+	bucketCost,
+	buyAssistant,
 	buyAutoFisher,
+	buyBucket,
 	buyAutoFisherOffline,
+	buyBicycle,
 	buyBoatUpgrade,
+	inTown,
+	rideToTown,
+	runTrader,
 	buyDeckhand,
 	buyFuel,
 	buyLicence,
@@ -142,6 +152,11 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 	const state = options.initialState ?? createInitialState();
 	const unlockedAt: Partial<Record<FishingSources, number>> = { [state.activeSource]: 0 };
 
+	// Wall-clock deadlines (the town trip, the trader) are absolute timestamps,
+	// so the simulation needs a clock of its own rather than Date.now().
+	const clockStart = state.lastUpdate || 0;
+	const clock = () => clockStart + elapsed * 1000;
+
 	let elapsed = 0;
 	let secondsToPrestige: number | null = null;
 	let idleCrossoverAt: number | null = null;
@@ -151,7 +166,9 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 	while (elapsed < maxSeconds) {
 		const modifiers = computeModifiers(state);
 
-		const manual = 1 / modifiers.castSeconds[state.activeSource];
+		// In town selling: manual casting stops, the crew do not.
+		const inTownNow = inTown(state, clock());
+		const manual = inTownNow ? 0 : 1 / modifiers.castSeconds[state.activeSource];
 
 		if (idleCrossoverAt === null) {
 			const table = catchTable(state.activeSource, modifiers.luck);
@@ -174,7 +191,20 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 			random,
 			1 - manualUptime
 		);
-		sellHold(state, modifiers);
+		// Who buys, and when.
+		//
+		// With an Assistant the catch is sold as it lands. With a bicycle the
+		// player rides in whenever the last trip has finished. With neither
+		// there is no on-demand sale at all — the trader comes when he comes,
+		// and the bucket fills in the meantime. That waiting is the whole
+		// economic shape of the opening, so the simulation has to feel it too.
+		if (state.hasAssistant) {
+			sellHold(state, modifiers);
+		} else if (state.hasBicycle && !inTown(state, clock())) {
+			rideToTown(state, modifiers, clock());
+		} else {
+			runTrader(state, modifiers, clock());
+		}
 
 		elapsed += step;
 
@@ -246,6 +276,26 @@ function cheapestPurchase(state: GameState): Purchase | null {
 			if (state.boat.upgrades[id].gte(BOAT_UPGRADES[id].maxLevel)) continue;
 			consider(boatUpgradeCost(id, state.boat.upgrades[id]), () => buyBoatUpgrade(state, id));
 		}
+	}
+
+	// The bucket only matters until the Assistant retires it, and a greedy
+	// player upgrades it while it does.
+	if (!state.hasAssistant && state.bucketLevel.lt(BUCKET_MAX_LEVEL)) {
+		consider(bucketCost(state.bucketLevel), () => {
+			buyBucket(state);
+		});
+	}
+
+	if (!state.hasBicycle) {
+		consider(D(BICYCLE_COST), () => {
+			buyBicycle(state);
+		});
+	}
+
+	if (!state.hasAssistant) {
+		consider(D(ASSISTANT_COST), () => {
+			buyAssistant(state);
+		});
 	}
 
 	if (state.autoFisher.lt(AUTO_FISHER.maxLevel)) {

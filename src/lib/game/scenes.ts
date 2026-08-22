@@ -48,6 +48,20 @@ export interface SceneConfig {
  * page ships no image files at all.
  */
 export const SCENES: Record<FishingSources, SceneConfig> = {
+	[FishingSources.MudPool]: {
+		// Browner and flatter than anything else, and shallower than the Pond's
+		// 0.12 — `guide.test.ts` asserts depth increases along SOURCE_ORDER.
+		sky: ['#d8cfae', '#b3a276'],
+		water: ['#8a7146', '#6b5533', '#4a3a22'],
+		shore: '#3d3120',
+		accent: '#c9b678',
+		depth: 0.04,
+		swell: 0.6,
+		horizon: 0.3,
+		features: ['reeds', 'pebbles', 'sun'],
+		shoal: 2,
+		mood: 'Brown, still, and barely knee deep. Whatever lives here is not hiding.'
+	},
 	[FishingSources.Pond]: {
 		sky: ['#bfe3c4', '#8cc79c'],
 		water: ['#6f9d5e', '#4e7a45', '#33552f'],

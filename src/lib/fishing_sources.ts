@@ -1,4 +1,5 @@
 export enum FishingSources {
+	MudPool = 'Mud Pool',
 	Pond = 'Pond',
 	Lake = 'Lake',
 	River = 'River',
@@ -15,6 +16,11 @@ interface Source {
 }
 
 export const sources = {
+	[FishingSources.MudPool]: {
+		name: 'Mud Pool',
+		description:
+			'A brown puddle behind the property, fed by whatever runs off the field. It holds fish, technically. Nobody has ever been proud of anything pulled out of it, but it is close, it is free, and it is where everyone starts.'
+	},
 	[FishingSources.Pond]: {
 		name: 'Pond',
 		description:

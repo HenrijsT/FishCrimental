@@ -27,8 +27,22 @@ import {
 	REPAIR_COST_PER_POINT,
 	SOURCE_LICENCE,
 	needsBoat,
+	ASSISTANT_COST,
 	AUTO_FISHER,
+	BUCKET_BASE_CAPACITY,
+	BUCKET_BASE_COST,
+	BUCKET_COST_GROWTH,
+	BUCKET_GROWTH,
+	BUCKET_MAX_LEVEL,
 	AUTO_FISHER_OFFLINE_COST,
+	BICYCLE_COST,
+	TOWN_RATE,
+	TOWN_TRIP_SECONDS,
+	TRADER_CATALOGUE,
+	TRADER_PERIOD_SECONDS,
+	TRADER_RATE,
+	TRADER_STOCK_SIZE,
+	type TraderOfferId,
 	AUTO_FISHER_START,
 	MIN_CAST_SECONDS,
 	PEARL_EXPONENT,
@@ -501,7 +515,11 @@ export function shoreSource(state: GameState): FishingSources {
 		return source;
 	}
 
-	return FishingSources.Pond;
+	// `SOURCE_ORDER[0]` and not a named source: the first source is guaranteed
+	// unlocked, licence-free and boat-free, and that invariant is what makes
+	// this fallback safe. Spelling it with a literal breaks silently the moment
+	// something is prepended.
+	return SOURCE_ORDER[0];
 }
 
 export function reachableSource(state: GameState, modifiers: Modifiers): FishingSources {
@@ -515,7 +533,11 @@ export function reachableSource(state: GameState, modifiers: Modifiers): Fishing
 		return source;
 	}
 
-	return FishingSources.Pond;
+	// `SOURCE_ORDER[0]` and not a named source: the first source is guaranteed
+	// unlocked, licence-free and boat-free, and that invariant is what makes
+	// this fallback safe. Spelling it with a literal breaks silently the moment
+	// something is prepended.
+	return SOURCE_ORDER[0];
 }
 
 /** Whether a source can be worked right now, with the reason if it cannot. */
@@ -670,13 +692,28 @@ export function distributeCatch(
 	source: FishingSources,
 	fishAmount: Decimal,
 	modifiers: Modifiers,
-	random: () => number = Math.random
+	random: () => number = Math.random,
+	/**
+	 * Fish the hold can still take. `undefined` means unlimited, which is what
+	 * every caller that does not care about the bucket passes.
+	 */
+	room?: Decimal | null
 ): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal } {
 	const caught = new Map<Fish, Decimal>();
 	let value = d0();
 	let landed = d0();
 
-	const whole = takeWhole(state, fishCarryKey(source), fishAmount);
+	// Clamp BEFORE `takeWhole`, never trim after it.
+	//
+	// `takeWhole` mutates `state.carry` — it banks the incoming fraction and
+	// hands back the whole part. Letting it run and then discarding the result
+	// spends the banked fraction and loses the fish with no credit anywhere.
+	// Clamping the input keeps the bank honest: what is not caught is not
+	// banked either.
+	const wanted = room === undefined || room === null ? fishAmount : Decimal.min(fishAmount, room);
+	if (wanted.lte(0)) return { caught, value, fish: landed };
+
+	const whole = takeWhole(state, fishCarryKey(source), wanted);
 	if (whole.lte(0)) return { caught, value, fish: landed };
 
 	const table = catchTable(source, modifiers.luck);
@@ -825,7 +862,14 @@ export function performCast(
 	const route = routeCasts(state, modifiers, source, d1(), true);
 	const working = route.sailed.gt(0) ? source : (route.fallback ?? source);
 
-	const result = distributeCatch(state, working, modifiers.fishPerCast, modifiers, random);
+	const result = distributeCatch(
+		state,
+		working,
+		modifiers.fishPerCast,
+		modifiers,
+		random,
+		holdRoom(state)
+	);
 	state.totalCasts = state.totalCasts.plus(1);
 	return { ...result, source: working };
 }
@@ -862,6 +906,14 @@ export function accumulate(
 	if (seconds <= 0) return { fish: fishTotal, value: valueTotal, fellBack };
 
 	for (const source of SOURCE_ORDER) {
+		// A full bucket stops the work before it starts. This has to be checked
+		// here, at the top, rather than at the catch: below this line the loop
+		// mints casts through `takeWhole` and `runBoat` burns fuel and hull
+		// condition, all of which would be spent on a fish there is nowhere to
+		// put.
+		const room = holdRoom(state);
+		if (room !== null && room.lte(0)) break;
+
 		// Unlicensed water pays nothing, however it came to be unlocked. Without
 		// this, `accumulate` and `reachableSource` disagree about where the crew
 		// are allowed to work.
@@ -886,7 +938,8 @@ export function accumulate(
 				source,
 				route.sailed.times(modifiers.fishPerCast),
 				modifiers,
-				random
+				random,
+				holdRoom(state)
 			);
 			fishTotal = fishTotal.plus(fish);
 			valueTotal = valueTotal.plus(value);
@@ -899,7 +952,8 @@ export function accumulate(
 				route.fallback,
 				route.stranded.times(modifiers.fishPerCast),
 				modifiers,
-				random
+				random,
+				holdRoom(state)
 			);
 			fishTotal = fishTotal.plus(fish);
 			valueTotal = valueTotal.plus(value);
@@ -915,8 +969,14 @@ export function accumulate(
 	if (autoFisherShare > 0) {
 		const source = state.activeSource;
 		const perSecond = autoFisherCastsPerSecond(state, modifiers);
+		const rigRoom = holdRoom(state);
 
-		if (perSecond.gt(0) && state.unlocked[source] && !missingLicence(state, source)) {
+		if (
+			perSecond.gt(0) &&
+			state.unlocked[source] &&
+			!missingLicence(state, source) &&
+			(rigRoom === null || rigRoom.gt(0))
+		) {
 			const casts = takeWhole(
 				state,
 				AUTO_FISHER_CARRY_KEY,
@@ -932,7 +992,8 @@ export function accumulate(
 						source,
 						route.sailed.times(modifiers.fishPerCast),
 						modifiers,
-						random
+						random,
+						holdRoom(state)
 					);
 					fishTotal = fishTotal.plus(fish);
 					valueTotal = valueTotal.plus(value);
@@ -944,7 +1005,8 @@ export function accumulate(
 						route.fallback,
 						route.stranded.times(modifiers.fishPerCast),
 						modifiers,
-						random
+						random,
+						holdRoom(state)
 					);
 					fishTotal = fishTotal.plus(fish);
 					valueTotal = valueTotal.plus(value);
@@ -969,13 +1031,20 @@ export function holdCount(state: GameState): Decimal {
 	return total;
 }
 
-export function sellHold(state: GameState, modifiers: Modifiers): Decimal {
+/**
+ * Empty the hold for coins.
+ *
+ * `rate` is who is buying: `TRADER_RATE` for a passing trader, `TOWN_RATE` for
+ * riding in and selling it yourself. It defaults to the full price so every
+ * existing caller — and every existing test — keeps its old meaning.
+ */
+export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RATE): Decimal {
 	if (state.holdValue.lte(0)) {
 		for (const type of FISH_TYPES) state.hold[type] = d0();
 		return d0();
 	}
 
-	const earned = state.holdValue.times(modifiers.sellMultiplier);
+	const earned = state.holdValue.times(modifiers.sellMultiplier).times(rate);
 
 	state.coins = state.coins.plus(earned);
 	state.lifetimeCoins = state.lifetimeCoins.plus(earned);
@@ -984,6 +1053,178 @@ export function sellHold(state: GameState, modifiers: Modifiers): Decimal {
 	for (const type of FISH_TYPES) state.hold[type] = d0();
 
 	return earned;
+}
+
+export function bucketCapacity(level: Decimal | number): Decimal {
+	return D(BUCKET_BASE_CAPACITY).times(D(BUCKET_GROWTH).pow(level));
+}
+
+export function bucketCost(level: Decimal | number): Decimal {
+	return D(BUCKET_BASE_COST).times(D(BUCKET_COST_GROWTH).pow(level));
+}
+
+/**
+ * How many more fish will fit, or `null` when nothing limits it.
+ *
+ * `null` rather than a very large number so the limit can be switched off
+ * outright: an Assistant minds the catch, so there is no bucket to fill.
+ */
+export function holdRoom(state: GameState): Decimal | null {
+	if (state.hasAssistant) return null;
+	return Decimal.max(d0(), bucketCapacity(state.bucketLevel).minus(holdCount(state)));
+}
+
+export function buyBucket(state: GameState): boolean {
+	const level = state.bucketLevel;
+	if (level.gte(BUCKET_MAX_LEVEL)) return false;
+	if (!traderInStock(state, 'bucket')) return false;
+
+	const cost = bucketCost(level);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	state.bucketLevel = level.plus(1);
+	return true;
+}
+
+/** What the player gets per coin of catch right now. */
+export function saleRate(state: GameState): number {
+	return state.hasBicycle ? TOWN_RATE : TRADER_RATE;
+}
+
+/** Is manual casting currently refused because you are in town? */
+export function inTown(state: GameState, now = Date.now()): boolean {
+	return !state.hasAssistant && state.fishingBlockedUntil > now;
+}
+
+/** Seconds left of the trip, for the UI. */
+export function townSecondsLeft(state: GameState, now = Date.now()): number {
+	if (!inTown(state, now)) return 0;
+	return (state.fishingBlockedUntil - now) / 1000;
+}
+
+// ---------------------------------------------------------------------------
+// The trader
+// ---------------------------------------------------------------------------
+
+/** Is this offer still worth showing? */
+export function traderOfferOpen(state: GameState, id: TraderOfferId): boolean {
+	if (id === 'bicycle') return !state.hasBicycle;
+	if (id === 'assistant') return !state.hasAssistant;
+	return !state.hasAssistant && state.bucketLevel.lt(BUCKET_MAX_LEVEL);
+}
+
+/**
+ * What the current trader is carrying.
+ *
+ * Rotates with the visit count, so an offer you want may be a visit or two
+ * away. That is the one thing a vendor adds over a price tag — a wait you
+ * cannot buy through — and it is bounded by the arrival period rather than by
+ * luck. When two or fewer offers are still open they are all in stock, so the
+ * opening can never stall waiting for the bicycle.
+ */
+export function traderStock(state: GameState): TraderOfferId[] {
+	const open = TRADER_CATALOGUE.filter((id) => traderOfferOpen(state, id));
+	if (open.length <= TRADER_STOCK_SIZE) return open;
+
+	const start = ((state.traderVisits % open.length) + open.length) % open.length;
+	return Array.from({ length: TRADER_STOCK_SIZE }, (_, i) => open[(start + i) % open.length]);
+}
+
+export function traderInStock(state: GameState, id: TraderOfferId): boolean {
+	return traderStock(state).includes(id);
+}
+
+/** Seconds until the next trader, for the progress bar. */
+export function traderSecondsLeft(state: GameState, now = Date.now()): number {
+	if (state.nextTraderAt <= 0) return TRADER_PERIOD_SECONDS;
+	return Math.max(0, (state.nextTraderAt - now) / 1000);
+}
+
+/** 0 to 1 across one arrival period. */
+export function traderProgress(state: GameState, now = Date.now()): number {
+	const left = traderSecondsLeft(state, now);
+	return Math.min(1, Math.max(0, 1 - left / TRADER_PERIOD_SECONDS));
+}
+
+/**
+ * Resolve every trader arrival due by `now`.
+ *
+ * Each arrival buys the whole hold at the trader's rate and rotates the stock.
+ * Catching up on a long absence is `floor(gap / period)` arrivals, resolved by
+ * walking the deadline forward rather than by sampling the clock — so a
+ * settle that happens in twenty-four chunks and one that happens in a single
+ * step both resolve the same number of visits.
+ */
+export function runTrader(
+	state: GameState,
+	modifiers: Modifiers,
+	now = Date.now()
+): { visits: number; earned: Decimal } {
+	let earned = d0();
+	let visits = 0;
+
+	// A fresh save has no appointment yet; make one and let it come round.
+	if (state.nextTraderAt <= 0) {
+		state.nextTraderAt = now + TRADER_PERIOD_SECONDS * 1000;
+		return { visits, earned };
+	}
+
+	const period = TRADER_PERIOD_SECONDS * 1000;
+	while (state.nextTraderAt <= now) {
+		earned = earned.plus(sellHold(state, modifiers, TRADER_RATE));
+		state.traderVisits += 1;
+		state.nextTraderAt += period;
+		visits += 1;
+	}
+
+	return { visits, earned };
+}
+
+export function buyBicycle(state: GameState): boolean {
+	if (state.hasBicycle) return false;
+	if (!traderInStock(state, 'bicycle')) return false;
+	if (state.coins.lt(BICYCLE_COST)) return false;
+
+	state.coins = state.coins.minus(BICYCLE_COST);
+	state.hasBicycle = true;
+	return true;
+}
+
+export function buyAssistant(state: GameState): boolean {
+	if (state.hasAssistant) return false;
+	if (!traderInStock(state, 'assistant')) return false;
+	if (state.coins.lt(ASSISTANT_COST)) return false;
+
+	state.coins = state.coins.minus(ASSISTANT_COST);
+	state.hasAssistant = true;
+	// Whatever trip was in progress is over — that is what hiring help buys.
+	state.fishingBlockedUntil = 0;
+	return true;
+}
+
+/**
+ * Ride into town, sell the whole hold at full price, and stay off the water
+ * until you are back.
+ *
+ * The crew keep working throughout: the cooldown is manual-only, and
+ * `accumulate` never consults it.
+ */
+export function rideToTown(
+	state: GameState,
+	modifiers: Modifiers,
+	now = Date.now()
+): { earned: Decimal; until: number } | null {
+	if (!state.hasBicycle) return null;
+	if (inTown(state, now)) return null;
+
+	const earned = sellHold(state, modifiers, TOWN_RATE);
+
+	// The Assistant does the trip for you, so there is nothing to wait for.
+	const until = state.hasAssistant ? 0 : now + TOWN_TRIP_SECONDS * 1000;
+	state.fishingBlockedUntil = until;
+
+	return { earned, until };
 }
 
 // ---------------------------------------------------------------------------
@@ -1241,7 +1482,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 	// they cannot work.
 	const activeSource =
 		SOURCE_ORDER.filter((source) => unlocked[source] && !needsBoat(source)).pop() ??
-		FishingSources.Pond;
+		SOURCE_ORDER[0];
 
 	return {
 		version: SAVE_VERSION,
@@ -1265,8 +1506,14 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 
 		upgrades: zeroUpgrades(),
 		deckhands: zeroDeckhands(),
-		// The rig is bought with coins, so it goes the way every coin purchase
-		// goes on a reset.
+		// Everything below is bought with coins, so it goes the way every coin
+		// purchase goes on a reset.
+		nextTraderAt: 0,
+		traderVisits: 0,
+		bucketLevel: d0(),
+		hasBicycle: false,
+		fishingBlockedUntil: 0,
+		hasAssistant: false,
 		autoFisher: d0(),
 		autoFisherOffline: false,
 
