@@ -21,8 +21,14 @@ import {
 	affordableDeckhands,
 	autoFisherCastsPerSecond,
 	autoFisherFraction,
+	buyAssistant,
 	buyAutoFisher,
 	buyAutoFisherOffline,
+	buyBicycle,
+	inTown,
+	rideToTown,
+	saleRate,
+	townSecondsLeft,
 	buyBoat,
 	buyBoatUpgrade,
 	buyFuel,
@@ -146,6 +152,12 @@ export class Game {
 	/** How many levels the buy buttons purchase at once. */
 	buyAmount = $state<BuyAmount>(1);
 
+	/**
+	 * Wall clock, refreshed every tick. Deadlines are absolute timestamps, so
+	 * anything counting down to one needs a reactive `now` to re-read.
+	 */
+	now = $state(Date.now());
+
 	modifiers = $derived<Modifiers>(computeModifiers(this.state));
 	incomePerSecond = $derived(totalIncomePerSecond(this.state, this.modifiers));
 	holdSize = $derived(holdCount(this.state));
@@ -242,6 +254,7 @@ export class Game {
 	}
 
 	tick(now = Date.now()): void {
+		this.now = now;
 		const elapsed = Math.min((now - this.state.lastUpdate) / 1000, RESUME_THRESHOLD_SECONDS);
 		this.state.lastUpdate = now;
 		if (elapsed <= 0) return;
@@ -377,6 +390,7 @@ export class Game {
 				Math.random,
 				state.autoFisherOffline ? 1 : 0
 			);
+
 			fish = fish.plus(step.fish);
 			value = value.plus(step.value);
 			fellBack = fellBack || step.fellBack;
@@ -385,7 +399,9 @@ export class Game {
 			const spent = coinsAtChunkStart.minus(state.coins);
 			if (spent.gt(0)) fuelSpent = fuelSpent.plus(spent);
 
-			sellHold(state, modifiers);
+			// Nobody rides to town while the game is shut, so the trader is the
+			// buyer — unless an Assistant is minding the shop.
+			sellHold(state, modifiers, saleRate(state));
 		}
 
 		if (fish.lte(0) && fuelSpent.lte(0)) {
@@ -423,6 +439,8 @@ export class Game {
 
 	beginCast(): void {
 		if (this.casting) return;
+		// In town selling. The crew are unaffected — `accumulate` never reads this.
+		if (inTown(this.state)) return;
 		this.casting = true;
 		this.#castStartedAt = performance.now();
 		this.castProgress = 0;
@@ -439,6 +457,14 @@ export class Game {
 
 	#frame = (now: number) => {
 		if (!this.casting) return;
+
+		// The trip can start mid-hold. Bailing out of the frame is not enough:
+		// the catch-up loop below lands up to 25 casts at a time, so the cast
+		// has to actually be ended.
+		if (inTown(this.state)) {
+			this.endCast();
+			return;
+		}
 
 		const duration = this.activeCastSeconds * 1000;
 		const elapsed = now - this.#castStartedAt;
@@ -529,10 +555,33 @@ export class Game {
 	// Actions
 	// -----------------------------------------------------------------------
 
+	/** Sell to whoever is buying. Without a bicycle that is the trader, cheaply. */
 	sell(): Decimal {
-		const earned = sellHold(this.state, this.modifiers);
+		const earned = sellHold(this.state, this.modifiers, saleRate(this.state));
 		this.#checkAchievements();
 		return earned;
+	}
+
+	/** Full price, at the cost of staying off the water while you are gone. */
+	ride(): Decimal {
+		const result = rideToTown(this.state, this.modifiers);
+		if (!result) return d0();
+
+		this.endCast();
+		this.#checkAchievements();
+		return result.earned;
+	}
+
+	purchaseBicycle(): boolean {
+		const bought = buyBicycle(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
+	purchaseAssistant(): boolean {
+		const bought = buyAssistant(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
 	}
 
 	setSource(source: FishingSources): void {
@@ -612,6 +661,11 @@ export class Game {
 	buyPearlUpgrade(id: Parameters<typeof buyPrestigeUpgrade>[1]): boolean {
 		return buyPrestigeUpgrade(this.state, id);
 	}
+
+	/** Manual casting is refused while the trip is running. */
+	inTown = $derived(inTown(this.state, this.now));
+	townLeft = $derived(townSecondsLeft(this.state, this.now));
+	saleRate = $derived(saleRate(this.state));
 
 	/** 0 to 1 — how close the rig is to a human hand. */
 	autoFisherSpeed = $derived(autoFisherFraction(this.state.autoFisher));

@@ -27,8 +27,13 @@ import {
 	REPAIR_COST_PER_POINT,
 	SOURCE_LICENCE,
 	needsBoat,
+	ASSISTANT_COST,
 	AUTO_FISHER,
 	AUTO_FISHER_OFFLINE_COST,
+	BICYCLE_COST,
+	TOWN_RATE,
+	TOWN_TRIP_SECONDS,
+	TRADER_RATE,
 	AUTO_FISHER_START,
 	MIN_CAST_SECONDS,
 	PEARL_EXPONENT,
@@ -969,13 +974,20 @@ export function holdCount(state: GameState): Decimal {
 	return total;
 }
 
-export function sellHold(state: GameState, modifiers: Modifiers): Decimal {
+/**
+ * Empty the hold for coins.
+ *
+ * `rate` is who is buying: `TRADER_RATE` for a passing trader, `TOWN_RATE` for
+ * riding in and selling it yourself. It defaults to the full price so every
+ * existing caller — and every existing test — keeps its old meaning.
+ */
+export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RATE): Decimal {
 	if (state.holdValue.lte(0)) {
 		for (const type of FISH_TYPES) state.hold[type] = d0();
 		return d0();
 	}
 
-	const earned = state.holdValue.times(modifiers.sellMultiplier);
+	const earned = state.holdValue.times(modifiers.sellMultiplier).times(rate);
 
 	state.coins = state.coins.plus(earned);
 	state.lifetimeCoins = state.lifetimeCoins.plus(earned);
@@ -984,6 +996,66 @@ export function sellHold(state: GameState, modifiers: Modifiers): Decimal {
 	for (const type of FISH_TYPES) state.hold[type] = d0();
 
 	return earned;
+}
+
+/** What the player gets per coin of catch right now. */
+export function saleRate(state: GameState): number {
+	return state.hasBicycle ? TOWN_RATE : TRADER_RATE;
+}
+
+/** Is manual casting currently refused because you are in town? */
+export function inTown(state: GameState, now = Date.now()): boolean {
+	return !state.hasAssistant && state.fishingBlockedUntil > now;
+}
+
+/** Seconds left of the trip, for the UI. */
+export function townSecondsLeft(state: GameState, now = Date.now()): number {
+	if (!inTown(state, now)) return 0;
+	return (state.fishingBlockedUntil - now) / 1000;
+}
+
+export function buyBicycle(state: GameState): boolean {
+	if (state.hasBicycle) return false;
+	if (state.coins.lt(BICYCLE_COST)) return false;
+
+	state.coins = state.coins.minus(BICYCLE_COST);
+	state.hasBicycle = true;
+	return true;
+}
+
+export function buyAssistant(state: GameState): boolean {
+	if (state.hasAssistant) return false;
+	if (state.coins.lt(ASSISTANT_COST)) return false;
+
+	state.coins = state.coins.minus(ASSISTANT_COST);
+	state.hasAssistant = true;
+	// Whatever trip was in progress is over — that is what hiring help buys.
+	state.fishingBlockedUntil = 0;
+	return true;
+}
+
+/**
+ * Ride into town, sell the whole hold at full price, and stay off the water
+ * until you are back.
+ *
+ * The crew keep working throughout: the cooldown is manual-only, and
+ * `accumulate` never consults it.
+ */
+export function rideToTown(
+	state: GameState,
+	modifiers: Modifiers,
+	now = Date.now()
+): { earned: Decimal; until: number } | null {
+	if (!state.hasBicycle) return null;
+	if (inTown(state, now)) return null;
+
+	const earned = sellHold(state, modifiers, TOWN_RATE);
+
+	// The Assistant does the trip for you, so there is nothing to wait for.
+	const until = state.hasAssistant ? 0 : now + TOWN_TRIP_SECONDS * 1000;
+	state.fishingBlockedUntil = until;
+
+	return { earned, until };
 }
 
 // ---------------------------------------------------------------------------
@@ -1265,8 +1337,11 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 
 		upgrades: zeroUpgrades(),
 		deckhands: zeroDeckhands(),
-		// The rig is bought with coins, so it goes the way every coin purchase
-		// goes on a reset.
+		// Everything below is bought with coins, so it goes the way every coin
+		// purchase goes on a reset.
+		hasBicycle: false,
+		fishingBlockedUntil: 0,
+		hasAssistant: false,
 		autoFisher: d0(),
 		autoFisherOffline: false,
 

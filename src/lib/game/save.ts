@@ -13,6 +13,7 @@ import {
 	PRESTIGE_UPGRADE_IDS,
 	AUTO_FISHER,
 	SAVE_BACKUP_KEY,
+	TOWN_TRIP_SECONDS,
 	SAVE_KEY,
 	SAVE_VERSION,
 	SOURCE_ORDER,
@@ -49,6 +50,17 @@ function dec(value: unknown, fallback: Decimal = d0()): Decimal {
 /** Currencies and counts can never be negative, whatever the file says. */
 function positive(value: unknown, fallback: Decimal = d0()): Decimal {
 	return dec(value, fallback).max(0);
+}
+
+/**
+ * A wall-clock deadline that can never be further away than one trip.
+ *
+ * Also catches a clock that has moved backwards since the save was written.
+ */
+function clampDeadline(value: unknown): number {
+	const parsed = num(value, 0);
+	if (parsed <= 0) return 0;
+	return Math.min(parsed, Date.now() + TOWN_TRIP_SECONDS * 1000);
 }
 
 /** Whole, non-negative, and never above the ceiling the game defines. */
@@ -336,6 +348,12 @@ export function fromRaw(data: Raw): GameState {
 
 		upgrades: readUpgrades(migrated.upgrades),
 		deckhands: readDeckhands(migrated.deckhands),
+		hasBicycle: bool(migrated.hasBicycle, false),
+		// Clamped, not just parsed. `num()` only checks finiteness, so a
+		// hand-edited or clock-skewed `Date.now() + 1e15` would refuse manual
+		// casting forever with no way back.
+		fishingBlockedUntil: clampDeadline(migrated.fishingBlockedUntil),
+		hasAssistant: bool(migrated.hasAssistant, false),
 		autoFisher: level(migrated.autoFisher, AUTO_FISHER.maxLevel),
 		// The rig cannot be running offline if it does not exist.
 		autoFisherOffline:

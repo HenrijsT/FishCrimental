@@ -219,6 +219,37 @@ export const DECKHAND_BASE_EFFICIENCY = 0.42;
 export const MIN_CAST_SECONDS = 0.05;
 
 // ---------------------------------------------------------------------------
+// Selling: the trader, the bicycle, the Assistant
+// ---------------------------------------------------------------------------
+
+/**
+ * What a passing trader pays, as a fraction of what the catch is worth.
+ *
+ * The trader is the only buyer a fisherman with no transport has, and he knows
+ * it. Everything before the bicycle sells at this rate.
+ */
+export const TRADER_RATE = 0.55;
+
+/** Riding into town yourself gets the full price. That is the whole point. */
+export const TOWN_RATE = 1;
+
+/** Coins for the bicycle, bought from the trader. */
+export const BICYCLE_COST = 900;
+
+/** How long a trip into town keeps you off the water. */
+export const TOWN_TRIP_SECONDS = 75;
+
+/**
+ * The Assistant minds the shop: no trip, no cooldown, full price — and no
+ * bucket, because someone is there to empty it.
+ *
+ * Priced above the first Pond deckhand (`deckhandBaseCost` 46) by a wide
+ * margin, per the owner: "costs more than first deckhand, not too early but
+ * also not too far in the game."
+ */
+export const ASSISTANT_COST = 26_000;
+
+// ---------------------------------------------------------------------------
 // The auto-fisher
 // ---------------------------------------------------------------------------
 
