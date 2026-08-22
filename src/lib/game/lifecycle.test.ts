@@ -1,8 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { D, d0 } from '$lib/decimal';
 import { FISH_TYPES, FishType } from '$lib/fish_types';
-import { FishingSources } from '$lib/fishing_sources';
-import { SAVE_KEY } from './config';
+import { SAVE_KEY, SOURCE_ORDER } from './config';
 import { Game } from './state.svelte';
 
 /**
@@ -133,7 +132,7 @@ describe('offline settlement', () => {
 
 	it('still pays for what the crew landed while away, and only that', () => {
 		const game = boot();
-		game.state.deckhands[FishingSources.Pond] = D(5);
+		game.state.deckhands[SOURCE_ORDER[0]] = D(5);
 		stockHold(game, 1000, 1_000_000);
 
 		game.state.lastUpdate = Date.now() - 3_600_000;

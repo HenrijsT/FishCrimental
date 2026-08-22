@@ -22,9 +22,26 @@ export interface SourceConfig {
  * Deliberately un-round so the curve does not read as hand-placed.
  */
 export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
-	[FishingSources.Pond]: {
+	[FishingSources.MudPool]: {
 		order: 0,
 		unlockCost: 0,
+		// Quick and worthless: a cast takes no time because there is no depth to
+		// it, and nothing in there is worth anything. Small fish only.
+		castSeconds: 0.95,
+		// Exactly a quarter of a Pond fish — and exactly representable in binary,
+		// which matters: `holdValue` accumulates per catch while the hold is
+		// priced in one multiplication, and a multiplier like 0.3 makes those two
+		// drift apart in the twelfth decimal place.
+		valueMultiplier: 0.25,
+		deckhandBaseCost: 70,
+		typeWeights: {
+			[FishType.Small]: 100
+		}
+	},
+	[FishingSources.Pond]: {
+		order: 1,
+		// No longer free — it is the first thing the mud pool pays for.
+		unlockCost: 75,
 		castSeconds: 1.15,
 		valueMultiplier: 1,
 		deckhandBaseCost: 265,
@@ -36,7 +53,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Stream]: {
-		order: 1,
+		order: 2,
 		unlockCost: 530,
 		castSeconds: 1.55,
 		valueMultiplier: 4.6,
@@ -48,7 +65,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.River]: {
-		order: 2,
+		order: 3,
 		unlockCost: 13900,
 		castSeconds: 2.05,
 		valueMultiplier: 13.4,
@@ -62,7 +79,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Lake]: {
-		order: 3,
+		order: 4,
 		unlockCost: 356000,
 		castSeconds: 2.7,
 		valueMultiplier: 79,
@@ -75,7 +92,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Lagoon]: {
-		order: 4,
+		order: 5,
 		unlockCost: 9450000,
 		castSeconds: 3.55,
 		valueMultiplier: 308,
@@ -89,7 +106,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Sea]: {
-		order: 5,
+		order: 6,
 		unlockCost: 244000000,
 		castSeconds: 4.65,
 		valueMultiplier: 84,
@@ -103,7 +120,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Offshore]: {
-		order: 6,
+		order: 7,
 		unlockCost: 6310000000,
 		castSeconds: 6.1,
 		valueMultiplier: 237,
@@ -116,7 +133,7 @@ export const SOURCE_CONFIG: Record<FishingSources, SourceConfig> = {
 		}
 	},
 	[FishingSources.Ocean]: {
-		order: 7,
+		order: 8,
 		unlockCost: 164000000000,
 		castSeconds: 8,
 		valueMultiplier: 1010,
@@ -276,7 +293,7 @@ export const TRADER_CATALOGUE: TraderOfferId[] = ['bicycle', 'bucket', 'assistan
  * would turn an implementation detail into the game's offline income ceiling,
  * so capacity has to outrun the crew until the Assistant retires it.
  */
-export const BUCKET_BASE_CAPACITY = 20;
+export const BUCKET_BASE_CAPACITY = 30;
 /**
  * Capacity has to climb faster than the cost, or the bucket falls behind the
  * crew and the cap becomes the offline ceiling.
@@ -456,7 +473,15 @@ export const SAVE_KEY = 'fishcrimental.save';
  * dismisses the banner protecting it.
  */
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}.bak`;
-export const SAVE_VERSION = 4;
+/**
+ * 5: the mud pool became `SOURCE_ORDER[0]`.
+ *
+ * No migration is required — `readUnlocked` reads each source against
+ * `createInitialState().unlocked`, so the mud pool defaults to open and the
+ * Pond keeps whatever it had. The bump exists so an OLDER build refuses this
+ * save outright instead of silently dropping a source key it does not know.
+ */
+export const SAVE_VERSION = 5;
 export const AUTOSAVE_MS = 10_000;
 
 // ---------------------------------------------------------------------------

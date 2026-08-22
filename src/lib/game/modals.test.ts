@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { SOURCE_ORDER } from './config';
 import { D } from '$lib/decimal';
-import { FishingSources } from '$lib/fishing_sources';
 import { Game, MODAL_ORDER } from './state.svelte';
 
 /**
@@ -42,7 +42,7 @@ function boot(): Game {
 
 /** Put an offline report on the game without going near the clock. */
 function withOfflineReport(game: Game): void {
-	game.state.deckhands[FishingSources.Pond] = D(5);
+	game.state.deckhands[SOURCE_ORDER[0]] = D(5);
 	game.state.lastUpdate = Date.now() - 3_600_000;
 	game.resume();
 }

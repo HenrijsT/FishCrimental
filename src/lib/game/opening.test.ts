@@ -136,7 +136,7 @@ describe('the trip into town', () => {
 	it('never stops the crew — the cooldown is manual only', () => {
 		const state = stocked();
 		state.hasBicycle = true;
-		state.deckhands[FishingSources.Pond] = D(10);
+		state.deckhands[SOURCE_ORDER[0]] = D(10);
 		rideToTown(state, computeModifiers(state), Date.now());
 
 		const before = state.holdValue;
@@ -149,7 +149,7 @@ describe('the Assistant', () => {
 	it('costs more than the first deckhand, as the owner asked', () => {
 		expect(ASSISTANT_COST).toBeGreaterThan(
 			// The Pond deckhand is the cheapest hire in the game.
-			createInitialState().deckhands[FishingSources.Pond].plus(46).toNumber()
+			createInitialState().deckhands[SOURCE_ORDER[0]].plus(46).toNumber()
 		);
 		expect(ASSISTANT_COST).toBeGreaterThan(BICYCLE_COST);
 	});
@@ -295,7 +295,7 @@ describe('the Game refuses to cast while you are in town', () => {
 
 	it('sells offline at the trader rate, not the town rate', () => {
 		const game = boot();
-		game.state.deckhands[FishingSources.Pond] = D(20);
+		game.state.deckhands[SOURCE_ORDER[0]] = D(20);
 		game.state.hasBicycle = true;
 		game.state.lastUpdate = Date.now() - 3_600_000;
 
@@ -358,7 +358,7 @@ describe('the bucket', () => {
 
 	it('never lands more than it can hold', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(50);
+		state.deckhands[SOURCE_ORDER[0]] = D(50);
 		accumulate(state, computeModifiers(state), 3600);
 
 		expect(holdCount(state).lte(bucketCapacity(state.bucketLevel))).toBe(true);
@@ -373,7 +373,7 @@ describe('the bucket', () => {
 		const modifiers = computeModifiers(state);
 
 		const before = JSON.stringify(state.carry);
-		distributeCatch(state, FishingSources.Pond, D(500), modifiers, () => 0.5, holdRoom(state));
+		distributeCatch(state, SOURCE_ORDER[0], D(500), modifiers, () => 0.5, holdRoom(state));
 		expect(JSON.stringify(state.carry)).toBe(before);
 	});
 
@@ -383,7 +383,7 @@ describe('the bucket', () => {
 		const modifiers = computeModifiers(state);
 
 		const before = Object.keys(state.dex).length;
-		distributeCatch(state, FishingSources.Pond, D(5000), modifiers, () => 0.5, holdRoom(state));
+		distributeCatch(state, SOURCE_ORDER[0], D(5000), modifiers, () => 0.5, holdRoom(state));
 		expect(Object.keys(state.dex).length).toBe(before);
 	});
 
@@ -413,7 +413,7 @@ describe('the bucket', () => {
 		state.hasAssistant = true;
 		expect(holdRoom(state)).toBeNull();
 
-		state.deckhands[FishingSources.Pond] = D(50);
+		state.deckhands[SOURCE_ORDER[0]] = D(50);
 		accumulate(state, computeModifiers(state), 3600);
 		expect(holdCount(state).gt(bucketCapacity(state.bucketLevel))).toBe(true);
 	});
@@ -421,7 +421,7 @@ describe('the bucket', () => {
 	it('defaults to unlimited when nobody passes a room, so old callers are unchanged', () => {
 		const state = createInitialState();
 		const modifiers = computeModifiers(state);
-		const result = distributeCatch(state, FishingSources.Pond, D(5000), modifiers, () => 0.5);
+		const result = distributeCatch(state, SOURCE_ORDER[0], D(5000), modifiers, () => 0.5);
 		// Not exactly 5000: the bulk path splits by expected share and banks the
 		// per-species remainders. The point is that nothing capped it.
 		expect(result.fish.toNumber()).toBeGreaterThan(4990);
@@ -434,7 +434,7 @@ describe('a night offline still scales with the crew', () => {
 		const state = createInitialState();
 		state.bucketLevel = D(bucketLevel);
 		state.hasAssistant = assistant;
-		state.deckhands[FishingSources.Pond] = D(crew);
+		state.deckhands[SOURCE_ORDER[0]] = D(crew);
 
 		const capped = MAX_OFFLINE_SECONDS;
 		const chunks = Math.max(1, Math.min(OFFLINE_CHUNKS, Math.ceil(capped / 60)));

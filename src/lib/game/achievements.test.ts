@@ -4,7 +4,7 @@ import { FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
 import { ACHIEVEMENTS, ACHIEVEMENTS_BY_ID, evaluateAchievements } from './achievements';
 import { ALL_SPECIES, createInitialState, performPrestige } from './engine';
-import { UPGRADES, UPGRADE_IDS } from './config';
+import { UPGRADES, UPGRADE_IDS, SOURCE_ORDER } from './config';
 
 describe('achievements', () => {
 	it('have unique ids and no empty copy', () => {
@@ -45,7 +45,7 @@ describe('achievements', () => {
 
 	it('track the crew, the depth and the gear', () => {
 		const state = createInitialState();
-		state.deckhands[FishingSources.Pond] = D(30);
+		state.deckhands[SOURCE_ORDER[0]] = D(30);
 		state.unlocked[FishingSources.Sea] = true;
 		state.upgrades.rod = D(UPGRADES.rod.maxLevel);
 		for (const id of UPGRADE_IDS) state.upgrades[id] = D(1);

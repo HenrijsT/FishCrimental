@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { D } from '$lib/decimal';
+import { D, d0 } from '$lib/decimal';
 import { FISH_TYPES } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
 import { SOURCE_CONFIG, SOURCE_ORDER } from './config';
@@ -23,11 +23,11 @@ import {
 describe('the core loop', () => {
 	it('starts with the Pond open and nothing else', () => {
 		const state = createInitialState();
-		expect(state.unlocked[FishingSources.Pond]).toBe(true);
+		expect(state.unlocked[SOURCE_ORDER[0]]).toBe(true);
 		for (const source of SOURCE_ORDER.slice(1)) {
 			expect(state.unlocked[source]).toBe(false);
 		}
-		expect(state.activeSource).toBe(FishingSources.Pond);
+		expect(state.activeSource).toBe(SOURCE_ORDER[0]);
 		expect(state.coins.eq(0)).toBe(true);
 	});
 
@@ -38,8 +38,15 @@ describe('the core loop', () => {
 		const rng = () => ((roll = (roll + 0.37) % 1), roll);
 
 		state.licences.inland = false;
-		// Fish the Pond until the Stream is affordable.
-		for (let cast = 0; cast < 4000; cast++) {
+		// The mud pool pays for the Pond first; the Stream is the next thing
+		// after that, and the first that needs paper as well as money.
+		state.coins = D(SOURCE_CONFIG[FishingSources.Pond].unlockCost);
+		expect(unlockSource(state, FishingSources.Pond)).toBe(true);
+		state.coins = d0();
+		state.activeSource = FishingSources.Pond;
+
+		// Fish until the Stream is affordable.
+		for (let cast = 0; cast < 8000; cast++) {
 			performCast(state, FishingSources.Pond, computeModifiers(state), rng);
 			if (cast % 25 === 0) sellHold(state, computeModifiers(state));
 			if (state.coins.gte(SOURCE_CONFIG[FishingSources.Stream].unlockCost)) break;
@@ -70,7 +77,7 @@ describe('the core loop', () => {
 
 		const rng = () => 0.5;
 		for (let i = 0; i < 50; i++) {
-			performCast(shallow, FishingSources.Pond, computeModifiers(shallow), rng);
+			performCast(shallow, SOURCE_ORDER[0], computeModifiers(shallow), rng);
 			performCast(deep, FishingSources.Ocean, computeModifiers(deep), rng);
 		}
 
@@ -82,7 +89,7 @@ describe('the core loop', () => {
 		expect(totalIncomePerSecond(state, computeModifiers(state)).eq(0)).toBe(true);
 
 		state.coins = D(1e6);
-		expect(buyDeckhand(state, FishingSources.Pond, 3).eq(3)).toBe(true);
+		expect(buyDeckhand(state, SOURCE_ORDER[0], 3).eq(3)).toBe(true);
 		expect(totalIncomePerSecond(state, computeModifiers(state)).gt(0)).toBe(true);
 	});
 
@@ -90,7 +97,7 @@ describe('the core loop', () => {
 		clearCatchTableCache();
 		const state = createInitialState();
 		state.coins = D(1e7);
-		buyDeckhand(state, FishingSources.Pond, 4);
+		buyDeckhand(state, SOURCE_ORDER[0], 4);
 
 		accumulate(state, computeModifiers(state), 300);
 
@@ -108,7 +115,7 @@ describe('the core loop', () => {
 		clearCatchTableCache();
 		const state = createInitialState();
 		state.coins = D(1e12);
-		buyDeckhand(state, FishingSources.Pond, 5);
+		buyDeckhand(state, SOURCE_ORDER[0], 5);
 
 		const before = totalIncomePerSecond(state, computeModifiers(state));
 		buyUpgrade(state, 'net', 5);

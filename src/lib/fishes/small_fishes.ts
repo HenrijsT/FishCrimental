@@ -24,7 +24,7 @@ export const smallFishes = {
 	[SmallFishes.Guppy]: {
 		name: SmallFishes.Guppy,
 		category: FishType.Small,
-		sources: [FishingSources.Pond, FishingSources.Lagoon],
+		sources: [FishingSources.MudPool, FishingSources.Pond, FishingSources.Lagoon],
 		baseChance: 24,
 		description:
 			'The guppy is a small, colorful, and popular freshwater aquarium fish. They are known for their lively behavior and wide range of color varieties. Guppies are easy to care for and are suitable for beginners in the aquarium hobby.'
@@ -40,7 +40,7 @@ export const smallFishes = {
 	[SmallFishes.Platy]: {
 		name: SmallFishes.Platy,
 		category: FishType.Small,
-		sources: [FishingSources.Pond, FishingSources.Lake],
+		sources: [FishingSources.MudPool, FishingSources.Pond, FishingSources.Lake],
 		baseChance: 18,
 		description:
 			'Platies are colorful and easy-to-care-for freshwater fish. They are peaceful and get along well with other community fish. Platies are known for their active swimming behavior and are a great addition to community aquariums.'
@@ -96,7 +96,7 @@ export const smallFishes = {
 	[SmallFishes.CorydorasCatfish]: {
 		name: SmallFishes.CorydorasCatfish,
 		category: FishType.Small,
-		sources: [FishingSources.Pond],
+		sources: [FishingSources.MudPool, FishingSources.Pond],
 		baseChance: 5,
 		description:
 			"Corydoras catfish, often called 'cories', are small and peaceful bottom-dwelling fish. They are excellent cleaners and can help keep the aquarium substrate free of debris. Corydoras catfish are social and should be kept in groups."
@@ -104,7 +104,7 @@ export const smallFishes = {
 	[SmallFishes.KuhliLoach]: {
 		name: SmallFishes.KuhliLoach,
 		category: FishType.Small,
-		sources: [FishingSources.River],
+		sources: [FishingSources.MudPool, FishingSources.River],
 		baseChance: 4,
 		description:
 			'Kuhli Loaches are eel-like freshwater fish with a peaceful nature. They are primarily nocturnal and prefer to hide during the day. Kuhli Loaches are best kept in groups and require a well-decorated aquarium with hiding spots.'
@@ -136,7 +136,7 @@ export const smallFishes = {
 	[SmallFishes.RosyBarb]: {
 		name: SmallFishes.RosyBarb,
 		category: FishType.Small,
-		sources: [FishingSources.Pond, FishingSources.Lake],
+		sources: [FishingSources.MudPool, FishingSources.Pond, FishingSources.Lake],
 		baseChance: 10,
 		description:
 			'Rosy Barbs are colorful and active freshwater fish. They are social and prefer to swim in groups. Rosy Barbs are hardy and adaptable, making them suitable for community aquariums. Males develop a bright red coloration during breeding season.'

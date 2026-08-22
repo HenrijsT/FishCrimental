@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { D, d0 } from '$lib/decimal';
 import { FishingSources } from '$lib/fishing_sources';
-import { AUTO_FISHER, AUTO_FISHER_OFFLINE_COST, AUTO_FISHER_START, UPGRADES } from './config';
+import {
+	AUTO_FISHER,
+	AUTO_FISHER_OFFLINE_COST,
+	AUTO_FISHER_START,
+	UPGRADES,
+	SOURCE_ORDER
+} from './config';
 import {
 	accumulate,
 	autoFisherCastsPerSecond,
@@ -186,14 +192,12 @@ describe('what it actually lands', () => {
 
 	it('banks its remainders under its own key, not the crew’s', () => {
 		const state = withRig(1);
-		state.deckhands[FishingSources.Pond] = D(3);
+		state.deckhands[SOURCE_ORDER[0]] = D(3);
 		accumulate(state, computeModifiers(state), 0.2, 1, undefined, () => 0.5, 1);
 
 		expect(Object.keys(state.carry)).toContain('autofisher#casts');
 		// And the crew's own cast bank is still separate.
-		expect(Object.keys(state.carry).some((key) => key === `${FishingSources.Pond}#casts`)).toBe(
-			true
-		);
+		expect(Object.keys(state.carry).some((key) => key === `${SOURCE_ORDER[0]}#casts`)).toBe(true);
 	});
 
 	it('never mints a fraction of a fish', () => {
