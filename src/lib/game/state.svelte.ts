@@ -68,6 +68,8 @@ class Game {
 	prestigeResult = $state<PrestigeResult | null>(null);
 	newlyUnlockedSpecies = $state<Fish[]>([]);
 	newAchievements = $state<string[]>([]);
+	/** The Lovestruck Lipfish reveal — fires once, ever. */
+	lipfishReveal = $state(false);
 
 	loaded = $state(false);
 
@@ -131,6 +133,7 @@ class Game {
 
 		this.state.playTime += elapsed;
 		accumulate(this.state, this.modifiers, elapsed);
+		this.#checkJokes();
 		this.#checkAchievements();
 	}
 
@@ -212,38 +215,59 @@ class Game {
 	/** One manual cast, rolled for real. */
 	castOnce(): void {
 		const source = this.state.activeSource;
-		const before = this.discovered;
 		const valueMultiplier = SOURCE_CONFIG[source].valueMultiplier;
+
+		const known = new Set(
+			Object.entries(this.state.dex)
+				.filter(([, count]) => count.gte(1))
+				.map(([name]) => name)
+		);
+
 		const { caught } = performCast(this.state, source, this.modifiers);
 
 		const feedback: CastFeedback[] = [];
+		const fresh: Fish[] = [];
+
 		for (const [fish, count] of caught) {
 			const value = count
 				.times(fishTypeBaseValue[fish.category])
 				.times(valueMultiplier)
 				.times(this.modifiers.sellMultiplier);
 			feedback.push({ id: this.#feedbackId++, fish, count, value });
+
+			if (!known.has(fish.name) && this.state.dex[fish.name]?.gte(1)) fresh.push(fish);
 		}
 
 		if (feedback.length) {
 			this.recentCatches = [...feedback, ...this.recentCatches].slice(0, 12);
 		}
 
-		if (this.discovered > before) this.#collectNewSpecies();
-		this.#checkAchievements();
-	}
-
-	#collectNewSpecies(): void {
-		// The Fishdex page picks these up and shows the description card.
-		const fresh: Fish[] = [];
-		for (const entry of this.recentCatches) {
-			if (this.state.dex[entry.fish.name]?.lt(2)) fresh.push(entry.fish);
+		if (fresh.length) {
+			this.newlyUnlockedSpecies = [...this.newlyUnlockedSpecies, ...fresh].slice(-4);
 		}
-		if (fresh.length) this.newlyUnlockedSpecies = fresh;
+
+		this.#checkJokes();
+		this.#checkAchievements();
 	}
 
 	dismissNewSpecies(): void {
 		this.newlyUnlockedSpecies = [];
+	}
+
+	/**
+	 * The Lovestruck Lipfish is rare enough that a player can land one from a
+	 * deckhand's line without ever seeing it in the ticker, so the reveal is
+	 * driven off the Fishdex count rather than off a manual cast.
+	 */
+	#checkJokes(): void {
+		if (!this.state.eroticJokeSeen && this.erotic.gte(1)) {
+			this.state.eroticJokeSeen = true;
+			this.lipfishReveal = true;
+		}
+	}
+
+	dismissLipfish(): void {
+		this.lipfishReveal = false;
 	}
 
 	// -----------------------------------------------------------------------

@@ -213,3 +213,52 @@ markup and logs no console errors.
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 121 passing · `pnpm audit:ui` all thresholds met.
+
+## Phase 5 — Depth
+
+- **Fishdex** (`Fishdex.svelte`) groups all 47 species by type. Undiscovered entries
+  read `???` and are disabled; discovered ones expand to the written description and
+  the list of water they live in. Every discovery adds a permanent **+1.85% to sale
+  value** (`DEX_BONUS_PER_SPECIES`), folded into `computeModifiers`, so a full dex is
+  roughly ×1.87. That is a real incentive to go looking rather than a collection
+  screen with no teeth.
+- **Prestige** (`PrestigePanel.svelte`) shows Pearls held, all-time Pearls, runs
+  completed, the current Pearl multiplier, and a progress bar toward the 1e15
+  threshold. Prestiging takes a confirmation step, because it wipes the run.
+- **Pearl tree:** five upgrades — Pearl Brokerage (sale value), Tide Reader (cast
+  speed), Pearl Diver's Eye (luck), Legendary Crew (deckhand output), Standing Charter
+  (start with deeper water already open). Pearls also give a passive multiplier
+  whether spent or not, so a player who saves is not punished.
+- **Records** (`AchievementsPanel.svelte`) — 17 achievements. The Lipfish one is
+  `secret: true` and is hidden from the list until earned; the panel says how many
+  hidden ones remain without saying what they are.
+- **Toasts** for new species and new records, dismissible, bottom-right, `aria-live`.
+
+**The two jokes**
+
+- **"Don't be too Jelly."** Fires in the prestige modal on the *first* prestige — the
+  game's completion moment — when the run landed zero jellyfish. `jellyFree` is
+  computed from the Fishdex, so a fractional jellyfish landed by a deckhand counts;
+  you have to have genuinely never touched one. **Decision:** rather than leave players
+  who did catch jellyfish with no payoff at all, the non-jelly-free branch shows a
+  different, wrier line that tells them the better joke existed and they missed it.
+  Nothing else in the game hints at this, which is the point.
+- **The Lovestruck Lipfish.** `FishType.Erotic` sells for 999 — five times a Shark and
+  the most valuable thing in the water — at a weight of 0.00011 against ~100, so about
+  one fish in a million. It lives in every source, so it is a lifetime lottery rather
+  than an endgame reward. The reveal modal is driven off the Fishdex count rather than
+  off a manual cast, because at that rarity you are far more likely to land one from a
+  deckhand's line than your own. Kept firmly PG: the fish puckers at things.
+
+- **Tabs are addressable.** `#water`, `#gear`, `#crew`, `#dex`, `#pearls`, `#records`
+  via `history.replaceState`, so a refresh returns you to the panel you were on. This
+  also made it possible to smoke-test every panel in headless Chrome, which caught
+  nothing but proved all six render.
+
+- **Naming gotcha, recorded because it will bite again:** a component that declares
+  `const state = …` cannot also use the `$state` rune — Svelte reads `$state` as a
+  store subscription to the local `state`. Components that need both name the game
+  state `g` and carry a comment saying why.
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 133 passing · `pnpm audit:ui` all thresholds met.
