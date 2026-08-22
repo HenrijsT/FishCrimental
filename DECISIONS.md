@@ -192,3 +192,24 @@ markup and logs no console errors.
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 111 passing · `pnpm audit:ui` all thresholds met.
+
+## Phase 4 — Automation
+
+- **`CrewPanel`** hires deckhands per source, shows each source's coins-per-second
+  contribution, and folds in the `Crew Quarters` upgrade (which multiplies every
+  deckhand's output) so the whole automation economy sits on one screen.
+- **The handover is shown explicitly.** The panel puts "you, holding the rod" next to
+  "the crew, without you" and, once the crew win, says so with the multiple. That is
+  the manual→idle moment the genre is built around, and it deserves to be legible
+  rather than something the player infers from a slowly-climbing number.
+- **Deckhands ride the same modifiers as the player** — the rod speeds them up, the
+  net makes their casts bigger, the lure improves their odds — but at a base 42%
+  efficiency scaled by Crew Quarters. Reusing the modifier stack means there is no
+  second economy to balance.
+- **Measured crossover:** `simulateRun` now records `idleCrossoverAt`, the second the
+  crew start out-earning the rod. On the tuned curves that lands well inside the first
+  half of the first run, and `automation.test.ts` asserts it is later than 30 s (so
+  the manual phase is real) and before 60% of the run (so the idle phase is real).
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 121 passing · `pnpm audit:ui` all thresholds met.
