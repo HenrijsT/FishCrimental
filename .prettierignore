@@ -19,3 +19,6 @@ yarn.lock
 USER-REQUIREMENTS.md
 ideas.txt
 Goals/
+
+# Harness scratch space — agent worktrees
+.claude/
