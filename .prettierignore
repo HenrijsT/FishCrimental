@@ -15,5 +15,7 @@ yarn.lock
 # Lighthouse CI working directory, removed by pnpm audit:ui
 .lighthouseci
 
-# Personal requirements log — locally ignored, hand-maintained
+# Personal working docs — locally ignored in .git/info/exclude, hand-maintained
 USER-REQUIREMENTS.md
+ideas.txt
+Goals/
