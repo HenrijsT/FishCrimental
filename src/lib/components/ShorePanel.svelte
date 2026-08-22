@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { ASSISTANT_COST, BICYCLE_COST, TOWN_TRIP_SECONDS, TRADER_RATE } from '$lib/game/config';
+	import {
+		ASSISTANT_COST,
+		BICYCLE_COST,
+		BUCKET_MAX_LEVEL,
+		TOWN_TRIP_SECONDS,
+		TRADER_RATE
+	} from '$lib/game/config';
+	import { bucketCapacity } from '$lib/game/engine';
 	import { game } from '$lib/game/state.svelte';
 	import { D } from '$lib/decimal';
 	import Num from './Num.svelte';
@@ -9,6 +16,9 @@
 	const traderPays = $derived(worth.times(TRADER_RATE));
 
 	const canRide = $derived(g.hasBicycle && !game.inTown && g.holdValue.gt(0));
+
+	const maxedBucket = $derived(g.bucketLevel.gte(BUCKET_MAX_LEVEL));
+	const nextBucket = $derived(bucketCapacity(g.bucketLevel.plus(1)));
 </script>
 
 <section class="panel">
@@ -74,6 +84,27 @@
 	{#if !g.hasAssistant}
 		<div class="row">
 			<div class="text">
+				<h3 class="name">
+					A bigger bucket
+					<span class="level">lv {g.bucketLevel.toFixed(0)}{maxedBucket ? ' · max' : ''}</span>
+				</h3>
+				<p class="desc muted">
+					Holds <Num value={game.bucketSize} /> fish.
+					{#if !maxedBucket}
+						The next one holds <Num value={nextBucket} />.
+					{/if}
+					A full bucket stops the crew as well as you.
+				</p>
+			</div>
+			{#if !maxedBucket}
+				<button onclick={() => game.upgradeBucket()} disabled={g.coins.lt(game.bucketPrice)}>
+					<Num value={game.bucketPrice} tone="coin" />
+				</button>
+			{/if}
+		</div>
+
+		<div class="row">
+			<div class="text">
 				<h3 class="name">An Assistant</h3>
 				<p class="desc muted">
 					Someone to mind the catch. Sells at full price with no trip and no cooldown, and empties
@@ -117,6 +148,16 @@
 
 	.name {
 		font-size: 0.85rem;
+		display: flex;
+		align-items: baseline;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+
+	.level {
+		font-size: 0.68rem;
+		color: var(--ink-dim);
+		font-weight: 400;
 	}
 
 	.desc {

@@ -21,10 +21,14 @@ import {
 	affordableDeckhands,
 	autoFisherCastsPerSecond,
 	autoFisherFraction,
+	bucketCapacity,
+	bucketCost,
 	buyAssistant,
 	buyAutoFisher,
 	buyAutoFisherOffline,
 	buyBicycle,
+	buyBucket,
+	holdRoom,
 	inTown,
 	rideToTown,
 	saleRate,
@@ -578,6 +582,12 @@ export class Game {
 		return bought;
 	}
 
+	upgradeBucket(): boolean {
+		const bought = buyBucket(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
 	purchaseAssistant(): boolean {
 		const bought = buyAssistant(this.state);
 		if (bought) this.#checkAchievements();
@@ -661,6 +671,11 @@ export class Game {
 	buyPearlUpgrade(id: Parameters<typeof buyPrestigeUpgrade>[1]): boolean {
 		return buyPrestigeUpgrade(this.state, id);
 	}
+
+	/** Null once an Assistant is minding the catch — nothing limits the hold. */
+	holdRoom = $derived(holdRoom(this.state));
+	bucketSize = $derived(bucketCapacity(this.state.bucketLevel));
+	bucketPrice = $derived(bucketCost(this.state.bucketLevel));
 
 	/** Manual casting is refused while the trip is running. */
 	inTown = $derived(inTown(this.state, this.now));

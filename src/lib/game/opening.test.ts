@@ -5,16 +5,28 @@ import { FishingSources } from '$lib/fishing_sources';
 import {
 	ASSISTANT_COST,
 	BICYCLE_COST,
+	BUCKET_BASE_CAPACITY,
+	BUCKET_MAX_LEVEL,
+	LICENCE_IDS,
+	MAX_OFFLINE_SECONDS,
+	OFFLINE_CHUNKS,
+	OFFLINE_EFFICIENCY,
 	SOURCE_ORDER,
 	TOWN_TRIP_SECONDS,
 	TRADER_RATE
 } from './config';
 import {
 	accumulate,
+	bucketCapacity,
+	bucketCost,
 	buyAssistant,
 	buyBicycle,
+	buyBucket,
 	computeModifiers,
 	createInitialState,
+	distributeCatch,
+	holdCount,
+	holdRoom,
 	inTown,
 	rideToTown,
 	saleRate,
@@ -308,5 +320,160 @@ describe('the opening still holds together', () => {
 		const state = createInitialState();
 		expect(sellHold(state, computeModifiers(state), TRADER_RATE).eq(0)).toBe(true);
 		expect(state.holdValue.eq(d0())).toBe(true);
+	});
+});
+
+describe('the bucket', () => {
+	it('holds something to begin with, and more when upgraded', () => {
+		expect(bucketCapacity(0).toNumber()).toBe(BUCKET_BASE_CAPACITY);
+		for (let level = 0; level < BUCKET_MAX_LEVEL; level++) {
+			expect(bucketCapacity(level + 1).gt(bucketCapacity(level))).toBe(true);
+			expect(bucketCost(level + 1).gt(bucketCost(level))).toBe(true);
+		}
+	});
+
+	it('stops at its top level', () => {
+		const state = createInitialState();
+		state.bucketLevel = D(BUCKET_MAX_LEVEL);
+		state.coins = D('1e30');
+		expect(buyBucket(state)).toBe(false);
+	});
+
+	it('refuses a catch that will not fit', () => {
+		const state = createInitialState();
+		const modifiers = computeModifiers(state);
+		// Fill it.
+		state.hold[FishType.Small] = bucketCapacity(state.bucketLevel);
+
+		expect(holdRoom(state)!.toNumber()).toBe(0);
+		const before = state.totalFish;
+		accumulate(state, modifiers, 3600, 1, { [state.activeSource]: 5 });
+		expect(state.totalFish.eq(before)).toBe(true);
+	});
+
+	it('never lands more than it can hold', () => {
+		const state = createInitialState();
+		state.deckhands[FishingSources.Pond] = D(50);
+		accumulate(state, computeModifiers(state), 3600);
+
+		expect(holdCount(state).lte(bucketCapacity(state.bucketLevel))).toBe(true);
+	});
+
+	it('does not spend the carry bank on a fish it refuses', () => {
+		// The whole reason the cap is applied before `takeWhole`: that function
+		// mutates state.carry, so refusing afterwards would bank the fraction
+		// and lose the fish with no credit.
+		const state = createInitialState();
+		state.hold[FishType.Small] = bucketCapacity(state.bucketLevel);
+		const modifiers = computeModifiers(state);
+
+		const before = JSON.stringify(state.carry);
+		distributeCatch(state, FishingSources.Pond, D(500), modifiers, () => 0.5, holdRoom(state));
+		expect(JSON.stringify(state.carry)).toBe(before);
+	});
+
+	it('does not credit the Fishdex for fish that never fit', () => {
+		const state = createInitialState();
+		state.hold[FishType.Small] = bucketCapacity(state.bucketLevel);
+		const modifiers = computeModifiers(state);
+
+		const before = Object.keys(state.dex).length;
+		distributeCatch(state, FishingSources.Pond, D(5000), modifiers, () => 0.5, holdRoom(state));
+		expect(Object.keys(state.dex).length).toBe(before);
+	});
+
+	it('burns no casts, no fuel and no hull on a full bucket', () => {
+		const state = createInitialState();
+		for (const source of SOURCE_ORDER) state.unlocked[source] = true;
+		for (const id of LICENCE_IDS) state.licences[id] = true;
+		state.boat.owned = true;
+		state.boat.fuel = D('1e9');
+		state.boat.condition = 100;
+		state.deckhands[FishingSources.Offshore] = D(20);
+		state.hold[FishType.Small] = bucketCapacity(state.bucketLevel);
+
+		const casts = state.totalCasts;
+		const fuel = state.boat.fuel;
+		const condition = state.boat.condition;
+
+		accumulate(state, computeModifiers(state), 3600);
+
+		expect(state.totalCasts.eq(casts)).toBe(true);
+		expect(state.boat.fuel.eq(fuel)).toBe(true);
+		expect(state.boat.condition).toBe(condition);
+	});
+
+	it('is switched off entirely by the Assistant', () => {
+		const state = createInitialState();
+		state.hasAssistant = true;
+		expect(holdRoom(state)).toBeNull();
+
+		state.deckhands[FishingSources.Pond] = D(50);
+		accumulate(state, computeModifiers(state), 3600);
+		expect(holdCount(state).gt(bucketCapacity(state.bucketLevel))).toBe(true);
+	});
+
+	it('defaults to unlimited when nobody passes a room, so old callers are unchanged', () => {
+		const state = createInitialState();
+		const modifiers = computeModifiers(state);
+		const result = distributeCatch(state, FishingSources.Pond, D(5000), modifiers, () => 0.5);
+		// Not exactly 5000: the bulk path splits by expected share and banks the
+		// per-species remainders. The point is that nothing capped it.
+		expect(result.fish.toNumber()).toBeGreaterThan(4990);
+	});
+});
+
+describe('a night offline still scales with the crew', () => {
+	/** Coins earned over eight hours away, settled the way the game settles it. */
+	function nightEarnings(crew: number, bucketLevel: number, assistant = false): number {
+		const state = createInitialState();
+		state.bucketLevel = D(bucketLevel);
+		state.hasAssistant = assistant;
+		state.deckhands[FishingSources.Pond] = D(crew);
+
+		const capped = MAX_OFFLINE_SECONDS;
+		const chunks = Math.max(1, Math.min(OFFLINE_CHUNKS, Math.ceil(capped / 60)));
+		const chunkSeconds = capped / chunks;
+
+		let coins = d0();
+		for (let i = 0; i < chunks; i++) {
+			const modifiers = computeModifiers(state);
+			accumulate(state, modifiers, chunkSeconds, OFFLINE_EFFICIENCY);
+			coins = coins.plus(sellHold(state, modifiers, saleRate(state)));
+		}
+		return coins.toNumber();
+	}
+
+	it('doubles the crew, roughly doubles the night — at a bucket the player can afford', () => {
+		// Five bucket levels cost 17,190 in total, which is inside the
+		// Assistant's 26,000 — so this is a bucket a player genuinely has while
+		// still owning a real crew. That is the worst moment for the cap.
+		const level = 5;
+		const small = nightEarnings(10, level);
+		const large = nightEarnings(20, level);
+
+		expect(small).toBeGreaterThan(0);
+		// Clipped by the bucket, this ratio collapses towards 1.
+		expect(large / small).toBeGreaterThan(1.8);
+	});
+
+	it('is the bucket, not the crew, that would have clipped it', () => {
+		// The same doubling against a level-0 bucket does get clipped — which is
+		// exactly why the bucket has to be upgradeable.
+		const clipped = nightEarnings(20, 0) / nightEarnings(10, 0);
+		const roomy = nightEarnings(20, 6) / nightEarnings(10, 6);
+		expect(roomy).toBeGreaterThan(clipped);
+	});
+
+	it('an Assistant removes the ceiling completely', () => {
+		// Same settle, same crew, same chunks — the only difference is the cap.
+		// A level-0 bucket is where the clipping is worst.
+		expect(nightEarnings(20, 0, true)).toBeGreaterThan(nightEarnings(20, 0, false));
+	});
+
+	it('and an Assistant is never worse than the biggest bucket', () => {
+		expect(nightEarnings(20, 0, true)).toBeGreaterThanOrEqual(
+			nightEarnings(20, BUCKET_MAX_LEVEL, false) * 0.999
+		);
 	});
 });

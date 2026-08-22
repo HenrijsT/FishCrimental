@@ -12,6 +12,7 @@ import {
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
 	AUTO_FISHER,
+	BUCKET_MAX_LEVEL,
 	SAVE_BACKUP_KEY,
 	TOWN_TRIP_SECONDS,
 	SAVE_KEY,
@@ -348,6 +349,7 @@ export function fromRaw(data: Raw): GameState {
 
 		upgrades: readUpgrades(migrated.upgrades),
 		deckhands: readDeckhands(migrated.deckhands),
+		bucketLevel: level(migrated.bucketLevel, BUCKET_MAX_LEVEL),
 		hasBicycle: bool(migrated.hasBicycle, false),
 		// Clamped, not just parsed. `num()` only checks finiteness, so a
 		// hand-edited or clock-skewed `Date.now() + 1e15` would refuse manual

@@ -61,6 +61,8 @@ export interface GameState {
 	upgrades: Record<UpgradeId, Decimal>;
 	deckhands: Record<FishingSources, Decimal>;
 
+	/** How big the bucket is. Level 0 is the one you started with. */
+	bucketLevel: Decimal;
 	/** Bought or fished up. Unlocks riding to town for the full price. */
 	hasBicycle: boolean;
 	/**

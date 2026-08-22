@@ -90,6 +90,9 @@ describe('round two: deckhands landed every species of a category at once', () =
 	it('still reaches the whole roster given long enough', () => {
 		const state = createInitialState();
 		state.deckhands[FishingSources.Pond] = D(50);
+		// Species coverage, not bucket capacity: an Assistant keeps the hold
+		// unlimited so 20,000 seconds of crew work actually lands.
+		state.hasAssistant = true;
 		const modifiers = computeModifiers(state);
 
 		accumulate(state, modifiers, 20_000);

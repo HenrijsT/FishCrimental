@@ -31,6 +31,9 @@ function drydocked(): GameState {
 	state.boat.fuel = d0();
 	state.coins = d0();
 	state.deckhands[FishingSources.Offshore] = D(10);
+	// Not a bucket test: an Assistant is the in-game way to say the hold is
+	// unlimited, so these assertions are about accumulation and nothing else.
+	state.hasAssistant = true;
 	return state;
 }
 
