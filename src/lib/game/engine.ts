@@ -27,6 +27,9 @@ import {
 	REPAIR_COST_PER_POINT,
 	SOURCE_LICENCE,
 	needsBoat,
+	AUTO_FISHER,
+	AUTO_FISHER_OFFLINE_COST,
+	AUTO_FISHER_START,
 	MIN_CAST_SECONDS,
 	PEARL_EXPONENT,
 	PEARL_MULTIPLIER_EXPONENT,
@@ -179,6 +182,61 @@ export function affordableUpgradeLevels(id: UpgradeId, level: Decimal, coins: De
 
 	const remaining = D(config.maxLevel).minus(level);
 	return Decimal.max(d0(), Decimal.min(count, remaining));
+}
+
+export function autoFisherCost(level: Decimal | number): Decimal {
+	return D(AUTO_FISHER.baseCost).times(D(AUTO_FISHER.costGrowth).pow(level));
+}
+
+/**
+ * What fraction of a human's hold speed the rig manages at this level.
+ *
+ * Level 1 is `AUTO_FISHER_START`; the top level is exactly 1, by construction
+ * rather than by a multiplier that happens to land near it — `x^0` is 1 with
+ * no floating-point slack, so "matches a human exactly, never more" is a
+ * property of the formula and not of the tuning.
+ */
+export function autoFisherFraction(level: Decimal | number): number {
+	const top = AUTO_FISHER.maxLevel;
+	const n = typeof level === 'number' ? level : level.toNumber();
+	if (!(n > 0)) return 0;
+	if (n >= top) return 1;
+	return Math.pow(AUTO_FISHER_START, 1 - (n - 1) / (top - 1));
+}
+
+/** Casts a second the rig lands at the water the player is pointing at. */
+export function autoFisherCastsPerSecond(state: GameState, modifiers: Modifiers): Decimal {
+	const fraction = autoFisherFraction(state.autoFisher);
+	if (fraction <= 0) return d0();
+
+	const seconds = modifiers.castSeconds[state.activeSource];
+	if (!Number.isFinite(seconds) || seconds <= 0) return d0();
+
+	// A human holding the rod lands one cast every `seconds`. The rig lands the
+	// same cast, slower, and at the top level at exactly the same rate.
+	return D(fraction / seconds);
+}
+
+export function buyAutoFisher(state: GameState): boolean {
+	const level = state.autoFisher;
+	if (level.gte(AUTO_FISHER.maxLevel)) return false;
+
+	const cost = autoFisherCost(level);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	state.autoFisher = level.plus(1);
+	return true;
+}
+
+export function buyAutoFisherOffline(state: GameState): boolean {
+	if (state.autoFisherOffline) return false;
+	if (state.autoFisher.lte(0)) return false;
+	if (state.coins.lt(AUTO_FISHER_OFFLINE_COST)) return false;
+
+	state.coins = state.coins.minus(AUTO_FISHER_OFFLINE_COST);
+	state.autoFisherOffline = true;
+	return true;
 }
 
 export function prestigeUpgradeCost(id: PrestigeUpgradeId, level: Decimal | number): Decimal {
@@ -565,6 +623,14 @@ function speciesCarryKey(source: FishingSources, name: string): string {
 }
 
 /**
+ * The rig banks its own remainders. Sharing the crew's key would pool two
+ * producers running at different rates into one bank, so neither would be
+ * separately accountable — and the whole point of the banking model is that
+ * every producer's fractional casts are owed to that producer.
+ */
+const AUTO_FISHER_CARRY_KEY = 'autofisher#casts';
+
+/**
  * Take whole units out of a fractional amount, banking what is left over.
  *
  * This is what keeps every count in the game an integer while staying exactly
@@ -780,7 +846,14 @@ export function accumulate(
 	efficiency = 1,
 	/** Extra casts per second on top of the crew — used to model the player. */
 	extraCastsPerSecond?: Partial<Record<FishingSources, number>>,
-	random: () => number = Math.random
+	random: () => number = Math.random,
+	/**
+	 * How much of this interval the auto-fisher was working, 0 to 1. It stands
+	 * down while the player holds the rod themselves (0), runs the whole
+	 * interval when they are not (1), and offline it is whatever the offline
+	 * purchase allows.
+	 */
+	autoFisherShare = 1
 ): { fish: Decimal; value: Decimal; fellBack: boolean } {
 	let fishTotal = d0();
 	let valueTotal = d0();
@@ -834,6 +907,53 @@ export function accumulate(
 		}
 
 		state.totalCasts = state.totalCasts.plus(casts);
+	}
+
+	// The rig works the water the player is pointing at, not a source of its
+	// own, and it is routed and priced through exactly the same path a manual
+	// cast takes — so a rig cast and a hand cast at the same rate pay the same.
+	if (autoFisherShare > 0) {
+		const source = state.activeSource;
+		const perSecond = autoFisherCastsPerSecond(state, modifiers);
+
+		if (perSecond.gt(0) && state.unlocked[source] && !missingLicence(state, source)) {
+			const casts = takeWhole(
+				state,
+				AUTO_FISHER_CARRY_KEY,
+				perSecond.times(seconds).times(efficiency).times(autoFisherShare)
+			);
+
+			if (casts.gt(0)) {
+				const route = routeCasts(state, modifiers, source, casts, true);
+
+				if (route.sailed.gt(0)) {
+					const { value, fish } = distributeCatch(
+						state,
+						source,
+						route.sailed.times(modifiers.fishPerCast),
+						modifiers,
+						random
+					);
+					fishTotal = fishTotal.plus(fish);
+					valueTotal = valueTotal.plus(value);
+				}
+
+				if (route.stranded.gt(0) && route.fallback !== null) {
+					const { value, fish } = distributeCatch(
+						state,
+						route.fallback,
+						route.stranded.times(modifiers.fishPerCast),
+						modifiers,
+						random
+					);
+					fishTotal = fishTotal.plus(fish);
+					valueTotal = valueTotal.plus(value);
+					fellBack = true;
+				}
+
+				state.totalCasts = state.totalCasts.plus(casts);
+			}
+		}
 	}
 
 	return { fish: fishTotal, value: valueTotal, fellBack };
@@ -1145,6 +1265,10 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 
 		upgrades: zeroUpgrades(),
 		deckhands: zeroDeckhands(),
+		// The rig is bought with coins, so it goes the way every coin purchase
+		// goes on a reset.
+		autoFisher: d0(),
+		autoFisherOffline: false,
 
 		pearls: keep?.pearls ?? d0(),
 		allTimePearls: keep?.allTimePearls ?? d0(),

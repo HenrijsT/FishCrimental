@@ -1,9 +1,11 @@
 import Decimal from 'break_eternity.js';
-import { d0 } from '$lib/decimal';
+import { D, d0 } from '$lib/decimal';
 import type { FishingSources } from '$lib/fishing_sources';
 import {
 	BOAT_COST,
 	BOAT_UPGRADES,
+	AUTO_FISHER,
+	AUTO_FISHER_OFFLINE_COST,
 	BOAT_UPGRADE_IDS,
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
@@ -18,6 +20,9 @@ import {
 import {
 	accumulate,
 	buyBoat,
+	autoFisherCost,
+	buyAutoFisher,
+	buyAutoFisherOffline,
 	buyBoatUpgrade,
 	buyDeckhand,
 	buyFuel,
@@ -157,7 +162,18 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 			if (totalIncomePerSecond(state, modifiers).gt(manualIncome)) idleCrossoverAt = elapsed;
 		}
 
-		accumulate(state, modifiers, step, 1, { [state.activeSource]: manual * manualUptime }, random);
+		// The rig covers whatever share of the interval the player is not
+		// holding the rod themselves — the same complement the live game applies
+		// per tick, expressed here as an average over the step.
+		accumulate(
+			state,
+			modifiers,
+			step,
+			1,
+			{ [state.activeSource]: manual * manualUptime },
+			random,
+			1 - manualUptime
+		);
 		sellHold(state, modifiers);
 
 		elapsed += step;
@@ -230,6 +246,18 @@ function cheapestPurchase(state: GameState): Purchase | null {
 			if (state.boat.upgrades[id].gte(BOAT_UPGRADES[id].maxLevel)) continue;
 			consider(boatUpgradeCost(id, state.boat.upgrades[id]), () => buyBoatUpgrade(state, id));
 		}
+	}
+
+	if (state.autoFisher.lt(AUTO_FISHER.maxLevel)) {
+		consider(autoFisherCost(state.autoFisher), () => {
+			buyAutoFisher(state);
+		});
+	}
+
+	if (!state.autoFisherOffline && state.autoFisher.gt(0)) {
+		consider(D(AUTO_FISHER_OFFLINE_COST), () => {
+			buyAutoFisherOffline(state);
+		});
 	}
 
 	return best;

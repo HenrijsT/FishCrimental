@@ -61,6 +61,11 @@ export interface GameState {
 	upgrades: Record<UpgradeId, Decimal>;
 	deckhands: Record<FishingSources, Decimal>;
 
+	/** Level of the Clockwork Rig. 0 means it has not been bought. */
+	autoFisher: Decimal;
+	/** Whether the rig has been paid to keep working while the game is shut. */
+	autoFisherOffline: boolean;
+
 	// Prestige
 	pearls: Decimal;
 	allTimePearls: Decimal;

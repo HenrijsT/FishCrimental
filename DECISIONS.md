@@ -1400,3 +1400,140 @@ residual claim; and the Steam Distribution Agreement's own terms, which I did
 not obtain. **I am not a lawyer and this is not legal advice.** The practical
 exposure is small — the published prototype has no game in it — but "small" is
 a judgement, not a legal opinion.
+
+---
+
+## Stage 3 — the auto-fisher
+
+`AUTO_FISHER` in `config.ts`, the "Clockwork Rig". An upgrade that holds the rod
+for the player, distinct from a deckhand: a deckhand works one source on their
+own, the rig works whichever water the player is pointing at, exactly as their
+own hand would.
+
+### The starting speed: 0.20 of a human, i.e. 5x slower
+
+The brief asked for a figure between 2x and 10x slower and for it to be
+justified against the existing pacing rather than picked round. The anchor is
+`DECKHAND_BASE_EFFICIENCY = 0.42` — a deckhand already casts at 42% of a human.
+
+- **At 0.42 or faster, the rig strictly dominates the crew track.** It would
+  out-cast a deckhand _and_ need no per-source purchase, so nobody would ever
+  hire anyone. That rules out anything faster than about 2.4x slower, which
+  eliminates most of the band the brief offered.
+- **Below roughly 0.15 nobody buys it.** Its first level would land less than
+  a third of a deckhand for several times the price, at a moment when the
+  cheapest-thing-on-the-board strategy the game itself recommends would never
+  choose it.
+- **0.20 is just under half a deckhand.** A real alternative at the moment it
+  unlocks, never the obvious one.
+
+### The ladder reaches exactly 1.00, by construction
+
+`autoFisherFraction(level) = AUTO_FISHER_START ^ (1 - (level - 1) / (maxLevel - 1))`
+
+Level 1 is `0.20 ^ 1` and level 12 is `0.20 ^ 0`, which is **exactly** 1 —
+`Math.pow(x, 0)` has no floating-point slack. "Matches a human exactly, never
+more" is therefore a property of the formula, not of the tuning, and a test
+asserts `toBe(1)` rather than `toBeCloseTo(1)`.
+
+Measured ladder: `0.200 0.232 0.268 0.310 0.359 0.416 0.481 0.557 0.645 0.746
+0.864 1.000`.
+
+### It stands down while you hold the rod
+
+The one design decision the brief did not specify. A rig that ran _alongside_ a
+held rod would give a maxed player 2x human speed, which breaks "it does not
+out-perform playing" even though each half obeys the rule.
+
+So `accumulate` takes an `autoFisherShare` from 0 to 1 — the fraction of the
+interval the rig was working. `tick()` passes `this.casting ? 0 : 1`,
+`#settleOffline` passes `state.autoFisherOffline ? 1 : 0`, and `simulateRun`
+passes `1 - manualUptime`. One number covers the live game, the offline settle
+and the simulation.
+
+The consequence is the intended one: below max, holding the rod yourself is
+strictly better, because you are faster. At max it makes no difference, because
+you are the same speed. The rig removes the _obligation_ to hold the button
+without ever removing the option.
+
+### Parity, and its own bank
+
+R14 required that the rig not pay differently from a hand at the same rate.
+It routes through the same `routeCasts` and the same `distributeCatch` as a
+manual cast — including the boat gate, so a rig pointed at an unfuelled Ocean
+falls back inshore exactly as a hand cast does, and it is refused on unlicensed
+water for the same reason `accumulate` refuses the crew. A test runs a hand at
+the human rate against a maxed rig for an hour and asserts the two land within
+0.1%.
+
+It banks under its own key, `autofisher#casts`, per the brief. Sharing the
+crew's key would pool two producers running at different rates into one bank.
+
+### The offline purchase
+
+`AUTO_FISHER_OFFLINE_COST = 5e11`, one purchase, no levels, and it requires a
+rig to exist first. Priced deliberately above the Ocean unlock (1.64e11) so
+that in the run where it first becomes reachable it is a genuine choice against
+opening the last source rather than a box ticked on the way past.
+
+Both the level and the offline fitting are coin purchases, so a prestige takes
+them, like every other coin purchase. Carrying either through prestige belongs
+in the Pearl tree, and is noted in `Goals/PLAN.md` rather than smuggled in
+here.
+
+### What it did to the pacing
+
+Re-measured through `simulateRun` with the rig integrated into
+`cheapestPurchase`, so the greedy reference player buys it whenever it is the
+cheapest thing on the board.
+
+|                             | before     | with the rig            |
+| --------------------------- | ---------- | ----------------------- |
+| First prestige, 100% uptime | 2h 25m 44s | **2h 28m 13s** (+1.7%)  |
+| First prestige, 50% uptime  | 3h 30m 39s | **2h 43m 03s** (-22.5%) |
+
+**No retune was needed**, and the shape of the change is the point. The
+attentive player is 1.7% _slower_, because the greedy simulation spends coins
+on a rig that — at 100% uptime — never runs. That is a real and acceptable
+cost. The half-attention player gains 47 minutes, because the rig covers the
+half of the time they are not holding the rod.
+
+So the rig does not inflate the ceiling; it raises the floor. The gap between
+playing attentively and playing casually narrows from 45 minutes to 15, and the
+attentive player still finishes first. Source unlocks moved by under a minute
+each at full uptime (Stream 5m59s, River 14m41s, Lake 21m40s, Lagoon 30m17s,
+Sea 40m37s, Offshore 54m26s, Ocean 73m35s); the idle crossover is unchanged at
+10m59s.
+
+### Save format
+
+`SAVE_VERSION` 3 -> 4, with `MIGRATIONS[3]`. The change is purely additive, so a
+v3 save would have loaded correctly on the field defaults alone; the step exists
+so the version is stamped explicitly rather than by `fromRaw`'s fallback.
+`autoFisherOffline` is read as `false` unless a rig also exists, so a
+hand-edited save cannot buy the night shift without the machine.
+
+Note that this bump is only safe _because_ Stage 0 fixed the Dismiss-destroys-
+the-save defect: a player who loads this build and then reverts now hits a
+banner that backs their save up instead of eating it.
+
+### Tests
+
+25 new, in `autofisher.test.ts`: the ladder's endpoints and monotonicity, the
+2x-10x band, human-rate parity at all eight sources, the cost curve sitting
+inside the gear tracks' 3.58-4.63 band, the purchase guards, R14 parity, linear
+scaling in the share, its own carry key, never a fractional fish, one-step
+versus many-step agreement, the licence refusal, and the inshore fallback.
+
+One of those tests compares casts and fish rather than coin value between one
+big step and many small ones. That is deliberate and the reason is written into
+the test: a 3600-second step is one bulk draw split by expected share, while
+3600 one-second steps are rolled individually, and the constant RNG the test
+uses makes every individual roll pick the same species. The divergence is a
+property of the test's RNG, not of the rig; casts and fish are what the
+remainder bank actually guarantees, and those match to within one cast.
+
+### Gates
+
+`pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok · `pnpm test`
+**321 passing** across 20 files · `pnpm audit:ui` 100/100/100/100 across 3 runs.

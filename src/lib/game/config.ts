@@ -219,6 +219,60 @@ export const DECKHAND_BASE_EFFICIENCY = 0.42;
 export const MIN_CAST_SECONDS = 0.05;
 
 // ---------------------------------------------------------------------------
+// The auto-fisher
+// ---------------------------------------------------------------------------
+
+/**
+ * A rig that holds the rod for you. Distinct from a deckhand: a deckhand works
+ * one source on their own, the auto-fisher works whichever water *you* are
+ * pointing at, exactly as your own hand would.
+ *
+ * Level 1 casts at `AUTO_FISHER_START` of human speed and the top level casts
+ * at exactly 1.0 — it removes the tedium of holding a button, it never beats
+ * playing. It also stands down entirely while you are holding the rod
+ * yourself, so the two can never stack.
+ *
+ * Why 0.2 (5x slower) rather than a rounder 2x or 10x: the anchor is
+ * `DECKHAND_BASE_EFFICIENCY`, 0.42. A first-level auto-fisher has to be worth
+ * buying without dominating the crew track it competes with for the same
+ * coins. At 0.42 or above it would strictly beat a deckhand *and* need no
+ * per-source purchase, so nobody would hire anyone. Much below 0.2 and its
+ * first level buys less than half a deckhand for several times the price, so
+ * nobody would buy it. 0.2 is just under half a deckhand: a real alternative
+ * at the moment it unlocks, and never the obvious one.
+ */
+export const AUTO_FISHER_START = 0.2;
+
+export interface AutoFisherConfig {
+	name: string;
+	description: string;
+	baseCost: number;
+	costGrowth: number;
+	maxLevel: number;
+}
+
+export const AUTO_FISHER: AutoFisherConfig = {
+	name: 'Clockwork Rig',
+	description: 'A sprung arm that works the rod for you, wherever you have pointed it.',
+	// Level 1 lands around the ten-minute mark, which is where holding the
+	// button stops being novel and starts being a chore. Growth sits inside the
+	// 3.58-4.63 band the gear tracks use, at the expensive end, because a fully
+	// upgraded rig is a second pair of hands.
+	baseCost: 2_400,
+	costGrowth: 4.45,
+	maxLevel: 12
+};
+
+/**
+ * Making the rig work while the game is closed. One purchase, no levels.
+ *
+ * Priced above the Ocean unlock (1.64e11) on purpose: in the run where it
+ * first becomes reachable it is a genuine choice against opening the last
+ * source, not a box to tick on the way past.
+ */
+export const AUTO_FISHER_OFFLINE_COST = 5e11;
+
+// ---------------------------------------------------------------------------
 // Prestige
 // ---------------------------------------------------------------------------
 
@@ -326,7 +380,7 @@ export const SAVE_KEY = 'fishcrimental.save';
  * dismisses the banner protecting it.
  */
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}.bak`;
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const AUTOSAVE_MS = 10_000;
 
 // ---------------------------------------------------------------------------

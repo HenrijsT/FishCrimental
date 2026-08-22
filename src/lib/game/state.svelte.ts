@@ -19,6 +19,10 @@ import {
 import {
 	accumulate,
 	affordableDeckhands,
+	autoFisherCastsPerSecond,
+	autoFisherFraction,
+	buyAutoFisher,
+	buyAutoFisherOffline,
 	buyBoat,
 	buyBoatUpgrade,
 	buyFuel,
@@ -232,7 +236,18 @@ export class Game {
 		if (elapsed <= 0) return;
 
 		this.state.playTime += elapsed;
-		accumulate(this.state, this.modifiers, elapsed);
+		// The rig holds the rod *for* you. While you are holding it yourself it
+		// stands down, so a maxed rig matches a human exactly and can never
+		// stack with one into something faster than playing.
+		accumulate(
+			this.state,
+			this.modifiers,
+			elapsed,
+			1,
+			undefined,
+			Math.random,
+			this.casting ? 0 : 1
+		);
 		this.#keepFishable();
 		this.#checkJokes();
 		this.#checkAchievements();
@@ -342,7 +357,15 @@ export class Game {
 			const modifiers = computeModifiers(state);
 			const coinsAtChunkStart = state.coins;
 
-			const step = accumulate(state, modifiers, chunkSeconds, OFFLINE_EFFICIENCY);
+			const step = accumulate(
+				state,
+				modifiers,
+				chunkSeconds,
+				OFFLINE_EFFICIENCY,
+				undefined,
+				Math.random,
+				state.autoFisherOffline ? 1 : 0
+			);
 			fish = fish.plus(step.fish);
 			value = value.plus(step.value);
 			fellBack = fellBack || step.fellBack;
@@ -577,6 +600,20 @@ export class Game {
 
 	buyPearlUpgrade(id: Parameters<typeof buyPrestigeUpgrade>[1]): boolean {
 		return buyPrestigeUpgrade(this.state, id);
+	}
+
+	/** 0 to 1 — how close the rig is to a human hand. */
+	autoFisherSpeed = $derived(autoFisherFraction(this.state.autoFisher));
+	autoFisherRate = $derived(autoFisherCastsPerSecond(this.state, this.modifiers));
+
+	buyRig(): boolean {
+		const bought = buyAutoFisher(this.state);
+		if (bought) this.#checkAchievements();
+		return bought;
+	}
+
+	buyRigOffline(): boolean {
+		return buyAutoFisherOffline(this.state);
 	}
 
 	boatBlocker = $derived(sourceBlocker(this.state, this.state.activeSource, this.modifiers));

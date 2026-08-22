@@ -1,5 +1,6 @@
 import { FishingSources } from '$lib/fishing_sources';
 import {
+	AUTO_FISHER,
 	BOAT_COST,
 	LICENCES,
 	LICENCE_IDS,
@@ -172,6 +173,13 @@ export function nextStep(state: GameState): NextStep | null {
 	if (UPGRADE_IDS.every((id) => state.upgrades[id].eq(0)) && state.coins.gte(cheapest.cost)) {
 		return {
 			text: `You can afford the ${UPGRADES[cheapest.id].name}. Gear compounds — buy early.`,
+			tab: 'gear'
+		};
+	}
+
+	if (state.autoFisher.eq(0) && state.coins.gte(AUTO_FISHER.baseCost)) {
+		return {
+			text: `You can afford the ${AUTO_FISHER.name}. It holds the rod for you while you do something else.`,
 			tab: 'gear'
 		};
 	}
