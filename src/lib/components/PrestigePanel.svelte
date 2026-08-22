@@ -12,6 +12,12 @@
 	// Named `g` rather than `state` — see the note in Fishdex.svelte.
 	const g = $derived(game.state);
 	const pending = $derived(pearlsFor(g.lifetimeCoins));
+	// The bonus multiplies `fishPerCast` and `sellMultiplier` alike, so income
+	// moves by its square. The panel used to print the single application and
+	// understate the real effect by that factor.
+	const pearlBonus = $derived(pearlMultiplier(g.pearls));
+	const pearlIncome = $derived(pearlBonus.times(pearlBonus));
+
 	const progress = $derived(Math.min(1, g.lifetimeCoins.div(PRESTIGE_THRESHOLD).toNumber() || 0));
 
 	let confirming = $state(false);
@@ -46,9 +52,21 @@
 		</div>
 		<div>
 			<dt>Pearl bonus</dt>
-			<dd><Num value={pearlMultiplier(g.pearls)} />×</dd>
+			<dd><Num value={pearlBonus} />× twice</dd>
+		</div>
+		<div>
+			<dt>Income effect</dt>
+			<dd><Num value={pearlIncome} />×</dd>
 		</div>
 	</dl>
+
+	<p class="faint small">
+		The Pearl bonus lands on both halves of the sum — every cast lands
+		<Num value={pearlBonus} />× the fish, and every fish sells for
+		<Num value={pearlBonus} />× as much — so what you actually earn moves by the square, <Num
+			value={pearlIncome}
+		/>×.
+	</p>
 
 	<div class="progress">
 		<div class="bar" role="presentation">
