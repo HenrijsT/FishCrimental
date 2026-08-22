@@ -11,6 +11,7 @@ import {
 	LICENCE_IDS,
 	PRESTIGE_UPGRADES,
 	PRESTIGE_UPGRADE_IDS,
+	AUTO_FISHER,
 	SAVE_BACKUP_KEY,
 	SAVE_KEY,
 	SAVE_VERSION,
@@ -86,7 +87,11 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 		licences: grandfatherLicences(data.unlocked),
 		boat: grandfatherBoat(data.unlocked),
 		version: 3
-	})
+	}),
+	// 3 → 4: the auto-fisher. Purely additive — a version 3 save simply has not
+	// bought one, which is what the defaults below already say. The step exists
+	// so the version is stamped explicitly rather than by `fromRaw`'s fallback.
+	3: (data) => ({ ...data, autoFisher: '0', autoFisherOffline: false, version: 4 })
 };
 
 function grandfatherLicences(unlocked: unknown): Raw {
@@ -331,6 +336,11 @@ export function fromRaw(data: Raw): GameState {
 
 		upgrades: readUpgrades(migrated.upgrades),
 		deckhands: readDeckhands(migrated.deckhands),
+		autoFisher: level(migrated.autoFisher, AUTO_FISHER.maxLevel),
+		// The rig cannot be running offline if it does not exist.
+		autoFisherOffline:
+			bool(migrated.autoFisherOffline, false) &&
+			level(migrated.autoFisher, AUTO_FISHER.maxLevel).gt(0),
 
 		pearls: positive(migrated.pearls).floor(),
 		allTimePearls: positive(migrated.allTimePearls).floor(),

@@ -4,7 +4,7 @@ import { D } from '$lib/decimal';
 import { formatNumber } from '$lib/format';
 import { FISH_TYPES, FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
-import { SOURCE_ORDER } from './config';
+import { SAVE_VERSION, SOURCE_ORDER } from './config';
 import {
 	accumulate,
 	autoCastsPerSecond,
@@ -198,6 +198,8 @@ describe('round two: version 1 saves carried fractional fish', () => {
 		expect(loaded.hold[FishType.Erotic].eq(0)).toBe(true);
 		expect(loaded.dex.Guppy.eq(3)).toBe(true);
 		expect(loaded.dex.Tetra).toBeUndefined();
-		expect(loaded.version).toBe(3);
+		// Not a literal: this asserts the migration chain runs all the way to
+		// the current format, whatever that is today.
+		expect(loaded.version).toBe(SAVE_VERSION);
 	});
 });

@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { game } from '$lib/game/state.svelte';
+	import { AUTO_FISHER } from '$lib/game/config';
 	import { TABS, availableTabs, type TabId } from '$lib/game/guide';
 	import AchievementsPanel from '$lib/components/AchievementsPanel.svelte';
+	import AutoFisherPanel from '$lib/components/AutoFisherPanel.svelte';
 	import CastPanel from '$lib/components/CastPanel.svelte';
 	import CatchTicker from '$lib/components/CatchTicker.svelte';
 	import CrewPanel from '$lib/components/CrewPanel.svelte';
@@ -36,6 +38,11 @@
 			badge:
 				tab.id === 'pearls' && game.prestigeReady ? '!' : seen.includes(tab.id) ? undefined : 'new'
 		}))
+	);
+	// The rig appears just before it is affordable, the same way every other
+	// surface in the game arrives when there is a reason to look at it.
+	const showRig = $derived(
+		game.state.autoFisher.gt(0) || game.state.lifetimeCoins.gte(AUTO_FISHER.baseCost * 0.5)
 	);
 	const current = $derived(TABS.find((tab) => tab.id === active));
 	const isNew = $derived(current !== undefined && !seen.includes(current.id));
@@ -115,6 +122,9 @@
 					<SourcePicker />
 				{:else if active === 'gear'}
 					<UpgradePanel />
+					{#if showRig}
+						<AutoFisherPanel />
+					{/if}
 				{:else if active === 'harbour'}
 					<HarbourPanel />
 				{:else if active === 'crew'}
