@@ -24,6 +24,8 @@ import {
 	accumulate,
 	buyBoat,
 	autoFisherCost,
+	boatUpgradeCeiling,
+	upgradeCeiling,
 	bucketCost,
 	buyAssistant,
 	buyAutoFisher,
@@ -262,7 +264,11 @@ function cheapestPurchase(state: GameState): Purchase | null {
 
 	for (const id of UPGRADE_IDS as UpgradeId[]) {
 		const level = state.upgrades[id];
-		if (level.gte(UPGRADES[id].maxLevel)) continue;
+		// Against the shopkeeper's ceiling, not the track's maximum. Compare to
+		// maxLevel and the greedy loop picks a gated track as "cheapest" every
+		// step, buys nothing, and the whole reference strategy stalls — silently,
+		// because buyUpgrade returns 0 rather than throwing.
+		if (level.gte(upgradeCeiling(state, id))) continue;
 		consider(upgradeCost(id, level), () => buyUpgrade(state, id, 1));
 	}
 
@@ -273,7 +279,7 @@ function cheapestPurchase(state: GameState): Purchase | null {
 
 	if (state.boat.owned) {
 		for (const id of BOAT_UPGRADE_IDS) {
-			if (state.boat.upgrades[id].gte(BOAT_UPGRADES[id].maxLevel)) continue;
+			if (state.boat.upgrades[id].gte(boatUpgradeCeiling(state, id))) continue;
 			consider(boatUpgradeCost(id, state.boat.upgrades[id]), () => buyBoatUpgrade(state, id));
 		}
 	}

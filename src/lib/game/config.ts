@@ -226,6 +226,29 @@ export const UPGRADES: Record<UpgradeId, UpgradeConfig> = {
 
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
 
+// ---------------------------------------------------------------------------
+// Shopkeepers
+// ---------------------------------------------------------------------------
+
+/**
+ * How much of a track the shopkeeper in each place will sell you, as a
+ * fraction of its maximum level, indexed by that place's position in
+ * `SOURCE_ORDER`.
+ *
+ * This is the whole shopkeeper mechanic: *"you cannot purchase the best parts
+ * without purchasing previous ones — you have to progress to new places to
+ * unlock better shopkeepers."* The man at the mud pool sells the cheap end of
+ * everything and nothing else; getting the best rod means reaching the place
+ * that stocks it.
+ *
+ * Expressed as one array rather than a per-track table so the ladder cannot
+ * drift between tracks, and so adding a source cannot silently leave a track
+ * ungated. A test asserts the length matches `SOURCE_ORDER`, that it rises,
+ * and that it ends at 1 — the last place must sell everything, or a track
+ * would be unfinishable.
+ */
+export const SHOPKEEPER_REACH = [0.08, 0.16, 0.26, 0.4, 0.55, 0.7, 0.82, 0.92, 1] as const;
+
 /** Cost of deckhand n+1 at a source is `deckhandBaseCost * DECKHAND_COST_GROWTH^n`. */
 export const DECKHAND_COST_GROWTH = 1.79;
 
