@@ -5,13 +5,15 @@ import { FishingSources, sources } from '../fishing_sources';
 import type { Fish } from './fish';
 import { RandomIndex } from '$lib/random_picker';
 import { smallFishes } from './small_fishes';
+import { oddityFishes } from './oddity_fishes';
 import { type FishType, fishTypeBaseChance } from '$lib/fish_types';
 
 export const fishes = {
 	...smallFishes,
 	...mediumFishes,
 	...largeFishes,
-	...sharkFishes
+	...sharkFishes,
+	...oddityFishes
 };
 
 // Map all sources to the fish they can catch

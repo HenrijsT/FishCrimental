@@ -1,9 +1,3 @@
-import { writable, type Writable } from 'svelte/store';
-import Decimal from 'break_eternity.js';
-
-//TODO: Jelly fish description opens up during the gameplay. After finishing the game -
-// A popup shows up about you not having any Jelly fish with "Don't be too Jelly" :D
-
 export enum FishType {
 	Small = 'Small',
 	Medium = 'Medium',
@@ -13,10 +7,9 @@ export enum FishType {
 	Jelly = 'Jelly'
 }
 
-export const fishTypeCurrentCount: Map<FishType, Writable<Decimal>> = new Map();
+export const FISH_TYPES = Object.values(FishType);
 
-Object.values(FishType).forEach((i) => fishTypeCurrentCount.set(i, writable(new Decimal(0))));
-
+/** Coins a single fish of this type is worth before any multiplier. */
 export const fishTypeBaseValue: Record<FishType, number> = {
 	[FishType.Small]: 2,
 	[FishType.Medium]: 5,
@@ -26,22 +19,33 @@ export const fishTypeBaseValue: Record<FishType, number> = {
 	[FishType.Jelly]: 0
 };
 
-export const fishTypeBaseChance = new Map([
+/**
+ * Fallback rarity weights. Every source overrides these in
+ * `src/lib/game/config.ts`; this table is what a source falls back to when it
+ * has no explicit mix.
+ */
+export const fishTypeBaseChance = new Map<FishType, number>([
 	[FishType.Small, 90],
 	[FishType.Medium, 7],
 	[FishType.Large, 2],
 	[FishType.Shark, 1],
-	[FishType.Erotic, 0]
+	[FishType.Jelly, 4],
+	[FishType.Erotic, 0.00011]
 ]);
 
-// test fish random picker
-/*console.log('random fish:', fishTypeChanceIndex.pick());
-  console.time("a");
-  const picks: Record<string, number> = {};
-  for (let i = 0; i < 100; i++) {
-    const item = fishTypeChanceIndex.pick();
-    picks[item] = (picks[item] || 0) + 1
-  }
-  console.timeEnd("a");
-  console.log(picks);
-  */
+/** Types that count as a "rare" catch — the luck stat pushes weight into these. */
+export const RARE_FISH_TYPES: readonly FishType[] = [
+	FishType.Medium,
+	FishType.Large,
+	FishType.Shark,
+	FishType.Erotic
+];
+
+export const fishTypeLabel: Record<FishType, string> = {
+	[FishType.Small]: 'Small',
+	[FishType.Medium]: 'Medium',
+	[FishType.Large]: 'Large',
+	[FishType.Shark]: 'Shark',
+	[FishType.Erotic]: 'Erotic',
+	[FishType.Jelly]: 'Jelly'
+};
