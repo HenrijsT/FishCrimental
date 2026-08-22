@@ -302,3 +302,138 @@ have caught this — it needed a browser actually pressing the button.
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 136 passing · `pnpm audit:ui` performance 1.00, accessibility 1.00,
 best-practices 1.00, SEO 1.00.
+
+---
+
+# Summary
+
+The game is finished and playable. Every phase in the brief was completed; nothing was
+cut.
+
+Run it with:
+
+```sh
+pnpm install
+pnpm dev        # then open http://localhost:5173
+```
+
+## What was built, phase by phase
+
+**Stage 0 — bug fixes** (`fix/bug-fixes`, merged with `--no-ff` into `feat/going-ham`).
+All five bugs fixed. `RandomIndex` rebuilt on a cumulative-weight array with binary
+search, so fractional and enormous weights both work. The 100-iteration `console.log`
+simulation that ran at module import is gone, replaced by a test suite that asserts
+real distribution invariants. `handleMouseDown` takes the selected source instead of
+always fishing the Ocean. `sellFish` returns the profit instead of logging a number it
+had already zeroed. The SvelteKit placeholder at `/` became the game, and `/test` was
+deleted. Vitest was added here because bug 2 required somewhere for the distribution
+check to live.
+
+**Phase 1 — Foundation.** One `$state` object behind one store class, replacing the
+`Map<FishType, Writable<Decimal>>`. `Decimal` for every currency, count, cost and
+multiplier. A strict `parseDecimal` that validates against the grammar
+`Decimal.toString()` actually emits, because `new Decimal('banana')` returns 0 rather
+than throwing. One number formatter (K/M/B/T → scientific → e-stacked layered).
+Versioned localStorage saves with a migration chain and an export/import blob. Offline
+progress computed in a single pass per source, capped at eight hours. Full Svelte 5
+runes migration.
+
+**Phase 2 — Core loop.** Playable at `/`: source picker, hold-to-fish with a cast bar,
+the hold, selling, the catch ticker. Dark maritime theme, responsive. `pnpm audit:ui`
+added and passing.
+
+**Phase 3 — Economy.** Five gear upgrades on exponential Decimal costs, a global buy
+amount (×1 / ×10 / ×25 / Max) using closed-form geometric-series pricing rather than
+loops, and the tabbed layout with the rod permanently on screen beside it.
+
+**Phase 4 — Automation.** Deckhands per source, reusing the player's modifier stack at
+42% base efficiency, plus the Crew Quarters multiplier. The manual→idle handover is
+shown explicitly and measured by the simulator.
+
+**Phase 5 — Depth.** Fishdex over 47 species with a permanent +1.85% sale bonus each,
+prestige with Pearls and a five-branch Pearl tree, 17 achievements (one hidden), toasts,
+and both joke payoffs.
+
+**Phase 6 — Polish.** Settings, scientific-notation mode, reduce motion, run
+statistics, export/import, a real README, and a fix for a cast-breaking pointer-capture
+bug that only a browser could find.
+
+## Compromises, with the real numbers
+
+**No quality gate was relaxed.** `pnpm check`, `pnpm lint`, `pnpm build`, `pnpm test`
+and `pnpm audit:ui` all pass at their original thresholds:
+
+| Gate | Result |
+|---|---|
+| `pnpm check` | 395 files, **0 errors, 0 warnings** |
+| `pnpm lint` | Prettier clean, ESLint clean |
+| `pnpm build` | ok — static output in `build/static` |
+| `pnpm test` | **136 passing** across 11 files |
+| `pnpm audit:ui` | performance **1.00**, accessibility **1.00**, best-practices **1.00**, SEO **1.00** (three runs) |
+
+The compromises that were made are design decisions, not relaxed gates:
+
+1. **Two joke species were added to a codebase the brief said to reuse, not rewrite.**
+   `FishType.Jelly` (sells 0) and `FishType.Erotic` (sells 999) were in the enum with
+   no species behind them, so neither could ever be caught and neither joke could ever
+   fire. Four species were added in a new file; no existing fish was touched. The
+   catalogue is now 47, not 43.
+2. **Per-source rarity mixes override the flat `fishTypeBaseChance` table.** With the
+   flat table, the Ocean — which only stocks Large, Shark, Jelly and Erotic — came out
+   62% jellyfish. The flat table is kept as the documented fallback.
+3. **Auto-fishing is deterministic, manual fishing is random.** Rolling RNG for 1e30
+   fish is not possible; deckhands use expected values, the player's rod rolls up to 16
+   real fish per cast and fills the remainder from the distribution.
+4. **The hold carries a coin value alongside per-type counts.** Fish from the Ocean are
+   worth ~1000× the same fish from the Pond, and a plain per-type inventory cannot
+   price a mixed hold. The alternative — 48 separate (source, type) buckets — would be
+   unreadable.
+5. **Offline catch is auto-sold** rather than dropped into the hold, so the "while you
+   were away" number is a payment rather than a promise.
+6. **The first prestige is defined as game completion**, which is when the
+   "Don't be too Jelly" popup fires.
+
+Balance was tuned against a simulated greedy player rather than by feel. The first
+attempt reached the first prestige in **6 minutes**; the shipped curves take
+**2 h 18 m** of active play (**3 h 08 m** for a mostly-idle player) and land at
+**1.00e15** lifetime coins, with sources opening at 5, 12, 18, 27, 37, 49 and 67
+minutes. Run 2 takes 1 h 02 m, run 3 24 m, run 4 1 m 25 s. Over a fixed three-hour
+window, run 1 reaches 4.3e15 and run 6 reaches **1.18e45**, with 4.27e12 Pearls banked.
+
+## Nothing was cut
+
+All six phases are complete. Two things are worth naming as deliberate scope choices
+rather than omissions:
+
+- **There are no component-level UI tests.** The brief's test list is game maths, and
+  adding jsdom plus a testing library would have meant installing packages beyond what
+  the brief calls for. Instead the UI is verified by an automated Chrome DevTools
+  Protocol playthrough and a responsive sweep — which is what caught the one real UI
+  bug in the build.
+- **The scratch scripts used for that verification live in the session scratchpad**,
+  not in the repo, because they are throwaway harnesses rather than a test suite.
+
+## What to review first
+
+1. **`src/lib/game/config.ts`** — every tuned number in one file. If the pacing feels
+   wrong, this is the only file to touch, and `balance.test.ts` will tell you what the
+   change did.
+2. **`src/lib/game/balance.ts` and `balance.test.ts`** — the simulated player and the
+   assertions that keep the curves honest. This is the least conventional part of the
+   build and the part most worth a second opinion.
+3. **`src/lib/decimal.ts`** — the `parseDecimal` grammar. It is the one place a
+   malformed save could quietly become a wrong number instead of an error.
+4. **`src/lib/game/state.svelte.ts`** — the single store, the tick loop, offline
+   settlement and the resume path.
+5. **The `fix/bug-fixes` branch** — left undeleted for review, as instructed.
+
+## Running it
+
+```sh
+pnpm install
+pnpm dev                                     # play it
+pnpm test                                    # 136 tests, ~14s
+CHROME_PATH=/usr/bin/google-chrome-stable pnpm audit:ui   # Lighthouse
+```
+
+Everything is committed locally on `feat/going-ham`. Nothing was pushed.
