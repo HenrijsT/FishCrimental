@@ -20,7 +20,9 @@ export default [
 		}
 	},
 	{
-		files: ['**/*.svelte'],
+		// Svelte 5 runes also live in `.svelte.ts` / `.svelte.js` modules, which
+		// eslint-plugin-svelte parses — they still need the TypeScript parser.
+		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
 		languageOptions: {
 			parserOptions: {
 				parser: ts.parser

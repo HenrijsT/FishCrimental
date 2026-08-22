@@ -8,10 +8,12 @@ const config = {
 	preprocess: [vitePreprocess({})],
 
 	kit: {
+		// Every route is prerendered, so no SPA fallback is needed — one used to
+		// be configured, and it overwrote the prerendered index.html with an
+		// empty shell.
 		adapter: adapterStatic({
 			pages: 'build/static',
-			assets: 'build/static',
-			fallback: 'index.html'
+			assets: 'build/static'
 		}),
 
 		prerender: {
