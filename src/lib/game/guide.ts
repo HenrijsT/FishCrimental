@@ -29,6 +29,7 @@ import type { GameState } from './types';
  */
 export const TAB_IDS = [
 	'water',
+	'shore',
 	'gear',
 	'harbour',
 	'crew',
@@ -60,6 +61,13 @@ export const TABS: TabDefinition[] = [
 		label: 'Water',
 		blurb: 'Pick where to fish. Deeper water is slower to work and pays far better.',
 		available: () => true
+	},
+	{
+		id: 'shore',
+		label: 'Shore',
+		blurb:
+			'Where the catch turns into coins. The trader pays badly; getting to town yourself pays properly.',
+		available: (state) => state.totalCasts.gte(3)
 	},
 	{
 		id: 'gear',

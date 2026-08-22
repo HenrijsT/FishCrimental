@@ -11,13 +11,19 @@
 	<div class="head">
 		<h2>The hold</h2>
 		<button onclick={() => game.sell()} disabled={state.holdValue.lte(0)}>
-			Sell · <Num value={state.holdValue.times(game.modifiers.sellMultiplier)} tone="coin" />
+			Sell · <Num
+				value={state.holdValue.times(game.modifiers.sellMultiplier).times(game.saleRate)}
+				tone="coin"
+			/>
 		</button>
 	</div>
 
 	<p class="faint note">
 		Fish are sorted by size. The bigger the fish the more it fetches, and where you caught it
 		matters more than what it is.
+		{#if !state.hasBicycle}
+			This button takes the trader's price — the Shore has a better one.
+		{/if}
 	</p>
 
 	{#if visible.length === 0}

@@ -61,6 +61,20 @@ export interface GameState {
 	upgrades: Record<UpgradeId, Decimal>;
 	deckhands: Record<FishingSources, Decimal>;
 
+	/** Bought or fished up. Unlocks riding to town for the full price. */
+	hasBicycle: boolean;
+	/**
+	 * Absolute wall-clock deadline, in ms, before which manual casting is
+	 * refused because you are in town selling.
+	 *
+	 * A deadline rather than a countdown: a hidden tab throttles timers to
+	 * roughly once a minute and `#settleOffline` never calls `tick()` at all, so
+	 * anything counted down never expires while the player is away.
+	 */
+	fishingBlockedUntil: number;
+	/** The Assistant: full price with no trip, and no bucket cap. */
+	hasAssistant: boolean;
+
 	/** Level of the Clockwork Rig. 0 means it has not been bought. */
 	autoFisher: Decimal;
 	/** Whether the rig has been paid to keep working while the game is shut. */
