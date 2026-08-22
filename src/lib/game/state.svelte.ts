@@ -30,6 +30,10 @@ import {
 	buyBucket,
 	holdRoom,
 	inTown,
+	runTrader,
+	traderProgress,
+	traderSecondsLeft,
+	traderStock,
 	rideToTown,
 	saleRate,
 	townSecondsLeft,
@@ -263,6 +267,10 @@ export class Game {
 		this.state.lastUpdate = now;
 		if (elapsed <= 0) return;
 
+		// The trader keeps his own appointment; the tick just notices he is due.
+		const visit = runTrader(this.state, this.modifiers, now);
+		if (visit.visits > 0) this.lastTraderEarned = visit.earned;
+
 		this.state.playTime += elapsed;
 		// The rig holds the rod *for* you. While you are holding it yourself it
 		// stands down, so a maxed rig matches a human exactly and can never
@@ -377,6 +385,8 @@ export class Game {
 		let value = d0();
 		let fellBack = false;
 		let fuelSpent = d0();
+		let traderVisits = 0;
+		let traderEarned = d0();
 
 		const chunks = Math.max(1, Math.min(OFFLINE_CHUNKS, Math.ceil(capped / 60)));
 		const chunkSeconds = capped / chunks;
@@ -403,9 +413,27 @@ export class Game {
 			const spent = coinsAtChunkStart.minus(state.coins);
 			if (spent.gt(0)) fuelSpent = fuelSpent.plus(spent);
 
-			// Nobody rides to town while the game is shut, so the trader is the
-			// buyer — unless an Assistant is minding the shop.
-			sellHold(state, modifiers, saleRate(state));
+			// Who empties the hold while the game is shut.
+			//
+			// With an Assistant it is sold as it lands, at full price, once per
+			// chunk — which is also what keeps `runBoat`'s standing fuel order
+			// funded, since that buys fuel out of coins and coins only arrive on
+			// a sale.
+			//
+			// Without one it is the trader, and he keeps his own schedule: the
+			// visits due inside this chunk are resolved by walking his deadline
+			// forward, so a settle split into twenty-four chunks and one done in
+			// a single step resolve the same number of arrivals. At a 90-second
+			// period there is at least one arrival in every chunk of any real
+			// length, so the fuel order stays funded either way.
+			if (state.hasAssistant) {
+				sellHold(state, modifiers, saleRate(state));
+			} else {
+				const chunkEnd = state.lastUpdate + (i + 1) * chunkSeconds * 1000;
+				const visit = runTrader(state, modifiers, chunkEnd);
+				traderVisits += visit.visits;
+				traderEarned = traderEarned.plus(visit.earned);
+			}
 		}
 
 		if (fish.lte(0) && fuelSpent.lte(0)) {
@@ -429,7 +457,9 @@ export class Game {
 			coins: state.coins.minus(coinsBefore).plus(fuelSpent),
 			autoSold: true,
 			fuelSpent,
-			fellBack
+			fellBack,
+			traderVisits,
+			traderEarned
 		};
 	}
 
@@ -559,11 +589,15 @@ export class Game {
 	// Actions
 	// -----------------------------------------------------------------------
 
-	/** Sell to whoever is buying. Without a bicycle that is the trader, cheaply. */
+	/**
+	 * Sell on demand.
+	 *
+	 * Only possible once you can get to town yourself. Before the bicycle there
+	 * is no on-demand sale at all — the trader comes when he comes, and that is
+	 * the whole reason the bucket and the bicycle matter.
+	 */
 	sell(): Decimal {
-		const earned = sellHold(this.state, this.modifiers, saleRate(this.state));
-		this.#checkAchievements();
-		return earned;
+		return this.ride();
 	}
 
 	/** Full price, at the cost of staying off the water while you are gone. */
@@ -671,6 +705,13 @@ export class Game {
 	buyPearlUpgrade(id: Parameters<typeof buyPrestigeUpgrade>[1]): boolean {
 		return buyPrestigeUpgrade(this.state, id);
 	}
+
+	/** What the last trader paid, for a one-line note on the Shore. */
+	lastTraderEarned = $state<Decimal | null>(null);
+
+	traderStock = $derived(traderStock(this.state));
+	traderLeft = $derived(traderSecondsLeft(this.state, this.now));
+	traderFill = $derived(traderProgress(this.state, this.now));
 
 	/** Null once an Assistant is minding the catch — nothing limits the hold. */
 	holdRoom = $derived(holdRoom(this.state));

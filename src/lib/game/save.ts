@@ -15,6 +15,7 @@ import {
 	BUCKET_MAX_LEVEL,
 	SAVE_BACKUP_KEY,
 	TOWN_TRIP_SECONDS,
+	TRADER_PERIOD_SECONDS,
 	SAVE_KEY,
 	SAVE_VERSION,
 	SOURCE_ORDER,
@@ -62,6 +63,12 @@ function clampDeadline(value: unknown): number {
 	const parsed = num(value, 0);
 	if (parsed <= 0) return 0;
 	return Math.min(parsed, Date.now() + TOWN_TRIP_SECONDS * 1000);
+}
+
+function clampTraderDeadline(value: unknown): number {
+	const parsed = num(value, 0);
+	if (parsed <= 0) return 0;
+	return Math.min(parsed, Date.now() + TRADER_PERIOD_SECONDS * 1000);
 }
 
 /** Whole, non-negative, and never above the ceiling the game defines. */
@@ -349,6 +356,10 @@ export function fromRaw(data: Raw): GameState {
 
 		upgrades: readUpgrades(migrated.upgrades),
 		deckhands: readDeckhands(migrated.deckhands),
+		// Clamped like the town trip: a deadline far in the future would stop the
+		// trader ever arriving again.
+		nextTraderAt: clampTraderDeadline(migrated.nextTraderAt),
+		traderVisits: Math.max(0, Math.floor(num(migrated.traderVisits, 0))),
 		bucketLevel: level(migrated.bucketLevel, BUCKET_MAX_LEVEL),
 		hasBicycle: bool(migrated.hasBicycle, false),
 		// Clamped, not just parsed. `num()` only checks finiteness, so a

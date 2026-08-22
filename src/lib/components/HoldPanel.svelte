@@ -15,19 +15,25 @@
 				<span class="cap"><Num value={game.holdSize} /> / <Num value={game.bucketSize} /></span>
 			{/if}
 		</h2>
-		<button onclick={() => game.sell()} disabled={state.holdValue.lte(0)}>
-			Sell · <Num
-				value={state.holdValue.times(game.modifiers.sellMultiplier).times(game.saleRate)}
-				tone="coin"
-			/>
-		</button>
+		{#if state.hasBicycle}
+			<button onclick={() => game.ride()} disabled={state.holdValue.lte(0) || game.inTown}>
+				{#if game.inTown}
+					In town · {Math.ceil(game.townLeft)}s
+				{:else}
+					{state.hasAssistant ? 'Sell' : 'Ride to town'} ·
+					<Num value={state.holdValue.times(game.modifiers.sellMultiplier)} tone="coin" />
+				{/if}
+			</button>
+		{:else}
+			<span class="waiting">Trader in {Math.ceil(game.traderLeft)}s</span>
+		{/if}
 	</div>
 
 	<p class="faint note">
 		Fish are sorted by size. The bigger the fish the more it fetches, and where you caught it
 		matters more than what it is.
 		{#if !state.hasBicycle}
-			This button takes the trader's price — the Shore has a better one.
+			With no way into town, you sell to whoever comes past — and he pays what he likes.
 		{/if}
 	</p>
 
@@ -57,6 +63,12 @@
 </section>
 
 <style>
+	.waiting {
+		font-size: 0.78rem;
+		color: var(--ink-dim);
+		font-variant-numeric: tabular-nums;
+	}
+
 	.cap {
 		font-size: 0.7rem;
 		font-weight: 400;

@@ -6,7 +6,8 @@
 		TOWN_TRIP_SECONDS,
 		TRADER_RATE
 	} from '$lib/game/config';
-	import { bucketCapacity } from '$lib/game/engine';
+	import { bucketCapacity, traderInStock } from '$lib/game/engine';
+	import CastBar from './CastBar.svelte';
 	import { game } from '$lib/game/state.svelte';
 	import { D } from '$lib/decimal';
 	import Num from './Num.svelte';
@@ -18,6 +19,9 @@
 	const canRide = $derived(g.hasBicycle && !game.inTown && g.holdValue.gt(0));
 
 	const maxedBucket = $derived(g.bucketLevel.gte(BUCKET_MAX_LEVEL));
+	const hasBike = $derived(traderInStock(g, 'bicycle'));
+	const hasBucketOffer = $derived(traderInStock(g, 'bucket'));
+	const hasAssistantOffer = $derived(traderInStock(g, 'assistant'));
 	const nextBucket = $derived(bucketCapacity(g.bucketLevel.plus(1)));
 </script>
 
@@ -30,16 +34,19 @@
 		you the time it takes to get there and back.
 	</p>
 
-	<div class="row">
-		<div class="text">
-			<h3 class="name">Sell where you stand</h3>
-			<p class="desc muted">
-				{Math.round(TRADER_RATE * 100)}% of what the catch is worth. No trip, no waiting.
-			</p>
+	<div class="trader">
+		<div class="trader-head">
+			<h3 class="name">The next trader</h3>
+			<span class="countdown">{Math.ceil(game.traderLeft)}s</span>
 		</div>
-		<button onclick={() => game.sell()} disabled={g.holdValue.lte(0)}>
-			<Num value={traderPays} tone="coin" />
-		</button>
+		<CastBar progress={game.traderFill} label="Time until the next trader" active />
+		<p class="desc muted">
+			He takes the whole bucket at {Math.round(TRADER_RATE * 100)}% of what it is worth — right now
+			that is <Num value={traderPays} tone="coin" /> — and brings whatever he happens to be carrying.
+		</p>
+		{#if game.lastTraderEarned}
+			<p class="last">Last trader paid <Num value={game.lastTraderEarned} tone="coin" />.</p>
+		{/if}
 	</div>
 
 	{#if g.hasBicycle}
@@ -75,8 +82,15 @@
 					off the water for {TOWN_TRIP_SECONDS}s.
 				</p>
 			</div>
-			<button onclick={() => game.purchaseBicycle()} disabled={g.coins.lt(BICYCLE_COST)}>
-				<Num value={D(BICYCLE_COST)} tone="coin" />
+			<button
+				onclick={() => game.purchaseBicycle()}
+				disabled={!hasBike || g.coins.lt(BICYCLE_COST)}
+			>
+				{#if hasBike}
+					<Num value={D(BICYCLE_COST)} tone="coin" />
+				{:else}
+					Not in stock
+				{/if}
 			</button>
 		</div>
 	{/if}
@@ -97,8 +111,15 @@
 				</p>
 			</div>
 			{#if !maxedBucket}
-				<button onclick={() => game.upgradeBucket()} disabled={g.coins.lt(game.bucketPrice)}>
-					<Num value={game.bucketPrice} tone="coin" />
+				<button
+					onclick={() => game.upgradeBucket()}
+					disabled={!hasBucketOffer || g.coins.lt(game.bucketPrice)}
+				>
+					{#if hasBucketOffer}
+						<Num value={game.bucketPrice} tone="coin" />
+					{:else}
+						Not in stock
+					{/if}
 				</button>
 			{/if}
 		</div>
@@ -111,8 +132,15 @@
 					the bucket as fast as you fill it.
 				</p>
 			</div>
-			<button onclick={() => game.purchaseAssistant()} disabled={g.coins.lt(ASSISTANT_COST)}>
-				<Num value={D(ASSISTANT_COST)} tone="coin" />
+			<button
+				onclick={() => game.purchaseAssistant()}
+				disabled={!hasAssistantOffer || g.coins.lt(ASSISTANT_COST)}
+			>
+				{#if hasAssistantOffer}
+					<Num value={D(ASSISTANT_COST)} tone="coin" />
+				{:else}
+					Not in stock
+				{/if}
 			</button>
 		</div>
 	{:else}
@@ -129,6 +157,31 @@
 		font-size: 0.8rem;
 		max-width: 62ch;
 		margin: 0.3rem 0 0.75rem;
+	}
+
+	.trader {
+		display: grid;
+		gap: 0.4rem;
+		padding: 0.6rem 0;
+		border-top: 1px solid var(--edge);
+	}
+
+	.trader-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.countdown {
+		font-size: 0.85rem;
+		color: var(--brass);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.last {
+		font-size: 0.75rem;
+		color: var(--foam);
 	}
 
 	.row {

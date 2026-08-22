@@ -33,7 +33,7 @@ import {
 	buyBoatUpgrade,
 	inTown,
 	rideToTown,
-	saleRate,
+	runTrader,
 	buyDeckhand,
 	buyFuel,
 	buyLicence,
@@ -191,12 +191,19 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 			random,
 			1 - manualUptime
 		);
-		// A greedy player takes the full price whenever the bicycle is free to
-		// use, and the trader's price the rest of the time.
-		if (state.hasBicycle && !inTown(state, clock())) {
+		// Who buys, and when.
+		//
+		// With an Assistant the catch is sold as it lands. With a bicycle the
+		// player rides in whenever the last trip has finished. With neither
+		// there is no on-demand sale at all — the trader comes when he comes,
+		// and the bucket fills in the meantime. That waiting is the whole
+		// economic shape of the opening, so the simulation has to feel it too.
+		if (state.hasAssistant) {
+			sellHold(state, modifiers);
+		} else if (state.hasBicycle && !inTown(state, clock())) {
 			rideToTown(state, modifiers, clock());
 		} else {
-			sellHold(state, modifiers, saleRate(state));
+			runTrader(state, modifiers, clock());
 		}
 
 		elapsed += step;

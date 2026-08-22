@@ -38,7 +38,11 @@ import {
 	BICYCLE_COST,
 	TOWN_RATE,
 	TOWN_TRIP_SECONDS,
+	TRADER_CATALOGUE,
+	TRADER_PERIOD_SECONDS,
 	TRADER_RATE,
+	TRADER_STOCK_SIZE,
+	type TraderOfferId,
 	AUTO_FISHER_START,
 	MIN_CAST_SECONDS,
 	PEARL_EXPONENT,
@@ -1065,6 +1069,7 @@ export function holdRoom(state: GameState): Decimal | null {
 export function buyBucket(state: GameState): boolean {
 	const level = state.bucketLevel;
 	if (level.gte(BUCKET_MAX_LEVEL)) return false;
+	if (!traderInStock(state, 'bucket')) return false;
 
 	const cost = bucketCost(level);
 	if (state.coins.lt(cost)) return false;
@@ -1090,8 +1095,87 @@ export function townSecondsLeft(state: GameState, now = Date.now()): number {
 	return (state.fishingBlockedUntil - now) / 1000;
 }
 
+// ---------------------------------------------------------------------------
+// The trader
+// ---------------------------------------------------------------------------
+
+/** Is this offer still worth showing? */
+export function traderOfferOpen(state: GameState, id: TraderOfferId): boolean {
+	if (id === 'bicycle') return !state.hasBicycle;
+	if (id === 'assistant') return !state.hasAssistant;
+	return !state.hasAssistant && state.bucketLevel.lt(BUCKET_MAX_LEVEL);
+}
+
+/**
+ * What the current trader is carrying.
+ *
+ * Rotates with the visit count, so an offer you want may be a visit or two
+ * away. That is the one thing a vendor adds over a price tag — a wait you
+ * cannot buy through — and it is bounded by the arrival period rather than by
+ * luck. When two or fewer offers are still open they are all in stock, so the
+ * opening can never stall waiting for the bicycle.
+ */
+export function traderStock(state: GameState): TraderOfferId[] {
+	const open = TRADER_CATALOGUE.filter((id) => traderOfferOpen(state, id));
+	if (open.length <= TRADER_STOCK_SIZE) return open;
+
+	const start = ((state.traderVisits % open.length) + open.length) % open.length;
+	return Array.from({ length: TRADER_STOCK_SIZE }, (_, i) => open[(start + i) % open.length]);
+}
+
+export function traderInStock(state: GameState, id: TraderOfferId): boolean {
+	return traderStock(state).includes(id);
+}
+
+/** Seconds until the next trader, for the progress bar. */
+export function traderSecondsLeft(state: GameState, now = Date.now()): number {
+	if (state.nextTraderAt <= 0) return TRADER_PERIOD_SECONDS;
+	return Math.max(0, (state.nextTraderAt - now) / 1000);
+}
+
+/** 0 to 1 across one arrival period. */
+export function traderProgress(state: GameState, now = Date.now()): number {
+	const left = traderSecondsLeft(state, now);
+	return Math.min(1, Math.max(0, 1 - left / TRADER_PERIOD_SECONDS));
+}
+
+/**
+ * Resolve every trader arrival due by `now`.
+ *
+ * Each arrival buys the whole hold at the trader's rate and rotates the stock.
+ * Catching up on a long absence is `floor(gap / period)` arrivals, resolved by
+ * walking the deadline forward rather than by sampling the clock — so a
+ * settle that happens in twenty-four chunks and one that happens in a single
+ * step both resolve the same number of visits.
+ */
+export function runTrader(
+	state: GameState,
+	modifiers: Modifiers,
+	now = Date.now()
+): { visits: number; earned: Decimal } {
+	let earned = d0();
+	let visits = 0;
+
+	// A fresh save has no appointment yet; make one and let it come round.
+	if (state.nextTraderAt <= 0) {
+		state.nextTraderAt = now + TRADER_PERIOD_SECONDS * 1000;
+		return { visits, earned };
+	}
+
+	const period = TRADER_PERIOD_SECONDS * 1000;
+	while (state.nextTraderAt <= now) {
+		earned = earned.plus(sellHold(state, modifiers, TRADER_RATE));
+		state.traderVisits += 1;
+		state.nextTraderAt += period;
+		visits += 1;
+	}
+
+	return { visits, earned };
+}
+
 export function buyBicycle(state: GameState): boolean {
 	if (state.hasBicycle) return false;
+	if (!traderInStock(state, 'bicycle')) return false;
 	if (state.coins.lt(BICYCLE_COST)) return false;
 
 	state.coins = state.coins.minus(BICYCLE_COST);
@@ -1101,6 +1185,7 @@ export function buyBicycle(state: GameState): boolean {
 
 export function buyAssistant(state: GameState): boolean {
 	if (state.hasAssistant) return false;
+	if (!traderInStock(state, 'assistant')) return false;
 	if (state.coins.lt(ASSISTANT_COST)) return false;
 
 	state.coins = state.coins.minus(ASSISTANT_COST);
@@ -1415,6 +1500,8 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		deckhands: zeroDeckhands(),
 		// Everything below is bought with coins, so it goes the way every coin
 		// purchase goes on a reset.
+		nextTraderAt: 0,
+		traderVisits: 0,
 		bucketLevel: d0(),
 		hasBicycle: false,
 		fishingBlockedUntil: 0,
