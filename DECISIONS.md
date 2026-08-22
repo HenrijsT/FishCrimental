@@ -1103,7 +1103,7 @@ failed; 8 of the 15 lifecycle tests failed on the original code, and 10 of the
 
 ### 1. Offline settle paid for the hold you already had, and handed it back
 
-`state.svelte.ts:287`, critical. `sellHold` ran *inside* the chunk loop; the
+`state.svelte.ts:287`, critical. `sellHold` ran _inside_ the chunk loop; the
 restore afterwards put the fish back without ever rolling back `coins`.
 
 Reproduced exactly as the audit described — three resumes with a 1e6 hold:
@@ -1118,7 +1118,7 @@ Silent with no deckhands, because the early return means no modal renders at
 all. It inflated `lifetimeCoins` identically, so it minted Pearls out of
 nothing.
 
-Fixed by zeroing the hold *before* the loop instead of restoring it after. That
+Fixed by zeroing the hold _before_ the loop instead of restoring it after. That
 repairs the early-return path for free: with the hold zeroed, a no-catch settle
 sells nothing.
 
@@ -1149,7 +1149,7 @@ The banner also gained a **Copy backup** button, because its old advice
 
 `state.svelte.ts:235`. Every caller discarded the boolean — the autosave, the
 `pagehide` handler, and the Save now button — while `SettingsPanel` went on
-asserting *"The game saves to this browser every 10 seconds."*
+asserting _"The game saves to this browser every 10 seconds."_
 
 New `write-failed` problem kind, raised on refusal and cleared when a write
 succeeds again. Deliberately non-blocking: a full quota should not also stop
@@ -1159,8 +1159,8 @@ the game trying.
 
 `state.svelte.ts:238`. Dismissing cleared the flag with no other effect, and
 the 10-second autosave was still armed — so ten seconds later the fresh game
-overwrote the preserved save. The banner's own advice, *export it and start
-fresh*, was impossible: `exportBlob()` serialised the brand-new game.
+overwrote the preserved save. The banner's own advice, _export it and start
+fresh_, was impossible: `exportBlob()` serialised the brand-new game.
 
 Two fixes. `dismissSaveProblem()` copies the raw bytes to
 `fishcrimental.save.bak` first (new `SAVE_BACKUP_KEY`, `backupRawSave`,
@@ -1185,8 +1185,8 @@ into `fuelForTrip` and `castsFromFuel` so the estimating and spending paths run
 the same code rather than two copies of it.
 
 **This uncovered a second drift the audit did not name.** The stranded fallback
-was `reachableSource`, which consults the tank — so it answered *Ocean* when
-asked before the trip and *Sea* when asked after the fuel was burned. The
+was `reachableSource`, which consults the tank — so it answered _Ocean_ when
+asked before the trip and _Sea_ when asked after the fuel was burned. The
 estimator and the settler disagreed by construction. New `shoreSource(state)`
 returns the deepest water workable from the shore, ignoring fuel entirely, so
 the answer does not depend on when you ask. This matches what `accumulate`
@@ -1265,7 +1265,7 @@ fish-list prototype and a progress bar.**
 **The design backlog is not exposed.** `ideas.txt`, `Goals/` and
 `USER-REQUIREMENTS.md` are all in `.git/info/exclude` and are untracked. The
 brief's concern that they "expose the entire design direction" is currently
-false. `DECISIONS.md` *is* tracked, but is not on `main` — it would become
+false. `DECISIONS.md` _is_ tracked, but is not on `main` — it would become
 public the first time `feat/going-ham` is pushed. That is a decision to take
 deliberately, not by accident.
 
@@ -1299,31 +1299,31 @@ its notice travel with distributions.
 
 Checked against the FSF's own GPL FAQ rather than folklore.
 
-- **Selling GPL software is explicitly permitted.** *"Yes, the GPL allows
+- **Selling GPL software is explicitly permitted.** _"Yes, the GPL allows
   everyone to do this. The right to sell copies is part of the definition of
-  free software."* There is no price cap. (`#DoesTheGPLAllowMoney`)
+  free software."_ There is no price cap. (`#DoesTheGPLAllowMoney`)
 - **Distributing a binary obliges you to offer the Corresponding Source to
   every recipient**, and under GPLv3 §6(a)/(d) by equivalent access through the
   same place at no further charge. (`#DoesTheGPLAllowDownloadFee`)
 - **A buyer may then redistribute freely, including for free.** The FSF is
-  blunt: *"someone could pay your fee, and then put her copy on a web site for
-  the general public."* (`#DoesTheGPLRequireAvailabilityToPublic`)
-- **You cannot stop them.** *"You can't require people to pay you when they get
-  a copy from someone else."*
+  blunt: _"someone could pay your fee, and then put her copy on a web site for
+  the general public."_ (`#DoesTheGPLRequireAvailabilityToPublic`)
+- **You cannot stop them.** _"You can't require people to pay you when they get
+  a copy from someone else."_
 - **Hosting is not distribution.** GPLv3 has no network-use clause, so serving
   the game as a web page triggers nothing. **Shipping a Tauri or Electron build
   on Steam is distribution and does trigger it.** That asymmetry is the whole
   practical point for this project.
 - **A copyright holder may licence future versions differently, but cannot
-  withdraw rights already granted.** *"the public already has the right to use
-  the program under the GPL, and this right cannot be withdrawn."*
+  withdraw rights already granted.** _"the public already has the right to use
+  the program under the GPL, and this right cannot be withdrawn."_
   (`#CanDeveloperThirdParty`)
 
 The genre precedent is real and worth knowing: **Mindustry is GPL-3.0 and sells
 for $9.99 on Steam**, while the same game is free on itch.io, F-Droid and as
 automatic per-commit builds on GitHub. It works — but it works because the
-developer chose to give it away too. A paid GPL release is a *convenience and
-support* purchase, not an exclusive one. That is a legitimate business model.
+developer chose to give it away too. A paid GPL release is a _convenience and
+support_ purchase, not an exclusive one. That is a legitimate business model.
 It is a different one from what I1 describes.
 
 ### The decision
@@ -1367,7 +1367,7 @@ there are none).
 - **`LICENSE`** — replaced. Proprietary, source-available: read, fork, build
   locally, quote with attribution; no distribution, hosting, sale or derivative
   works without permission. Real copyright line: `Copyright (c) 2026 Henrijs
-  Treiguts`. Includes a contribution grant, so a future pull request does not
+Treiguts`. Includes a contribution grant, so a future pull request does not
   create the exact fragmentation problem `Gogls` nearly created. Includes an
   explicit **note on earlier versions** stating that whatever the old GPL text
   granted for already-published commits is not withdrawn — because it cannot
@@ -1400,4 +1400,3 @@ residual claim; and the Steam Distribution Agreement's own terms, which I did
 not obtain. **I am not a lawyer and this is not legal advice.** The practical
 exposure is small — the published prototype has no game in it — but "small" is
 a judgement, not a legal opinion.
-
