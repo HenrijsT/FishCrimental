@@ -8,6 +8,11 @@ export interface FormatOptions {
 	precision?: number;
 	/** Digits used below 1000. Default 0 for integers, `precision` otherwise. */
 	smallPrecision?: number;
+	/**
+	 * `short` uses K/M/B/T below 1e15; `scientific` goes straight to exponents.
+	 * Layered notation is identical either way — there is no suffix for `ee300`.
+	 */
+	notation?: 'short' | 'scientific';
 }
 
 function trimTrailingZeros(text: string): string {
@@ -67,7 +72,7 @@ export function formatNumber(value: DecimalSource, options: FormatOptions = {}):
 
 	const exponent = Math.floor(Math.log10(magnitude));
 
-	if (exponent < 15) {
+	if (exponent < 15 && options.notation !== 'scientific') {
 		const tier = Math.floor(exponent / 3);
 		const mantissa = magnitude / Math.pow(1000, tier);
 		return `${mantissa.toFixed(precision)}${SHORT_SUFFIXES[tier]}`;

@@ -8,6 +8,7 @@
 	import LipfishModal from '$lib/components/LipfishModal.svelte';
 	import PrestigeModal from '$lib/components/PrestigeModal.svelte';
 	import PrestigePanel from '$lib/components/PrestigePanel.svelte';
+	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import Toasts from '$lib/components/Toasts.svelte';
 	import CatchTicker from '$lib/components/CatchTicker.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
@@ -17,7 +18,7 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import UpgradePanel from '$lib/components/UpgradePanel.svelte';
 
-	const TAB_IDS = ['water', 'gear', 'crew', 'dex', 'pearls', 'records'];
+	const TAB_IDS = ['water', 'gear', 'crew', 'dex', 'pearls', 'records', 'settings'];
 
 	let active = $state('water');
 
@@ -35,7 +36,8 @@
 		{ id: 'crew', label: 'Crew' },
 		{ id: 'dex', label: 'Fishdex' },
 		{ id: 'pearls', label: 'Pearls', badge: game.prestigeReady ? '!' : undefined },
-		{ id: 'records', label: 'Records' }
+		{ id: 'records', label: 'Records' },
+		{ id: 'settings', label: 'Settings' }
 	]);
 
 	onMount(() => {
@@ -45,13 +47,15 @@
 		game.init();
 
 		const save = () => game.save();
-		document.addEventListener('visibilitychange', save);
+		const onVisibility = () => (document.hidden ? game.save() : game.resume());
+
+		document.addEventListener('visibilitychange', onVisibility);
 		window.addEventListener('pagehide', save);
 
 		return () => {
 			save();
 			game.stop();
-			document.removeEventListener('visibilitychange', save);
+			document.removeEventListener('visibilitychange', onVisibility);
 			window.removeEventListener('pagehide', save);
 		};
 	});
@@ -65,7 +69,7 @@
 	/>
 </svelte:head>
 
-<div class="shell">
+<div class="shell" class:reduce-motion={game.state.settings.reduceMotion}>
 	<TopBar />
 
 	<div class="grid">
@@ -91,6 +95,8 @@
 					<PrestigePanel />
 				{:else if active === 'records'}
 					<AchievementsPanel />
+				{:else if active === 'settings'}
+					<SettingsPanel />
 				{/if}
 			</div>
 		</main>

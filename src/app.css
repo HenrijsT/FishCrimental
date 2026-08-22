@@ -171,3 +171,12 @@ code,
 		transition-duration: 0.001ms !important;
 	}
 }
+
+/* The in-game "reduce motion" setting, alongside the OS-level media query. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+	animation-duration: 0.001ms !important;
+	animation-iteration-count: 1 !important;
+	transition-duration: 0.001ms !important;
+}
