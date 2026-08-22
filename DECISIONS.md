@@ -572,16 +572,16 @@ spam clicks. **No console errors or warnings at any point, before or after the f
 `WaterScene.svelte` renders them through one SVG skeleton. That gets eight scenes
 that read as different places without eight hand-drawn files:
 
-| | |
-|---|---|
-| Pond | warm green, reeds, lily pads, sun, you can see the bottom |
-| Stream | pale blue-green, boulders, pebbles, current streaks, trees |
-| River | wider, tree line, current, boulders, more depth |
-| Lake | still, distant hills, a jetty, light rays |
-| Lagoon | turquoise over a white sandbar, coral, bright sun |
-| Sea | open blue, gulls, real swell |
-| Offshore | grey, heavy swell, a marker buoy, kelp |
-| Ocean | near-black under starlight, the heaviest swell, deep kelp |
+|          |                                                            |
+| -------- | ---------------------------------------------------------- |
+| Pond     | warm green, reeds, lily pads, sun, you can see the bottom  |
+| Stream   | pale blue-green, boulders, pebbles, current streaks, trees |
+| River    | wider, tree line, current, boulders, more depth            |
+| Lake     | still, distant hills, a jetty, light rays                  |
+| Lagoon   | turquoise over a white sandbar, coral, bright sun          |
+| Sea      | open blue, gulls, real swell                               |
+| Offshore | grey, heavy swell, a marker buoy, kelp                     |
+| Ocean    | near-black under starlight, the heaviest swell, deep kelp  |
 
 Depth and swell both increase monotonically down the list, and a test asserts it.
 `SourceThumb.svelte` renders the same palette at 48×32 so the picker list is
@@ -637,3 +637,100 @@ the in-game Reduce Motion setting stop all of it, verified live. **Lighthouse st
 scores 1.00 / 1.00 / 1.00 / 1.00** with the animation running, so nothing had to be cut.
 
 Responsive re-checked at 360 / 768 / 1440 px: no horizontal overflow. No console errors.
+
+## Stage 2 — licences and the boat
+
+### Licences
+
+**Decision: a chain of four, not independent permits.** Independent licences would let
+a player with one big payday buy a Deep Sea Charter before they had ever fished a
+stream, which reads wrong and flattens the progression. A chain gives four ordered
+beats and a natural place for flavour.
+
+| Licence | Covers | Cost |
+|---|---|---|
+| Inland Angling Licence | Stream, River | 360 |
+| Lake & Lagoon Permit | Lake, Lagoon | 14,000 |
+| Coastal Waters Licence | Sea, Offshore | 640,000 |
+| Deep Sea Charter | Ocean | 38,000,000 |
+
+The Pond needs nothing — the first two minutes of the game must not have a form to
+fill in. A licence is separate from the source's coin cost, so opening new water has
+two beats: qualify, then afford.
+
+### The boat
+
+**Decision: Offshore and Ocean need it; the Sea does not.** The brief left the Sea to
+judgement. Keeping it shore-accessible means the boat arrives *after* the player has
+met licences, deckhands, upgrades and the Fishdex, rather than piling a fifth system on
+top of a fourth. It also gives the fallback somewhere real to fall back *to* — the Sea
+is a genuinely productive place to be stranded, not a punishment.
+
+- **Boat** — 1,950,000 coins, bought once.
+- **Fuel** — 0.85 L per open-water cast at 5,400 coins/L, from a 400 L tank.
+- **Condition** — 0–100, 0.006 lost per open-water cast, 74,000 coins per point to repair.
+- **Fit-out** — Reinforced Hull (wear ×0.72/level), Efficient Engine (fuel ×0.74/level),
+  Larger Tank (×1.85/level), and Standing Fuel Order (one-off).
+
+### Never a fail state — and what that actually took
+
+The brief's hard constraint drove four separate design choices, each with a test:
+
+1. **Condition never stops the boat.** `boatEfficiency` maps 0–100 onto 0.4–1.0 and is
+   applied as *drag on cast time*. A completely neglected boat is 60% slower. It is
+   never 0, and it costs nothing to leave broken except speed.
+2. **An empty tank falls back, it does not halt.** `reachableSource` walks back to the
+   deepest water that is unlocked, licensed and shore-accessible. In `accumulate`, the
+   casts the boat could not cover are *worked inshore instead* and still pay. A test
+   runs eight hours with an empty tank, zero condition and no money and asserts the
+   value earned is greater than zero and nothing was destroyed.
+3. **The player is told, in plain words.** A persistent banner names the water they were
+   moved from and to, says nothing was lost, and offers a jump to the harbour. The
+   offline summary carries the same line when it happened while they were away.
+4. **A standing order removes the chore entirely.** It is a *delivery*, not a tank
+   top-up — it buys exactly what the trip needs, capped only by coins, and bills for it.
+   An empty tank with a standing order and coins in hand counts as able to sail.
+
+**Two bugs came out of playtesting this, not out of the type checker:**
+
+- The stranded banner cleared itself on the very next 200 ms tick, because
+  `#keepFishable` tested the source the player had just been *moved to* rather than the
+  one they were moved *from*. Reproduced live: the banner never appeared at all.
+- With a standing order the tank ended each trip at exactly zero, and
+  `fuel / fuelPerCast` then floored to one cast short — so every trip reported a
+  fallback and the player was flagged as stranded despite a paid-up standing order.
+  Fixed with a small purchase margin, plus `canSail` treating an affordable standing
+  order as fuel in hand. Both have regression tests.
+
+### Pacing
+
+Both systems are bought by the simulated player in `simulateRun` — it takes each licence
+as soon as it is affordable and required, buys the boat before it needs open water,
+keeps the tank filled, arranges a standing order once it is worth 2.5× its price, and
+repairs below 65% condition.
+
+Adding the sinks pushed the first prestige from **2 h 18 m to 2 h 41 m**. Trimming
+licence and boat prices barely moved it (2 h 39 m) — the delay is the licence gate
+sitting in front of each tier, not the money. The lever that actually worked was the
+`market` upgrade cost growth, **3.71 → 3.62**, which brought it back to **2 h 25 m** —
+within 5% of where it was before this stage.
+
+| | before Stage 2 | after |
+|---|---|---|
+| First prestige | 2 h 18 m at 1.00e15 | **2 h 25 m at 1.00e15** |
+| Mostly-idle player | 3 h 08 m | 3 h 30 m |
+| Sources open at | 5/12/18/27/37/49/67 m | 6/14/21/30/39/53/71 m |
+| Licences taken at | — | 3 / 14 / 23 / 33 m |
+| Boat bought at | — | 39 m |
+| Run 2 / 3 / 4 | 1 h 02 m / 24 m / 1 m 25 s | 1 h 03 m / 24 m / 57 s |
+| Run 6 lifetime (3 h) | 1.18e45 | **1.79e55** |
+
+Source unlock costs were also cut 20% to soften the double charge of licence-plus-price
+at each tier.
+
+**Save format 3**, with a migration that grandfathers an existing run: the licences
+covering water it had already opened are granted, and a save that had already reached
+open water is handed a boat. Nobody loses access to water mid-run.
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 213 passing · `pnpm audit:ui` 1.00 / 1.00 / 1.00 / 1.00.

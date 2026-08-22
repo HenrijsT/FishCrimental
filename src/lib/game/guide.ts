@@ -1,6 +1,22 @@
 import { FishingSources } from '$lib/fishing_sources';
-import { SOURCE_CONFIG, SOURCE_ORDER, UPGRADES, UPGRADE_IDS } from './config';
-import { deckhandCost, discoveredCount, nextLockedSource, upgradeCost } from './engine';
+import {
+	BOAT_COST,
+	LICENCES,
+	LICENCE_IDS,
+	SOURCE_CONFIG,
+	SOURCE_ORDER,
+	UPGRADES,
+	UPGRADE_IDS,
+	needsBoat
+} from './config';
+import {
+	canBuyLicence,
+	deckhandCost,
+	discoveredCount,
+	missingLicence,
+	nextLockedSource,
+	upgradeCost
+} from './engine';
 import type { GameState } from './types';
 
 export interface TabDefinition {
@@ -29,6 +45,15 @@ export const TABS: TabDefinition[] = [
 		label: 'Gear',
 		blurb: 'Five pieces of kit. Every one of them multiplies, and they stack.',
 		available: (state) => state.lifetimeCoins.gte(1)
+	},
+	{
+		id: 'harbour',
+		label: 'Harbour',
+		blurb: 'Licences for better water, and the boat you need past the Sea.',
+		available: (state) =>
+			state.coins.gte(LICENCES.inland.cost * 0.5) ||
+			LICENCE_IDS.some((id) => state.licences[id]) ||
+			state.boat.owned
 	},
 	{
 		id: 'crew',
@@ -112,6 +137,31 @@ export function nextStep(state: GameState): NextStep | null {
 	}
 
 	const next = nextLockedSource(state);
+
+	if (next && missingLicence(state, next)) {
+		const licence = missingLicence(state, next)!;
+		const ready = canBuyLicence(state, licence);
+		return {
+			text: ready
+				? `The ${next} needs the ${LICENCES[licence].name}. You can afford it.`
+				: `The ${next} needs the ${LICENCES[licence].name}. Keep selling.`,
+			tab: 'harbour'
+		};
+	}
+
+	if (next && needsBoat(next) && !state.boat.owned) {
+		return {
+			text: state.coins.gte(BOAT_COST)
+				? 'You can afford a boat. Open water is out of reach without one.'
+				: 'The next water is out of reach from the shore. You need a boat.',
+			tab: 'harbour'
+		};
+	}
+
+	if (state.boat.owned && state.boat.fuel.lte(0) && state.unlocked[SOURCE_ORDER[6]]) {
+		return { text: 'The tank is empty, so the crew are working inshore. Fuel up.', tab: 'harbour' };
+	}
+
 	if (next && state.coins.gte(SOURCE_CONFIG[next].unlockCost)) {
 		return { text: `You can open the ${next}. Deeper water pays far more per fish.`, tab: 'water' };
 	}

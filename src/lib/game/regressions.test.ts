@@ -198,6 +198,6 @@ describe('round two: version 1 saves carried fractional fish', () => {
 		expect(loaded.hold[FishType.Erotic].eq(0)).toBe(true);
 		expect(loaded.dex.Guppy.eq(3)).toBe(true);
 		expect(loaded.dex.Tetra).toBeUndefined();
-		expect(loaded.version).toBe(2);
+		expect(loaded.version).toBe(3);
 	});
 });

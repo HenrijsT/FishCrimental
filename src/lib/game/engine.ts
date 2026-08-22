@@ -12,8 +12,21 @@ import { fishes, sourcesToFish } from '$lib/fishes';
 import type { Fish } from '$lib/fishes/fish';
 import { RandomIndex } from '$lib/random_picker';
 import {
+	BOAT_BASE_FUEL_CAPACITY,
+	BOAT_BASE_FUEL_PER_CAST,
+	BOAT_BASE_WEAR_PER_CAST,
+	BOAT_COST,
+	BOAT_MIN_EFFICIENCY,
+	BOAT_UPGRADES,
+	BOAT_UPGRADE_IDS,
 	DECKHAND_BASE_EFFICIENCY,
 	DECKHAND_COST_GROWTH,
+	FUEL_PRICE,
+	LICENCES,
+	LICENCE_IDS,
+	REPAIR_COST_PER_POINT,
+	SOURCE_LICENCE,
+	needsBoat,
 	MIN_CAST_SECONDS,
 	PEARL_EXPONENT,
 	PEARL_MULTIPLIER_EXPONENT,
@@ -26,6 +39,8 @@ import {
 	SOURCE_ORDER,
 	UPGRADES,
 	UPGRADE_IDS,
+	type BoatUpgradeId,
+	type LicenceId,
 	type PrestigeUpgradeId,
 	type UpgradeId
 } from './config';
@@ -240,11 +255,28 @@ export function computeModifiers(state: GameState): Modifiers {
 	const castSeconds = {} as Record<FishingSources, number>;
 	const deckhandCastsPerSecond = {} as Record<FishingSources, number>;
 
+	// A worn boat slows every cast in open water — for the crew and for you.
+	const condition = boatEfficiency(state.boat.condition);
+
 	for (const source of SOURCE_ORDER) {
-		const seconds = Math.max(SOURCE_CONFIG[source].castSeconds * speedFactor, MIN_CAST_SECONDS);
+		const drag = needsBoat(source) ? 1 / condition : 1;
+		const seconds = Math.max(
+			SOURCE_CONFIG[source].castSeconds * speedFactor * drag,
+			MIN_CAST_SECONDS
+		);
 		castSeconds[source] = seconds;
 		deckhandCastsPerSecond[source] = (DECKHAND_BASE_EFFICIENCY * crewFactor) / seconds;
 	}
+
+	const boat = state.boat;
+	const fuelPerCast = D(BOAT_BASE_FUEL_PER_CAST).times(
+		D(BOAT_UPGRADES.engine.effect).pow(boat.upgrades.engine)
+	);
+	const wearPerCast =
+		BOAT_BASE_WEAR_PER_CAST * Math.pow(BOAT_UPGRADES.hull.effect, boat.upgrades.hull.toNumber());
+	const fuelCapacity = D(BOAT_BASE_FUEL_CAPACITY).times(
+		D(BOAT_UPGRADES.tank.effect).pow(boat.upgrades.tank)
+	);
 
 	return {
 		castSeconds,
@@ -252,8 +284,171 @@ export function computeModifiers(state: GameState): Modifiers {
 		luck,
 		sellMultiplier,
 		deckhandCastsPerSecond,
-		pearlMultiplier: pearlBonus
+		pearlMultiplier: pearlBonus,
+		fuelPerCast,
+		wearPerCast,
+		fuelCapacity,
+		boatEfficiency: boatEfficiency(boat.condition)
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Licences and the boat
+// ---------------------------------------------------------------------------
+
+/** A neglected boat is slow, never dead. */
+export function boatEfficiency(condition: number): number {
+	const health = Math.max(0, Math.min(100, condition)) / 100;
+	return BOAT_MIN_EFFICIENCY + (1 - BOAT_MIN_EFFICIENCY) * health;
+}
+
+export function hasLicence(state: GameState, id: LicenceId): boolean {
+	return state.licences[id] === true;
+}
+
+export function canBuyLicence(state: GameState, id: LicenceId): boolean {
+	if (hasLicence(state, id)) return false;
+	const required = LICENCES[id].requires;
+	if (required && !hasLicence(state, required)) return false;
+	return state.coins.gte(LICENCES[id].cost);
+}
+
+export function buyLicence(state: GameState, id: LicenceId): boolean {
+	if (!canBuyLicence(state, id)) return false;
+	state.coins = state.coins.minus(LICENCES[id].cost);
+	state.licences[id] = true;
+	return true;
+}
+
+/** The licence a source needs, if it has not been bought yet. */
+export function missingLicence(state: GameState, source: FishingSources): LicenceId | null {
+	const required = SOURCE_LICENCE[source];
+	if (!required) return null;
+	return hasLicence(state, required) ? null : required;
+}
+
+export function nextLicence(state: GameState): LicenceId | null {
+	for (const id of LICENCE_IDS) {
+		if (!hasLicence(state, id)) return id;
+	}
+	return null;
+}
+
+export function buyBoat(state: GameState): boolean {
+	if (state.boat.owned || state.coins.lt(BOAT_COST)) return false;
+	state.coins = state.coins.minus(BOAT_COST);
+	state.boat.owned = true;
+	state.boat.condition = 100;
+	state.boat.fuel = d0();
+	return true;
+}
+
+export function buyBoatUpgrade(state: GameState, id: BoatUpgradeId): boolean {
+	if (!state.boat.owned) return false;
+	const level = state.boat.upgrades[id];
+	if (level.gte(BOAT_UPGRADES[id].maxLevel)) return false;
+
+	const cost = boatUpgradeCost(id, level);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	state.boat.upgrades[id] = level.plus(1);
+	return true;
+}
+
+export function boatUpgradeCost(id: BoatUpgradeId, level: Decimal | number): Decimal {
+	const config = BOAT_UPGRADES[id];
+	return D(config.baseCost).times(D(config.costGrowth).pow(level));
+}
+
+/** Litres the tank can still take. */
+export function fuelRoom(state: GameState, modifiers: Modifiers): Decimal {
+	return Decimal.max(d0(), modifiers.fuelCapacity.minus(state.boat.fuel));
+}
+
+/** Buy fuel, capped by the tank and by what the player can pay for. */
+export function buyFuel(state: GameState, modifiers: Modifiers, litres?: Decimal): Decimal {
+	if (!state.boat.owned) return d0();
+
+	const room = fuelRoom(state, modifiers);
+	const affordable = state.coins.div(FUEL_PRICE);
+	const amount = Decimal.min(litres ?? room, Decimal.min(room, affordable));
+	if (amount.lte(0)) return d0();
+
+	state.coins = state.coins.minus(amount.times(FUEL_PRICE));
+	state.boat.fuel = state.boat.fuel.plus(amount);
+	return amount;
+}
+
+export function repairCost(state: GameState): Decimal {
+	return D(Math.max(0, 100 - state.boat.condition)).times(REPAIR_COST_PER_POINT);
+}
+
+export function repairBoat(state: GameState): boolean {
+	if (!state.boat.owned) return false;
+
+	const cost = repairCost(state);
+	if (cost.lte(0)) return false;
+
+	if (state.coins.gte(cost)) {
+		state.coins = state.coins.minus(cost);
+		state.boat.condition = 100;
+		return true;
+	}
+
+	// Partial repairs, so a short player is never stuck with a broken boat.
+	const points = state.coins.div(REPAIR_COST_PER_POINT).toNumber();
+	if (points <= 0) return false;
+	state.coins = d0();
+	state.boat.condition = Math.min(100, state.boat.condition + points);
+	return true;
+}
+
+export function hasStandingOrder(state: GameState): boolean {
+	return state.boat.upgrades.order.gte(1);
+}
+
+/**
+ * The deepest water the player can actually work right now: unlocked, licensed,
+ * and either shore-accessible or reachable with fuel in the tank. This is the
+ * fallback whenever the boat cannot sail — the game never simply stops earning.
+ */
+export function canSail(state: GameState, modifiers: Modifiers): boolean {
+	if (!state.boat.owned) return false;
+	if (state.boat.fuel.gte(modifiers.fuelPerCast)) return true;
+
+	// With a standing order the tank sitting empty between trips is normal —
+	// the yard delivers on demand. What matters is whether it can be paid for.
+	return hasStandingOrder(state) && state.coins.gte(modifiers.fuelPerCast.times(FUEL_PRICE));
+}
+
+export function reachableSource(state: GameState, modifiers: Modifiers): FishingSources {
+	const sailable = canSail(state, modifiers);
+
+	for (let i = SOURCE_ORDER.length - 1; i >= 0; i--) {
+		const source = SOURCE_ORDER[i];
+		if (!state.unlocked[source]) continue;
+		if (missingLicence(state, source)) continue;
+		if (needsBoat(source) && !sailable) continue;
+		return source;
+	}
+
+	return FishingSources.Pond;
+}
+
+/** Whether a source can be worked right now, with the reason if it cannot. */
+export function sourceBlocker(
+	state: GameState,
+	source: FishingSources,
+	modifiers?: Modifiers
+): 'locked' | 'licence' | 'boat' | 'fuel' | null {
+	if (!state.unlocked[source]) return 'locked';
+	if (missingLicence(state, source)) return 'licence';
+	if (needsBoat(source)) {
+		if (!state.boat.owned) return 'boat';
+		if (!canSail(state, modifiers ?? computeModifiers(state))) return 'fuel';
+	}
+	return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -403,16 +598,67 @@ export function distributeCatch(
 	return { caught, value, fish: landed };
 }
 
+/**
+ * Spend fuel and condition for `casts` in open water, and report how many of
+ * them the boat could actually make.
+ *
+ * A short tank does not stop the game: the casts it cannot cover come back as
+ * a shortfall, and the caller works them inshore instead.
+ */
+export function runBoat(
+	state: GameState,
+	modifiers: Modifiers,
+	casts: Decimal
+): { sailed: Decimal; shortfall: Decimal } {
+	if (!state.boat.owned) return { sailed: d0(), shortfall: casts };
+
+	if (hasStandingOrder(state)) {
+		// A standing order is a delivery, not a tank top-up: the yard supplies
+		// what the trip needs and bills for it. Capping it at tank capacity
+		// would leave a large crew running dry every few minutes despite the
+		// most expensive fit-out in the game already being paid for.
+		// A hair of margin: without it, dividing the exact amount back out and
+		// flooring can strand the last cast of every trip.
+		const needed = casts.times(modifiers.fuelPerCast).times(1.0001).plus(1).minus(state.boat.fuel);
+		if (needed.gt(0)) {
+			const buying = Decimal.min(needed, state.coins.div(FUEL_PRICE));
+			if (buying.gt(0)) {
+				state.coins = state.coins.minus(buying.times(FUEL_PRICE));
+				state.boat.fuel = state.boat.fuel.plus(buying);
+			}
+		}
+	}
+
+	const possible = state.boat.fuel.div(modifiers.fuelPerCast).floor();
+	const sailed = Decimal.min(casts, possible);
+	if (sailed.lte(0)) return { sailed: d0(), shortfall: casts };
+
+	state.boat.fuel = Decimal.max(d0(), state.boat.fuel.minus(sailed.times(modifiers.fuelPerCast)));
+	state.boat.condition = Math.max(
+		0,
+		state.boat.condition - sailed.times(modifiers.wearPerCast).toNumber()
+	);
+
+	return { sailed, shortfall: casts.minus(sailed) };
+}
+
 /** One manual cast — what the player gets for holding the rod. */
 export function performCast(
 	state: GameState,
 	source: FishingSources,
 	modifiers: Modifiers,
 	random: () => number = Math.random
-): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal } {
-	const result = distributeCatch(state, source, modifiers.fishPerCast, modifiers, random);
+): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal; source: FishingSources } {
+	let working = source;
+
+	if (needsBoat(source)) {
+		const { sailed } = runBoat(state, modifiers, d1());
+		if (sailed.lte(0)) working = reachableSource(state, modifiers);
+	}
+
+	const result = distributeCatch(state, working, modifiers.fishPerCast, modifiers, random);
 	state.totalCasts = state.totalCasts.plus(1);
-	return result;
+	return { ...result, source: working };
 }
 
 /**
@@ -432,11 +678,12 @@ export function accumulate(
 	/** Extra casts per second on top of the crew — used to model the player. */
 	extraCastsPerSecond?: Partial<Record<FishingSources, number>>,
 	random: () => number = Math.random
-): { fish: Decimal; value: Decimal } {
+): { fish: Decimal; value: Decimal; fellBack: boolean } {
 	let fishTotal = d0();
 	let valueTotal = d0();
+	let fellBack = false;
 
-	if (seconds <= 0) return { fish: fishTotal, value: valueTotal };
+	if (seconds <= 0) return { fish: fishTotal, value: valueTotal, fellBack };
 
 	for (const source of SOURCE_ORDER) {
 		const extra = state.unlocked[source] ? (extraCastsPerSecond?.[source] ?? 0) : 0;
@@ -450,20 +697,48 @@ export function accumulate(
 		);
 		if (casts.lte(0)) continue;
 
-		const { value, fish } = distributeCatch(
-			state,
-			source,
-			casts.times(modifiers.fishPerCast),
-			modifiers,
-			random
-		);
+		let working = casts;
+		let stranded = d0();
+
+		if (needsBoat(source)) {
+			const run = runBoat(state, modifiers, casts);
+			working = run.sailed;
+			stranded = run.shortfall;
+		}
+
+		if (working.gt(0)) {
+			const { value, fish } = distributeCatch(
+				state,
+				source,
+				working.times(modifiers.fishPerCast),
+				modifiers,
+				random
+			);
+			fishTotal = fishTotal.plus(fish);
+			valueTotal = valueTotal.plus(value);
+		}
+
+		// Whatever the boat could not cover is worked from the shore instead.
+		if (stranded.gt(0)) {
+			const inshore = reachableSource(state, modifiers);
+			if (!needsBoat(inshore)) {
+				const { value, fish } = distributeCatch(
+					state,
+					inshore,
+					stranded.times(modifiers.fishPerCast),
+					modifiers,
+					random
+				);
+				fishTotal = fishTotal.plus(fish);
+				valueTotal = valueTotal.plus(value);
+				fellBack = true;
+			}
+		}
 
 		state.totalCasts = state.totalCasts.plus(casts);
-		fishTotal = fishTotal.plus(fish);
-		valueTotal = valueTotal.plus(value);
 	}
 
-	return { fish: fishTotal, value: valueTotal };
+	return { fish: fishTotal, value: valueTotal, fellBack };
 }
 
 // ---------------------------------------------------------------------------
@@ -507,6 +782,8 @@ export function nextLockedSource(state: GameState): FishingSources | null {
 export function canUnlock(state: GameState, source: FishingSources): boolean {
 	if (state.unlocked[source]) return false;
 	if (nextLockedSource(state) !== source) return false;
+	if (missingLicence(state, source)) return false;
+	if (needsBoat(source) && !state.boat.owned) return false;
 	return state.coins.gte(SOURCE_CONFIG[source].unlockCost);
 }
 
@@ -665,6 +942,31 @@ function zeroDeckhands(): Record<FishingSources, Decimal> {
 	);
 }
 
+function zeroLicences(): Record<LicenceId, boolean> {
+	return LICENCE_IDS.reduce(
+		(acc, id) => {
+			acc[id] = false;
+			return acc;
+		},
+		{} as Record<LicenceId, boolean>
+	);
+}
+
+function freshBoat(): GameState['boat'] {
+	return {
+		owned: false,
+		fuel: d0(),
+		condition: 100,
+		upgrades: BOAT_UPGRADE_IDS.reduce(
+			(acc, id) => {
+				acc[id] = d0();
+				return acc;
+			},
+			{} as Record<BoatUpgradeId, Decimal>
+		)
+	};
+}
+
 function zeroPrestigeUpgrades(): Record<PrestigeUpgradeId, Decimal> {
 	return PRESTIGE_UPGRADE_IDS.reduce(
 		(acc, id) => {
@@ -730,6 +1032,9 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 
 		unlocked,
 		activeSource,
+
+		licences: zeroLicences(),
+		boat: freshBoat(),
 
 		upgrades: zeroUpgrades(),
 		deckhands: zeroDeckhands(),
