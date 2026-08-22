@@ -1,57 +1,47 @@
 import { linear } from 'svelte/easing';
 import { tweened } from 'svelte/motion';
 import { get } from 'svelte/store';
-import { sourceToFishChanceIndex } from '$lib/fishes';
+import { sourceToAllFishChanceIndex } from '$lib/fishes';
 import { fishTypeCurrentCount } from './fish_types';
-import { FishingSources } from '$lib/fishing_sources';
-import { RandomIndex } from './random_picker';
-import type { Fish } from '$lib/fishes/fish';
+import type { FishingSources } from '$lib/fishing_sources';
+
+export const CAST_DURATION_MS = 5000;
 
 export const progressBar = tweened(0, {
-	duration: 5000,
+	duration: CAST_DURATION_MS,
 	easing: linear
 });
-let timer: number;
 
-export const handleMouseDown = () => {
+let timer: ReturnType<typeof setInterval> | undefined;
+
+export const handleMouseDown = (source: FishingSources) => {
+	handleMouseUp();
+
 	progressBar.set(0, { duration: 0 });
 	progressBar.set(100);
+
 	timer = setInterval(() => {
 		progressBar.set(0, { duration: 0 });
 		progressBar.set(100);
-		fishAction(FishingSources.Ocean);
-	}, 5000);
+		fishAction(source);
+	}, CAST_DURATION_MS);
 };
 
 export const handleMouseUp = () => {
-	clearInterval(timer);
+	if (timer !== undefined) {
+		clearInterval(timer);
+		timer = undefined;
+	}
 	progressBar.set(0);
 };
 
-// TODO: ADD catching per fishes individually and not types
 export function fishAction(source: FishingSources) {
-	const fishTypeIndices = sourceToFishChanceIndex[source];
+	const caughtFish = sourceToAllFishChanceIndex[source].pick();
 
-	// Combine all fish indices into a single array
-	const allFishIndices: Fish[] = Object.values(fishTypeIndices).flatMap(
-		(randomIndex: RandomIndex<Fish>) => Object.values(randomIndex.map)
-	);
-
-	// Create a RandomIndex for all available fish in the source
-	const allFishRandomIndex = new RandomIndex(
-		allFishIndices.map((fish) => [fish, fish.baseChance] as [Fish, number])
-	);
-
-	// Pick a fish directly from the combined fish indices
-	const caughtFish = allFishRandomIndex.pick();
-
-	// Increase the count of the caught fish type
 	const fishCountStore = fishTypeCurrentCount.get(caughtFish.category);
 	if (fishCountStore) {
 		fishCountStore.set(get(fishCountStore).plus(1));
 	}
 
-	// Print out the caught fish details
-	console.log('Caught a fish: ', caughtFish.name);
-	console.log('Details: ', caughtFish);
+	return caughtFish;
 }

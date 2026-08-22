@@ -73,15 +73,15 @@ export const sourceToFishChanceIndex: Record<
 	});
 });
 
-// Simulate 100 catches per source
-for (const [k, v] of Object.entries(sourceToFishTypeChanceIndex)) {
-	const caught = {} as Record<FishType, number>;
-	for (let i = 0; i < 100; i++) {
-		const chosen = v.pick();
-		if (!(chosen in caught)) {
-			caught[chosen] = 0;
-		}
-		caught[chosen]++;
-	}
-	console.log('Caught: ', k, caught);
-}
+// Flat per-source index over every fish that source can yield
+export const sourceToAllFishChanceIndex = (
+	Object.keys(sources) as Array<keyof typeof sources>
+).reduce(
+	(final, source) => {
+		final[source] = new RandomIndex(
+			sourcesToFish[source].map((fish) => [fish, fish.baseChance] as [Fish, number])
+		);
+		return final;
+	},
+	{} as Record<FishingSources, RandomIndex<Fish>>
+);
