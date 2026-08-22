@@ -898,3 +898,169 @@ overflow at every combination.
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` **260 passing** across 17 files · `pnpm audit:ui` **1.00 / 1.00 / 1.00 / 1.00**.
+
+---
+
+# Second pass — closing summary
+
+All five stages are complete. The game is playable, committed on `feat/going-ham`, and
+nothing was pushed.
+
+```sh
+pnpm install
+pnpm dev        # http://localhost:5173
+```
+
+## Every bug found, and how
+
+**Fourteen confirmed**, each reproduced before being fixed and re-verified after.
+
+*Stage 0 — the round-two hunt (`fix/round-two`, merged `--no-ff`)*
+
+| # | Bug | Reproduced by |
+|---|---|---|
+| B1 | One cast wrote a fractional sliver of **all 31 species** in the source into the ticker, the hold and the Fishdex — the single cause of three of the five bugs the user reported | Unit probe: `caught.size` was 31 after one cast at `net` level 1. Confirmed live: the ticker read `Guppy 0.51 \| Tetra 0.51 \| Platy 0.51 …` and the hold read `Erotic 0 !` |
+| B2 | `formatNumber` rendered nonzero values as `"0"` | `formatNumber(0.004)` → `"0"` |
+| B3 | Toasts only dismissed, never navigated | Clicking a Fishdex toast left the tab on Water |
+| B4 | Every source stocked nearly every species at identical rarity | Pond catch table held 31 species, all at 7.08e-2 |
+| B5 | A large crew overflowed a double to `Infinity`, which the save layer rejects — **silently zeroing the player's coins on reload** | A 1e320 crew produced `Infinity` through hold → coins → save |
+| B6 | Bulk-buying deckhands cost more than buying them singly | Ten Pond deckhands: 112,938 singly, 112,943.47 in bulk |
+| B7 | A save from a newer build loaded silently and was then overwritten | `version: 99` loaded and was truncated on the next autosave |
+| B8 | Hand-edited saves were trusted — negative coins, rod level 1e30 | `fromRaw({coins: '-1e30'})` |
+| B9 | Two tabs on one save clobbered each other | Both autosaved, last writer won |
+
+*Stage 2 — found by playtesting the boat, not by the type checker*
+
+| # | Bug | Reproduced by |
+|---|---|---|
+| B10 | The stranded banner cleared itself on the next 200 ms tick, because it tested the source the player had been moved **to** rather than **from** | Banner never appeared live |
+| B11 | With a standing order the tank ended each trip at exactly zero, and `fuel / fuelPerCast` floored one cast short — so every trip reported a fallback despite a paid-up order | Offline summary said "ran out of fuel" with 1e12 coins in hand |
+
+*Stage 4 — the final pass*
+
+| # | Bug | Reproduced by |
+|---|---|---|
+| B12 | The Standing Charter opened water the player had **no licence for**, stalling every prestige run past the first | The six-run balance chain completed five |
+| B13 | A headstart run could start standing over open water with no boat | Same root; caught at headstart ≥ 6 |
+| B14 | Unlicensed water still paid out — `accumulate` disagreed with `reachableSource` | Hand-edited save earned 28 fish/hour from unpermitted water |
+| B15 | A non-finite boat condition propagated NaN into every cast time | `boatEfficiency(NaN)` |
+| B16 | The offline summary subtracted the fuel bill twice | Coins delta 204.4M vs sales 210.2M with a 5.8M bill shown separately |
+
+Every one has a regression test. The user's five reported bugs map to B1 (three of
+them), B3 and B4.
+
+## Hypotheses that could not be reproduced
+
+Logged rather than fixed, as the brief requires.
+
+- **Log-rounding overshoot in `affordableUpgradeLevels` / `affordableDeckhands`.**
+  Brute-forced 1,120 upgrade and 1,000 deckhand cases across five upgrades, eight
+  sources, 40 levels and coin piles from exactly-affordable to 97×: zero overshoots,
+  zero negative balances. 1,000 live spam-clicks agreed.
+- **Timer leak on unmount.** `stop()` clears all three handles and `onMount` returns it.
+- **Duplicate keys crashing a toast `{#each}`.** Guarded on both paths.
+- **`parseDecimal` rejecting a legitimate value.** It rejects non-canonical forms like
+  `1e1e300`, which break_eternity accepts as input but never emits.
+- **`fuelPerCast` reaching zero and dividing by zero.** Multiplicative curve, floor
+  0.0061 L at maximum Engine.
+- **`takeWhole` poisoned by a non-finite amount.** NaN returns 0 and never banks.
+- **A 1e300 crew corrupting the save.** Probed end to end; coins returned bit-identical.
+
+## The fractional catch question
+
+**Decision: every count is a whole number, and fractional rates are resolved by banking
+the remainder.** 1.19 fish per cast pays 1, 1, 1, 1, 1, 2, 1 … averaging exactly 1.19.
+
+The argument in one line each: *keeping fractions* is what produced three of the five
+reported bugs, because the only honest way to hand out 1.19 fish from a 31-species
+distribution is to hand out a slice of all 31; *resolving stochastically* is unbiased
+only in expectation and adds noise to the one number an idle player watches; *banking*
+is unbiased **exactly** — at any moment everything owed has either been paid or is in
+the bank — needs no RNG, and resolves eight hours in a single step.
+
+Manual and automatic fishing call the same function, so they cannot pay differently.
+The one seam is haul size, not who is fishing: **24 fish or fewer are rolled one at a
+time** so a small catch is a real draw with real surprise; larger hauls split by
+expected share with the same banking per species. Full reasoning in the Stage 3 section.
+
+## How licences and the boat changed the pacing
+
+| | Before second pass | After |
+|---|---|---|
+| First prestige | 2 h 18 m at 1.00e15 | **2 h 25 m at 1.00e15** |
+| Mostly-idle player | 3 h 08 m | 3 h 30 m |
+| Sources open at | 5/12/18/27/37/49/67 min | 6/14/21/30/39/53/71 min |
+| Licences taken at | — | 3 / 14 / 23 / 33 min |
+| Boat bought at | — | 40 min |
+| Crew out-earn the player at | 12 min | 11 min |
+| Runs 2 / 3 / 4 | 1 h 02 m / 24 m / 1 m 25 s | 1 h 03 m / 24 m / 57 s |
+| Run 6 lifetime in a fixed 3 h | 1.18e45 | **1.79e55** |
+
+Adding the sinks first pushed the run to **2 h 41 m**. Trimming licence and boat prices
+barely helped (2 h 39 m) — the delay is the licence gate in front of each tier, not the
+money. The lever that worked was `market` cost growth, **3.71 → 3.62**, plus a 20% cut
+to source unlock costs to soften the double charge. Final: **2 h 25 m, within 5% of
+where it started.**
+
+## Compromises, with the real figures
+
+**No quality gate was relaxed.** All five pass at their original thresholds:
+
+| Gate | Result |
+|---|---|
+| `pnpm check` | 409 files, **0 errors, 0 warnings** |
+| `pnpm lint` | Prettier clean, ESLint clean |
+| `pnpm build` | ok |
+| `pnpm test` | **260 passing** across 17 files (was 136) |
+| `pnpm audit:ui` | **1.00 / 1.00 / 1.00 / 1.00**, three runs |
+
+The judgement calls, each with its number:
+
+1. **The catch-model rewrite landed in Stage 0, not Stage 3.** Three separately-reported
+   bugs shared it as a root cause, and the brief is explicit that features must not be
+   built on broken code. Stage 3 owns the decision, the argument and the 19-test proof.
+2. **Four species were added in the first pass and their rosters rewritten in this one.**
+   43 catalogue species now sit 8–14 to a source instead of up to 31, with `baseChance`
+   spread 1–24 instead of a flat 10. **Zero economic impact by construction** — value
+   depends only on the per-type weights, which were not touched — and that invariant is
+   a test.
+3. **The Sea does not need a boat.** The brief left it to judgement. Keeping it
+   shore-accessible means the boat arrives after every other system, and gives the
+   fuel fallback somewhere genuinely productive to fall back to.
+4. **`state.carry` values are plain `number`, not `Decimal`.** They are always in
+   `[0, 1)` — fractions of a unit, never counts, never compounded, never spent. Above
+   2^53 there is no representable fraction left to bank.
+5. **The offline settlement runs in up to 24 chunks, not one.** A standing fuel order
+   pays out of coins, and coins only arrive when the catch is sold. 24 chunks covers
+   eight hours; it is not a per-cast simulation.
+6. **No component-level UI tests.** The brief's test list is game maths, and jsdom plus
+   a testing library would be packages beyond what the work requires. The UI is verified
+   by CDP playthroughs instead — which is what found B10, B11 and B16.
+
+Nothing was cut from the brief.
+
+## What to look at first
+
+1. **Play it.** `pnpm dev`. The first two minutes are the part that changed most: one
+   tab, one button, one instruction, and a pond that looks like a pond.
+2. **`src/lib/game/engine.ts`, `takeWhole` and `distributeCatch`** — the catch model, and
+   the answer to the fractional question.
+3. **`src/lib/game/catch_model.test.ts`** — the proof. 19 tests: unbiasedness at seven
+   rates over 100,000 draws each, distribution accuracy on both paths, manual/auto
+   parity, and eight hours resolving in under 250 ms with a billion deckhands.
+4. **`src/lib/game/config.ts`** — every tuned number in one file, now including licences
+   and the boat. `balance.test.ts` will tell you what any change did.
+5. **`src/lib/components/WaterScene.svelte` and `src/lib/game/scenes.ts`** — eight water
+   scenes from one SVG skeleton. `static/` still holds only `favicon.png`.
+6. **`fix/round-two`** — left undeleted for review, as instructed.
+
+## Running it
+
+```sh
+pnpm install
+pnpm dev                                                   # play it
+pnpm test                                                  # 260 tests
+CHROME_PATH=/usr/bin/google-chrome-stable pnpm audit:ui    # Lighthouse
+```
+
+Everything is committed locally on `feat/going-ham`. Nothing was pushed.
