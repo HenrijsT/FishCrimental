@@ -1,110 +1,83 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { game } from '$lib/game/state.svelte';
-	import { SOURCE_CONFIG, SOURCE_ORDER } from '$lib/game/config';
-	import { FISH_TYPES } from '$lib/fish_types';
-	import { sources } from '$lib/fishing_sources';
-	import { formatDuration, formatNumber } from '$lib/format';
+	import CastPanel from '$lib/components/CastPanel.svelte';
+	import CatchTicker from '$lib/components/CatchTicker.svelte';
+	import HoldPanel from '$lib/components/HoldPanel.svelte';
+	import OfflineModal from '$lib/components/OfflineModal.svelte';
+	import SourcePicker from '$lib/components/SourcePicker.svelte';
+	import TopBar from '$lib/components/TopBar.svelte';
 
 	onMount(() => {
 		game.init();
-		return () => game.stop();
-	});
 
-	const state = $derived(game.state);
-	const report = $derived(game.offlineReport);
+		const save = () => game.save();
+		document.addEventListener('visibilitychange', save);
+		window.addEventListener('pagehide', save);
+
+		return () => {
+			save();
+			game.stop();
+			document.removeEventListener('visibilitychange', save);
+			window.removeEventListener('pagehide', save);
+		};
+	});
 </script>
 
 <svelte:head>
 	<title>FishCrimental</title>
-	<meta name="description" content="A fishing incremental. Cast, sell, upgrade, go deeper." />
+	<meta
+		name="description"
+		content="A fishing incremental. Cast a line, sell the catch, hire a crew, and work your way from a pond to the open ocean."
+	/>
 </svelte:head>
 
-<main>
-	<h1>FishCrimental</h1>
+<div class="shell">
+	<TopBar />
 
-	{#if report}
-		<section class="modal">
-			<h2>While you were away</h2>
-			<p>
-				Your crew worked for {formatDuration(report.cappedSeconds)} and landed
-				{formatNumber(report.fish)} fish, sold dockside for
-				<strong>{formatNumber(report.coins)}</strong> MarketCoins.
-			</p>
-			<button onclick={() => game.dismissOfflineReport()}>Back to it</button>
-		</section>
-	{/if}
+	<main class="grid">
+		<div class="column">
+			<SourcePicker />
+			<CastPanel />
+			<HoldPanel />
+		</div>
+		<div class="column side">
+			<CatchTicker />
+		</div>
+	</main>
+</div>
 
-	<p class="coins">{formatNumber(state.coins)} MarketCoins</p>
-	<p>Income: {formatNumber(game.incomePerSecond)}/s · Played {formatDuration(state.playTime)}</p>
-
-	<label>
-		Source
-		<select
-			value={state.activeSource}
-			onchange={(event) => game.setSource(event.currentTarget.value as never)}
-		>
-			{#each SOURCE_ORDER as source (source)}
-				{#if state.unlocked[source]}
-					<option value={source}>{sources[source].name}</option>
-				{/if}
-			{/each}
-		</select>
-	</label>
-
-	<div class="bar" role="progressbar" aria-valuenow={Math.round(game.castProgress * 100)}>
-		<div class="fill" style:width="{game.castProgress * 100}%"></div>
-	</div>
-
-	<button
-		onpointerdown={() => game.beginCast()}
-		onpointerup={() => game.endCast()}
-		onpointerleave={() => game.endCast()}
-	>
-		Hold to fish ({game.activeCastSeconds.toFixed(2)}s)
-	</button>
-	<button onclick={() => game.sell()}>Sell hold ({formatNumber(state.holdValue)})</button>
-
-	<ul>
-		{#each FISH_TYPES as type (type)}
-			<li>{type}: {formatNumber(state.hold[type])}</li>
-		{/each}
-	</ul>
-
-	<p>
-		Deckhands: {formatNumber(state.deckhands[state.activeSource])} · Unlock cost of next source:
-		{formatNumber(SOURCE_CONFIG[state.activeSource].unlockCost)}
-	</p>
-</main>
+<OfflineModal />
 
 <style>
-	main {
-		max-width: 40rem;
+	.shell {
+		max-width: 62rem;
 		margin: 0 auto;
-		padding: 1rem;
+		padding: 1rem 1rem 3rem;
+		display: grid;
+		gap: 1rem;
 	}
 
-	.coins {
-		font-size: 1.5rem;
-		font-weight: 600;
+	.grid {
+		display: grid;
+		gap: 1rem;
+		align-items: start;
 	}
 
-	.bar {
-		height: 0.75rem;
-		border: 1px solid #3a6ea5;
-		border-radius: 0.5rem;
-		overflow: hidden;
-		margin: 0.75rem 0;
+	.column {
+		display: grid;
+		gap: 1rem;
+		align-content: start;
 	}
 
-	.fill {
-		height: 100%;
-		background: #3a6ea5;
-	}
+	@media (min-width: 52rem) {
+		.grid {
+			grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
+		}
 
-	.modal {
-		border: 1px solid #3a6ea5;
-		padding: 1rem;
-		border-radius: 0.5rem;
+		.side {
+			position: sticky;
+			top: 1rem;
+		}
 	}
 </style>

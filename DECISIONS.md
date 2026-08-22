@@ -114,7 +114,7 @@ were tuned against it rather than guessed.
 
 The first attempt reached the first prestige in **6 minutes**, with sources 2–8 opening
 inside 70 seconds of each other. The cause was structural: five upgrade tracks each
-multiply income, so total income grows as the *product* of five exponentials while any
+multiply income, so total income grows as the _product_ of five exponentials while any
 single cost curve grows as one. Buying one level of everything multiplies income by
 about 2.2×, so any cost growth below ~2.2 makes the game explode. Cost growth was
 raised from 1.54–2.07 to **3.58–4.63**, deckhand growth from 1.28 to **1.79**, and
@@ -122,14 +122,51 @@ unlock costs re-spaced by ~26× per tier.
 
 Result, asserted in `balance.test.ts`:
 
-| | |
-|---|---|
-| First prestige | 2 h 18 m of active play, at 1.00e15 lifetime |
-| Source unlocks | 5 m, 12 m, 18 m, 27 m, 37 m, 49 m, 67 m |
-| Mostly-idle player (15% uptime) | 3 h 08 m |
-| Run 2 / 3 / 4 | 1 h 02 m / 24 m / 1 m 25 s |
-| Lifetime reached in a fixed 3 h, run 1 → run 6 | 4.3e15 → 1.18e45 |
-| Pearls after six runs | 4.27e12 |
+|                                                |                                              |
+| ---------------------------------------------- | -------------------------------------------- |
+| First prestige                                 | 2 h 18 m of active play, at 1.00e15 lifetime |
+| Source unlocks                                 | 5 m, 12 m, 18 m, 27 m, 37 m, 49 m, 67 m      |
+| Mostly-idle player (15% uptime)                | 3 h 08 m                                     |
+| Run 2 / 3 / 4                                  | 1 h 02 m / 24 m / 1 m 25 s                   |
+| Lifetime reached in a fixed 3 h, run 1 → run 6 | 4.3e15 → 1.18e45                             |
+| Pearls after six runs                          | 4.27e12                                      |
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 96 passing.
+
+## Phase 2 — Core loop
+
+The game is playable at `/`: pick a source, hold the rod, watch the cast bar, land
+fish, sell the hold, unlock the next water.
+
+- **Components** live in `src/lib/components/`: `TopBar`, `SourcePicker`, `CastPanel`,
+  `CastBar`, `HoldPanel`, `CatchTicker`, `OfflineModal`, plus `Modal` and `Num`
+  primitives. All Svelte 5 runes (`$props`, `$derived`, `$state`, `{@render}`).
+- **`Num.svelte` is the only place a number reaches the screen.** It wraps
+  `formatNumber` and applies the coin/pearl colour, so notation stays consistent.
+- **Hold-to-fish uses pointer events with pointer capture**, plus space/enter for
+  keyboard players, plus `onblur`/`onpointercancel` release so a cast cannot get stuck
+  running when focus or the pointer leaves.
+- **Cast progress is driven by `requestAnimationFrame`, and only while the rod is
+  held.** The simulation itself runs on a 200 ms `setInterval` regardless. Keeping
+  them separate means an idle tab is not painting 60 times a second.
+- **`SourcePicker` shows only open water plus the single next locked source.** Showing
+  all eight from the start spoils the progression and makes the panel unreadable on a
+  phone.
+- **Theme:** dark maritime palette in `src/app.css` using custom properties, plain CSS
+  only. Two-column grid above 52rem, single column below.
+
+**Quality gate: `pnpm audit:ui` added.** `@lhci/cli` runs Lighthouse three times
+against `pnpm preview` (desktop preset, headless Chrome) and asserts performance,
+accessibility and best-practices at ≥ 0.9. Reports are written to `build/lighthouse`
+rather than the default `.lighthouseci/`, because `/build` is already gitignored and
+the brief forbids editing `.gitignore`.
+
+**Result: performance 1.00, accessibility 1.00, best-practices 1.00, SEO 1.00** across
+all three runs.
+
+Also smoke-tested the built site in headless Chrome — the page renders the real game
+markup and logs no console errors.
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 102 passing · `pnpm audit:ui` all categories 1.00.
