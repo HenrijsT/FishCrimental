@@ -3,7 +3,6 @@ import { D, d0 } from '$lib/decimal';
 import type { FishingSources } from '$lib/fishing_sources';
 import {
 	BOAT_COST,
-	BOAT_UPGRADES,
 	ASSISTANT_COST,
 	AUTO_FISHER,
 	BUCKET_MAX_LEVEL,
@@ -14,7 +13,6 @@ import {
 	PRESTIGE_UPGRADE_IDS,
 	needsBoat,
 	SOURCE_ORDER,
-	UPGRADES,
 	UPGRADE_IDS,
 	type LicenceId,
 	type PrestigeUpgradeId,
