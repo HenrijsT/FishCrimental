@@ -1645,3 +1645,113 @@ that drops the deprecation warning.
 - A research subagent fetched a 132 KB TV Tropes page to `tv.html` in the repo
   root, which broke `pnpm lint`. Moved out, not committed. Worth watching for
   when agents have web access and a working directory.
+
+---
+
+## Stage 2 — the main deliverable: research and plan
+
+`Goals/RESEARCH.md` (560 lines) and `Goals/PLAN.md` (694 lines). **Documents
+only — nothing from this stage was implemented.**
+
+**Note on committing:** `Goals/` is in `.git/info/exclude`, so both files are
+deliberately untracked, like every other brief in that directory. The brief
+forbids editing the exclude file, and force-adding them would defeat the same
+intention, so they live on disk and this section is the tracked record that
+they exist. This is also why the Stage 1 finding matters — the design backlog
+is not exposed on the remote, and `DECISIONS.md` is the only working doc that
+would be.
+
+### How it was researched
+
+Seven independent research lines run as a workflow, each with web access, each
+then attacked by a **separate adversarial verifier** told to refute the
+findings and personally re-fetch every URL. In parallel, two agents costed every
+idea in `ideas.txt` against the actual codebase with `file:line` citations.
+
+**The adversarial half earned its place.** On the line whose verification
+completed first, the tally was **9 CONFIRMED, 6 UNSUPPORTED, 3
+RECLASSIFY-AS-JUDGEMENT, 3 FALSE** — including a quotation presented in quote
+marks that **does not exist in the cited article and inverts what the article
+actually says**. Every claim in `RESEARCH.md` is therefore tagged `[cited]`,
+`[verified]`, `[disputed]`, `[inferred]` or `[judgement]`, the killed claims are
+recorded so nobody re-derives them, and every place the research wanted a number
+and could not source one is listed as a gap rather than filled in.
+
+A note on cost: the first workflow run lost 7 of 9 agents to a session limit
+mid-flight. Resuming replayed the two completed agents from cache and re-ran the
+rest, which is the only reason the research survived.
+
+### The three findings that reshaped the plan
+
+**1. `pearlMultiplier` is applied twice, and the panel shows the unsquared
+figure.** I verified this in the code rather than taking it from a report:
+`engine.ts:278` gives `1 + 0.5 × pearls^0.9`, and `computeModifiers` multiplies
+it into **both** `fishPerCast` (`:299`) and `sellMultiplier` (`:305`), so income
+scales as its **square**. `PrestigePanel.svelte:49` renders the unsquared value.
+
+This — not the cost curves, which were already retuned once — is the real reason
+the prestige chain collapses from 2h25m to 4 seconds over six runs. It confirms
+the audit's §4 note independently, and it means **any second reset layer built
+on top of it would be untunable.** It is now the first item in the roadmap's
+Phase A and an open question for the owner, because halving it is a pacing
+decision rather than a bug fix.
+
+**2. Nothing in the genre ships a random-timing deep reset.** Roughly ten search
+angles; every candidate resolved to player-triggered, threshold-triggered or
+failure-triggered. Recorded as an absence, not as a search failure. It does not
+make the idea bad — it makes this game the experiment, and removes the "game X
+does this and it works" safety net.
+
+**3. "Paradigm shift" already means something else.** The genre's own vocabulary
+(The Paper Pilot's guide, by the author of the Profectus engine) defines it as
+_a phase of completely distinct gameplay that fully replaces the previous one_ —
+Universal Paperclips, A Dark Room. Genre-literate players will expect the
+fishing loop to be **replaced**, not multiplied.
+
+### The verdicts, in short
+
+**Changed:** the probabilistic paradigm shift becomes a **visible Tide meter
+that arms a player-pressed button** — the owner's escalating curve kept exactly,
+the agency kept too. The map is deferred until it has something to contain.
+Shopkeepers need one of four properties or they are a reskin of the price gate
+that already ships.
+
+**Kept:** the bicycle and its selling cooldown (the cleanest fit in the file —
+manual and automatic paths are already separated, so it touches nothing in the
+engine); the bucket, with a **scheduled expiry** at the first deckhand; the
+trader as auto-sell plus restock on a wall-clock deadline; the mud pool as a new
+first source; repeat-catch species value; a read-only price board; one-time
+story beats; and nested reset layers.
+
+**Cut:** police fines, inverted instead into a value penalty on unlicensed water
+— every fix that makes the fine safe removes the idea, and it contradicts the
+project's own never-a-fail-state rule. Two thirds of "knowledge-based profit",
+which already ships as `DEX_BONUS_PER_SPECIES`. A real fluctuating market, which
+needs `state.hold` rebuilt from 6 type buckets to 47 species buckets behind an
+information-destroying migration — a bigger job than the entire boat system was.
+
+**Quantified rather than argued:**
+
+- A **×100 price collapse per shift is undone by 13.13 levels of Market
+  Contacts**, out of 80. Falling prices are either invisible or a wall, with
+  almost no band between — unless the player holds the lever, which is the one
+  condition under which the two shipped examples work.
+- A hard bucket cap makes offline throughput **`chunks × capacity`** — 24 × 10 =
+  240 fish for an eight-hour absence, whatever the crew. `OFFLINE_CHUNKS` was
+  chosen to keep the standing fuel order funded and would silently become the
+  game's offline income ceiling.
+- A flat per-tick reset roll is **~1000× more punishing in run 1 than run 5**,
+  given the 2h25m/1h03m/24m/57s/13s/4s ladder — backwards, because it hits
+  hardest the players least invested.
+- `save.ts:250` hardcodes `unlocked[FishingSources.Pond] = true`. Prepend a mud
+  pool without changing it and **every reloading player is handed the Pond
+  free, permanently.** The audit's blanket "do not insert anything before
+  `SOURCE_ORDER[0]`" is over-stated — `reachableSource` is a bounded loop that
+  terminates regardless — but this line is the real hazard it was pointing at.
+
+### On the audit's refutations
+
+The brief said not to re-investigate the six refuted findings and to say so with
+a reproduction if I disagreed. **I found nothing to disagree with.** The
+remaining 17 confirmed defects are carried into `Goals/PLAN.md` Part 2 with a
+recommended order, grouped by what blocks other work.
