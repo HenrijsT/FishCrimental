@@ -37,6 +37,12 @@ import { evaluateAchievements } from './achievements';
 import { exportSave, importSave, loadFromStorage, saveToStorage } from './save';
 import type { GameState, Modifiers, OfflineReport } from './types';
 
+/**
+ * A gap longer than this is settled as offline progress rather than replayed
+ * by the tick loop.
+ */
+const RESUME_THRESHOLD_SECONDS = 120;
+
 export type BuyAmount = 1 | 10 | 25 | 'max';
 
 export const BUY_AMOUNTS: BuyAmount[] = [1, 10, 25, 'max'];
@@ -127,7 +133,7 @@ class Game {
 	}
 
 	tick(now = Date.now()): void {
-		const elapsed = Math.min((now - this.state.lastUpdate) / 1000, 60);
+		const elapsed = Math.min((now - this.state.lastUpdate) / 1000, RESUME_THRESHOLD_SECONDS);
 		this.state.lastUpdate = now;
 		if (elapsed <= 0) return;
 
@@ -135,6 +141,24 @@ class Game {
 		accumulate(this.state, this.modifiers, elapsed);
 		this.#checkJokes();
 		this.#checkAchievements();
+	}
+
+	/**
+	 * Called when the tab becomes visible again. A backgrounded tab has its
+	 * timers throttled to roughly once a minute, and a sleeping laptop stops
+	 * them entirely, so a long gap is settled the same way a fresh load is
+	 * rather than being silently clamped away by `tick`.
+	 */
+	resume(): void {
+		if (!this.loaded) return;
+
+		const gap = (Date.now() - this.state.lastUpdate) / 1000;
+		if (gap > RESUME_THRESHOLD_SECONDS) {
+			const report = this.#settleOffline(this.state);
+			if (report) this.offlineReport = report;
+		}
+
+		this.state.lastUpdate = Date.now();
 	}
 
 	save(): boolean {

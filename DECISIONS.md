@@ -236,7 +236,7 @@ markup and logs no console errors.
 
 **The two jokes**
 
-- **"Don't be too Jelly."** Fires in the prestige modal on the *first* prestige — the
+- **"Don't be too Jelly."** Fires in the prestige modal on the _first_ prestige — the
   game's completion moment — when the run landed zero jellyfish. `jellyFree` is
   computed from the Fishdex, so a fractional jellyfish landed by a deckhand counts;
   you have to have genuinely never touched one. **Decision:** rather than leave players
@@ -262,3 +262,43 @@ markup and logs no console errors.
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` 133 passing · `pnpm audit:ui` all thresholds met.
+
+## Phase 6 — Polish
+
+- **Settings tab**: offline progress on/off, reduce motion, scientific notation, save
+  now, export to a text blob, import from one, and a two-step save wipe.
+- **Scientific notation** is a real formatter mode (`notation: 'scientific'`) rather
+  than a display hack — it skips K/M/B/T and goes straight to exponents below 1e15.
+  Layered notation is identical either way, because there is no suffix for `ee300`.
+- **Reduce motion** is honoured twice: the OS-level `prefers-reduced-motion` media
+  query, and an in-game class on the shell for players whose OS setting says otherwise.
+- **The log** — casts, fish, coins this run and all time, species, jellyfish landed,
+  runs completed, time at sea — sits under the Records panel.
+- **Real README** replacing the create-svelte boilerplate: how it plays, the scripts
+  table, the stack, the file layout, the Decimal rules, and the measured balance
+  numbers.
+- **Long background gaps are settled as offline progress.** A backgrounded tab has its
+  timers throttled to about once a minute and a sleeping laptop stops them entirely.
+  `tick()` used to clamp the gap to 60 s and silently lose the rest; `game.resume()`
+  now runs the offline settlement for any gap over two minutes.
+
+**Bug found by playtesting, not by the type checker**
+
+An automated playthrough driven over the Chrome DevTools Protocol caught
+`setPointerCapture` throwing `NotFoundError` when the event has no live pointer behind
+it. The call was the first statement in the `pointerdown` handler, so the throw
+aborted the handler and **the cast never started**. It is now wrapped, with the capture
+released on the way out. Nothing in `pnpm check`, `pnpm lint` or `pnpm test` would ever
+have caught this — it needed a browser actually pressing the button.
+
+**Verification beyond the gates**
+
+- Full CDP playthrough on the production build: fish → sell → switch tab → fish →
+  sell → buy an upgrade (Graphite Rod reached lv 1) → visit all seven tabs → export a
+  save → reload → coins preserved. **Zero page errors.**
+- Responsive check at 360 / 768 / 1440 px across all seven tabs: **no horizontal
+  overflow anywhere, no control under 24 px tall.**
+
+**Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
+`pnpm test` 136 passing · `pnpm audit:ui` performance 1.00, accessibility 1.00,
+best-practices 1.00, SEO 1.00.

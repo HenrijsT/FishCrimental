@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { ACHIEVEMENTS } from '$lib/game/achievements';
 	import { game } from '$lib/game/state.svelte';
+	import { formatDuration } from '$lib/format';
+	import { ALL_SPECIES } from '$lib/game/engine';
+	import Num from './Num.svelte';
 
 	const g = $derived(game.state);
 	const earned = $derived(new Set(g.achievements));
@@ -25,6 +28,42 @@
 			</li>
 		{/each}
 	</ul>
+
+	<h3 class="log-heading">The log</h3>
+	<dl class="stats">
+		<div>
+			<dt>Casts made</dt>
+			<dd><Num value={g.totalCasts} /></dd>
+		</div>
+		<div>
+			<dt>Fish landed</dt>
+			<dd><Num value={g.totalFish} /></dd>
+		</div>
+		<div>
+			<dt>Coins this run</dt>
+			<dd><Num value={g.lifetimeCoins} tone="coin" /></dd>
+		</div>
+		<div>
+			<dt>Coins all time</dt>
+			<dd><Num value={g.allTimeCoins} tone="coin" /></dd>
+		</div>
+		<div>
+			<dt>Species logged</dt>
+			<dd>{game.discovered} / {ALL_SPECIES.length}</dd>
+		</div>
+		<div>
+			<dt>Jellyfish landed</dt>
+			<dd><Num value={game.jelly} /></dd>
+		</div>
+		<div>
+			<dt>Runs completed</dt>
+			<dd><Num value={g.prestigeCount} /></dd>
+		</div>
+		<div>
+			<dt>Time at sea</dt>
+			<dd>{formatDuration(g.playTime)}</dd>
+		</div>
+	</dl>
 
 	{#if hiddenCount > 0}
 		<p class="faint hidden-note">
@@ -80,6 +119,30 @@
 
 	.desc {
 		font-size: 0.75rem;
+	}
+
+	.log-heading {
+		margin-top: 1.2rem;
+	}
+
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+		gap: 0.55rem;
+		margin: 0.6rem 0 0;
+	}
+
+	dt {
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		color: var(--ink-faint);
+	}
+
+	dd {
+		margin: 0;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.hidden-note {

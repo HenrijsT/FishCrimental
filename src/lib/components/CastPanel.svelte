@@ -10,12 +10,33 @@
 			: `${game.activeCastSeconds.toFixed(2)}s per cast`
 	);
 
+	let captured: { element: HTMLElement; pointerId: number } | null = null;
+
 	function hold(event: PointerEvent) {
-		(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+		// Capture keeps the cast alive if the finger slides off the button. It
+		// throws when there is no live pointer behind the event (synthetic events,
+		// some assistive tech), and a throw here would abort the cast entirely.
+		const element = event.currentTarget as HTMLElement;
+		try {
+			element.setPointerCapture(event.pointerId);
+			captured = { element, pointerId: event.pointerId };
+		} catch {
+			captured = null;
+		}
+
 		game.beginCast();
 	}
 
 	function release() {
+		if (captured) {
+			try {
+				captured.element.releasePointerCapture(captured.pointerId);
+			} catch {
+				// Already released — nothing to do.
+			}
+			captured = null;
+		}
+
 		game.endCast();
 	}
 

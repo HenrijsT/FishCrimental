@@ -97,3 +97,20 @@ describe('formatRate / formatDuration', () => {
 		expect(formatDuration(-1)).toBe('—');
 	});
 });
+
+describe('scientific notation mode', () => {
+	it('skips the K/M/B/T suffixes', () => {
+		expect(formatNumber(1234, { notation: 'scientific' })).toBe('1.23e3');
+		expect(formatNumber(5.5e9, { notation: 'scientific' })).toBe('5.50e9');
+		expect(formatNumber(9.87e12, { notation: 'scientific' })).toBe('9.87e12');
+	});
+
+	it('leaves small numbers and layered values alone', () => {
+		expect(formatNumber(42, { notation: 'scientific' })).toBe('42');
+		expect(formatNumber(D('1e1e300'), { notation: 'scientific' })).toBe('ee300');
+	});
+
+	it('agrees with short notation above 1e15', () => {
+		expect(formatNumber(1.5e18, { notation: 'scientific' })).toBe(formatNumber(1.5e18));
+	});
+});
