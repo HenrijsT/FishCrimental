@@ -438,6 +438,15 @@ CHROME_PATH=/usr/bin/google-chrome-stable pnpm audit:ui   # Lighthouse
 
 Everything is committed locally on `feat/going-ham`. Nothing was pushed.
 
+## One late correction
+
+`@lhci/cli` writes its working files to `.lighthouseci/` at the repo root regardless of
+the `upload.outputDir` setting, which only controls where the finished reports are
+copied. Seven of those artifacts had been committed since Stage 1 — build output that
+does not belong in the repo. They are untracked and deleted, `pnpm audit:ui` now removes
+the directory after every run while preserving lhci's exit code, and `.prettierignore`
+covers it. `.gitignore` was not touched, as the brief requires.
+
 ---
 
 # SECOND PASS
@@ -884,17 +893,17 @@ overflow at every combination.
 
 ### Final numbers
 
-| | |
-|---|---|
-| First prestige | **2 h 25 m** at 1.00e15 lifetime |
-| Sources open at | 6 / 14 / 21 / 30 / 39 / 53 / 71 min |
-| Licences taken at | 3 / 14 / 23 / 33 min |
-| Boat bought at | 40 min |
-| Crew out-earn the player at | 11 min |
-| Mostly-idle player (15% uptime) | 3 h 30 m |
-| Runs 2 / 3 / 4 / 5 / 6 | 1 h 03 m / 24 m / 57 s / 13 s / 4 s |
-| Run 6 lifetime in a fixed 3 h | 1.79e55 |
-| Pearls after six runs | 8.05e16 |
+|                                 |                                     |
+| ------------------------------- | ----------------------------------- |
+| First prestige                  | **2 h 25 m** at 1.00e15 lifetime    |
+| Sources open at                 | 6 / 14 / 21 / 30 / 39 / 53 / 71 min |
+| Licences taken at               | 3 / 14 / 23 / 33 min                |
+| Boat bought at                  | 40 min                              |
+| Crew out-earn the player at     | 11 min                              |
+| Mostly-idle player (15% uptime) | 3 h 30 m                            |
+| Runs 2 / 3 / 4 / 5 / 6          | 1 h 03 m / 24 m / 57 s / 13 s / 4 s |
+| Run 6 lifetime in a fixed 3 h   | 1.79e55                             |
+| Pearls after six runs           | 8.05e16                             |
 
 **Gates:** `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok ·
 `pnpm test` **260 passing** across 17 files · `pnpm audit:ui` **1.00 / 1.00 / 1.00 / 1.00**.
@@ -915,36 +924,36 @@ pnpm dev        # http://localhost:5173
 
 **Fourteen confirmed**, each reproduced before being fixed and re-verified after.
 
-*Stage 0 — the round-two hunt (`fix/round-two`, merged `--no-ff`)*
+_Stage 0 — the round-two hunt (`fix/round-two`, merged `--no-ff`)_
 
-| # | Bug | Reproduced by |
-|---|---|---|
-| B1 | One cast wrote a fractional sliver of **all 31 species** in the source into the ticker, the hold and the Fishdex — the single cause of three of the five bugs the user reported | Unit probe: `caught.size` was 31 after one cast at `net` level 1. Confirmed live: the ticker read `Guppy 0.51 \| Tetra 0.51 \| Platy 0.51 …` and the hold read `Erotic 0 !` |
-| B2 | `formatNumber` rendered nonzero values as `"0"` | `formatNumber(0.004)` → `"0"` |
-| B3 | Toasts only dismissed, never navigated | Clicking a Fishdex toast left the tab on Water |
-| B4 | Every source stocked nearly every species at identical rarity | Pond catch table held 31 species, all at 7.08e-2 |
-| B5 | A large crew overflowed a double to `Infinity`, which the save layer rejects — **silently zeroing the player's coins on reload** | A 1e320 crew produced `Infinity` through hold → coins → save |
-| B6 | Bulk-buying deckhands cost more than buying them singly | Ten Pond deckhands: 112,938 singly, 112,943.47 in bulk |
-| B7 | A save from a newer build loaded silently and was then overwritten | `version: 99` loaded and was truncated on the next autosave |
-| B8 | Hand-edited saves were trusted — negative coins, rod level 1e30 | `fromRaw({coins: '-1e30'})` |
-| B9 | Two tabs on one save clobbered each other | Both autosaved, last writer won |
+| #   | Bug                                                                                                                                                                             | Reproduced by                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1  | One cast wrote a fractional sliver of **all 31 species** in the source into the ticker, the hold and the Fishdex — the single cause of three of the five bugs the user reported | Unit probe: `caught.size` was 31 after one cast at `net` level 1. Confirmed live: the ticker read `Guppy 0.51 \| Tetra 0.51 \| Platy 0.51 …` and the hold read `Erotic 0 !` |
+| B2  | `formatNumber` rendered nonzero values as `"0"`                                                                                                                                 | `formatNumber(0.004)` → `"0"`                                                                                                                                               |
+| B3  | Toasts only dismissed, never navigated                                                                                                                                          | Clicking a Fishdex toast left the tab on Water                                                                                                                              |
+| B4  | Every source stocked nearly every species at identical rarity                                                                                                                   | Pond catch table held 31 species, all at 7.08e-2                                                                                                                            |
+| B5  | A large crew overflowed a double to `Infinity`, which the save layer rejects — **silently zeroing the player's coins on reload**                                                | A 1e320 crew produced `Infinity` through hold → coins → save                                                                                                                |
+| B6  | Bulk-buying deckhands cost more than buying them singly                                                                                                                         | Ten Pond deckhands: 112,938 singly, 112,943.47 in bulk                                                                                                                      |
+| B7  | A save from a newer build loaded silently and was then overwritten                                                                                                              | `version: 99` loaded and was truncated on the next autosave                                                                                                                 |
+| B8  | Hand-edited saves were trusted — negative coins, rod level 1e30                                                                                                                 | `fromRaw({coins: '-1e30'})`                                                                                                                                                 |
+| B9  | Two tabs on one save clobbered each other                                                                                                                                       | Both autosaved, last writer won                                                                                                                                             |
 
-*Stage 2 — found by playtesting the boat, not by the type checker*
+_Stage 2 — found by playtesting the boat, not by the type checker_
 
-| # | Bug | Reproduced by |
-|---|---|---|
-| B10 | The stranded banner cleared itself on the next 200 ms tick, because it tested the source the player had been moved **to** rather than **from** | Banner never appeared live |
+| #   | Bug                                                                                                                                                                         | Reproduced by                                                  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| B10 | The stranded banner cleared itself on the next 200 ms tick, because it tested the source the player had been moved **to** rather than **from**                              | Banner never appeared live                                     |
 | B11 | With a standing order the tank ended each trip at exactly zero, and `fuel / fuelPerCast` floored one cast short — so every trip reported a fallback despite a paid-up order | Offline summary said "ran out of fuel" with 1e12 coins in hand |
 
-*Stage 4 — the final pass*
+_Stage 4 — the final pass_
 
-| # | Bug | Reproduced by |
-|---|---|---|
-| B12 | The Standing Charter opened water the player had **no licence for**, stalling every prestige run past the first | The six-run balance chain completed five |
-| B13 | A headstart run could start standing over open water with no boat | Same root; caught at headstart ≥ 6 |
-| B14 | Unlicensed water still paid out — `accumulate` disagreed with `reachableSource` | Hand-edited save earned 28 fish/hour from unpermitted water |
-| B15 | A non-finite boat condition propagated NaN into every cast time | `boatEfficiency(NaN)` |
-| B16 | The offline summary subtracted the fuel bill twice | Coins delta 204.4M vs sales 210.2M with a 5.8M bill shown separately |
+| #   | Bug                                                                                                             | Reproduced by                                                        |
+| --- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| B12 | The Standing Charter opened water the player had **no licence for**, stalling every prestige run past the first | The six-run balance chain completed five                             |
+| B13 | A headstart run could start standing over open water with no boat                                               | Same root; caught at headstart ≥ 6                                   |
+| B14 | Unlicensed water still paid out — `accumulate` disagreed with `reachableSource`                                 | Hand-edited save earned 28 fish/hour from unpermitted water          |
+| B15 | A non-finite boat condition propagated NaN into every cast time                                                 | `boatEfficiency(NaN)`                                                |
+| B16 | The offline summary subtracted the fuel bill twice                                                              | Coins delta 204.4M vs sales 210.2M with a 5.8M bill shown separately |
 
 Every one has a regression test. The user's five reported bugs map to B1 (three of
 them), B3 and B4.
@@ -971,10 +980,10 @@ Logged rather than fixed, as the brief requires.
 **Decision: every count is a whole number, and fractional rates are resolved by banking
 the remainder.** 1.19 fish per cast pays 1, 1, 1, 1, 1, 2, 1 … averaging exactly 1.19.
 
-The argument in one line each: *keeping fractions* is what produced three of the five
+The argument in one line each: _keeping fractions_ is what produced three of the five
 reported bugs, because the only honest way to hand out 1.19 fish from a 31-species
-distribution is to hand out a slice of all 31; *resolving stochastically* is unbiased
-only in expectation and adds noise to the one number an idle player watches; *banking*
+distribution is to hand out a slice of all 31; _resolving stochastically_ is unbiased
+only in expectation and adds noise to the one number an idle player watches; _banking_
 is unbiased **exactly** — at any moment everything owed has either been paid or is in
 the bank — needs no RNG, and resolves eight hours in a single step.
 
@@ -985,16 +994,16 @@ expected share with the same banking per species. Full reasoning in the Stage 3 
 
 ## How licences and the boat changed the pacing
 
-| | Before second pass | After |
-|---|---|---|
-| First prestige | 2 h 18 m at 1.00e15 | **2 h 25 m at 1.00e15** |
-| Mostly-idle player | 3 h 08 m | 3 h 30 m |
-| Sources open at | 5/12/18/27/37/49/67 min | 6/14/21/30/39/53/71 min |
-| Licences taken at | — | 3 / 14 / 23 / 33 min |
-| Boat bought at | — | 40 min |
-| Crew out-earn the player at | 12 min | 11 min |
-| Runs 2 / 3 / 4 | 1 h 02 m / 24 m / 1 m 25 s | 1 h 03 m / 24 m / 57 s |
-| Run 6 lifetime in a fixed 3 h | 1.18e45 | **1.79e55** |
+|                               | Before second pass         | After                   |
+| ----------------------------- | -------------------------- | ----------------------- |
+| First prestige                | 2 h 18 m at 1.00e15        | **2 h 25 m at 1.00e15** |
+| Mostly-idle player            | 3 h 08 m                   | 3 h 30 m                |
+| Sources open at               | 5/12/18/27/37/49/67 min    | 6/14/21/30/39/53/71 min |
+| Licences taken at             | —                          | 3 / 14 / 23 / 33 min    |
+| Boat bought at                | —                          | 40 min                  |
+| Crew out-earn the player at   | 12 min                     | 11 min                  |
+| Runs 2 / 3 / 4                | 1 h 02 m / 24 m / 1 m 25 s | 1 h 03 m / 24 m / 57 s  |
+| Run 6 lifetime in a fixed 3 h | 1.18e45                    | **1.79e55**             |
 
 Adding the sinks first pushed the run to **2 h 41 m**. Trimming licence and boat prices
 barely helped (2 h 39 m) — the delay is the licence gate in front of each tier, not the
@@ -1006,12 +1015,12 @@ where it started.**
 
 **No quality gate was relaxed.** All five pass at their original thresholds:
 
-| Gate | Result |
-|---|---|
-| `pnpm check` | 409 files, **0 errors, 0 warnings** |
-| `pnpm lint` | Prettier clean, ESLint clean |
-| `pnpm build` | ok |
-| `pnpm test` | **260 passing** across 17 files (was 136) |
+| Gate            | Result                                    |
+| --------------- | ----------------------------------------- |
+| `pnpm check`    | 409 files, **0 errors, 0 warnings**       |
+| `pnpm lint`     | Prettier clean, ESLint clean              |
+| `pnpm build`    | ok                                        |
+| `pnpm test`     | **260 passing** across 17 files (was 136) |
 | `pnpm audit:ui` | **1.00 / 1.00 / 1.00 / 1.00**, three runs |
 
 The judgement calls, each with its number:
