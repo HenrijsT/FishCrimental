@@ -94,11 +94,17 @@ describe('onboarding', () => {
 		expect(availableTabs(state).map((tab) => tab.id)).toContain('crew');
 	});
 
-	it('opens the Fishdex after a couple of species', () => {
+	/**
+	 * One species, not two.
+	 *
+	 * The first catch raises a toast that says "tap to see it", and at a
+	 * threshold of two that toast navigated to a tab that did not exist yet.
+	 * The first thing the game invites a new player to do cannot be a dead end.
+	 */
+	it('opens the Fishdex on the very first species', () => {
 		const state = createInitialState();
-		state.dex[ALL_SPECIES[0].name] = D(1);
 		expect(availableTabs(state).map((tab) => tab.id)).not.toContain('dex');
-		state.dex[ALL_SPECIES[1].name] = D(1);
+		state.dex[ALL_SPECIES[0].name] = D(1);
 		expect(availableTabs(state).map((tab) => tab.id)).toContain('dex');
 	});
 

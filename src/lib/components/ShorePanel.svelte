@@ -14,6 +14,9 @@
 
 	const g = $derived(game.state);
 	const worth = $derived(game.holdWorth);
+	// `rideToTown` sells the bucket *and* settles the quay, both at full price —
+	// which the copy above the button has always said and the button did not.
+	const rideWorth = $derived(worth.plus(game.listedWorth));
 	/** What is already on the quay, waiting for him — not the whole bucket. */
 	const traderPays = $derived(game.listedWorth.times(TRADER_RATE));
 
@@ -88,7 +91,7 @@
 				{#if game.inTown}
 					In town
 				{:else}
-					<Num value={worth} tone="coin" />
+					<Num value={rideWorth} tone="coin" />
 				{/if}
 			</button>
 		</div>
@@ -182,7 +185,7 @@
 		display: grid;
 		gap: 0.4rem;
 		padding: 0.6rem 0;
-		border-top: 1px solid var(--edge);
+		border-top: 1px solid var(--rule);
 	}
 
 	.trader-head {
@@ -210,7 +213,7 @@
 		gap: var(--gap);
 		flex-wrap: wrap;
 		padding: 0.6rem 0;
-		border-top: 1px solid var(--edge);
+		border-top: 1px solid var(--rule);
 	}
 
 	.text {
@@ -248,7 +251,7 @@
 	.hired {
 		font-size: 0.78rem;
 		color: var(--foam);
-		border-top: 1px solid var(--edge);
+		border-top: 1px solid var(--rule);
 		padding-top: 0.6rem;
 	}
 

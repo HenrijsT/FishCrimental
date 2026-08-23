@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { HELP_TOPICS } from '$lib/game/help';
 	import type { TabId } from '$lib/game/guide';
-	import { game } from '$lib/game/state.svelte';
 	import Modal from './Modal.svelte';
 
 	interface Props {
@@ -16,7 +15,7 @@
 	const entry = $derived(HELP_TOPICS.find((item) => item.id === topic));
 </script>
 
-{#if entry && game.state.settings.unlockGuides}
+{#if entry}
 	<Modal title={entry.title} closeLabel="Got it" {onclose}>
 		<p class="lead">Something new. Here is the short version.</p>
 		{#each entry.body.slice(0, 2) as paragraph (paragraph)}

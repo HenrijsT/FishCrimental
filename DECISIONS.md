@@ -3404,7 +3404,7 @@ the ladder.
 
 **Storms**, then **Bosses**, then **Megalodon**, thirty-two apiece, Megalodon
 without end. A shift is never "a shift" in the copy any more: the button says
-*Storm 7*, the modal says *Boss 3 — ridden out*, and each tier carries a line
+_Storm 7_, the modal says _Boss 3 — ridden out_, and each tier carries a line
 about what kind of thing it is.
 
 **The tier is derived from `prestigeCount` rather than stored, and that is a
@@ -3418,8 +3418,8 @@ and when the real shift layer lands it will still be counting shifts.
 
 A **Help** tab, browsable, twelve topics, **covering only what the player has
 already unlocked**. That constraint is the whole design and it is what makes
-Help different from `guide.ts`: the guide says *what to do next*, one line, and
-vanishes when you do it; Help says *what the thing you already have does*, and
+Help different from `guide.ts`: the guide says _what to do next_, one line, and
+vanishes when you do it; Help says _what the thing you already have does_, and
 stays. A wiki tells you about systems you have not met, which is how a wiki
 spoils a game. Reading all of Help at any moment is a complete and accurate
 account of the game you are currently playing, and nothing more.
@@ -3455,13 +3455,13 @@ moment a shadow` twice, and one phrase I introduced while fixing the first).
 
 The result, measured rather than asserted:
 
-| | |
-| --- | --- |
-| Length | 198 – 244 characters, median **222** (was 171–256, median 226) |
-| Aquarium framing | **none** |
-| Addresses the reader as "you" | **none** (the four oddities did; they no longer do) |
-| Five-word phrases shared by two entries | **none** |
-| Most-repeated opening word | 5 of 47 |
+|                                         |                                                                |
+| --------------------------------------- | -------------------------------------------------------------- |
+| Length                                  | 198 – 244 characters, median **222** (was 171–256, median 226) |
+| Aquarium framing                        | **none**                                                       |
+| Addresses the reader as "you"           | **none** (the four oddities did; they no longer do)            |
+| Five-word phrases shared by two entries | **none**                                                       |
+| Most-repeated opening word              | 5 of 47                                                        |
 
 Four tests hold that line, and they assert **variety rather than taste**, which
 is the only part of this a test can honestly check.

@@ -124,7 +124,11 @@
 						{/if}
 					</p>
 				</div>
-				<button disabled={maxed || g.pearls.lt(cost)} onclick={() => game.buyPearlUpgrade(id)}>
+				<button
+					aria-label="Buy {config.name}"
+					disabled={maxed || g.pearls.lt(cost)}
+					onclick={() => game.buyPearlUpgrade(id)}
+				>
 					{#if maxed}
 						Maxed
 					{:else}

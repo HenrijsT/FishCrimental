@@ -8,6 +8,7 @@
 		dexMultiplier
 	} from '$lib/game/engine';
 	import { game } from '$lib/game/state.svelte';
+	import { scrollBehaviour } from '$lib/motion';
 	import { formatPercent } from '$lib/format';
 	import Num from './Num.svelte';
 
@@ -30,7 +31,7 @@
 	$effect(() => {
 		if (!focus) return;
 		expanded = focus;
-		entries[focus]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		entries[focus]?.scrollIntoView({ block: 'center', behavior: scrollBehaviour() });
 	});
 
 	function caught(name: string) {

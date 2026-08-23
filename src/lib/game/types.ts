@@ -154,8 +154,15 @@ export interface GameState {
 	poaching: FishingSources | null;
 	/** Seconds fished on the current poach. Cleared by a bust or by leaving. */
 	poachElapsed: number;
-	/** Coin worth of what has been landed on this poach, for confiscation. */
-	poachedValue: Decimal;
+	/**
+	 * What has been landed on this poach, by species.
+	 *
+	 * A ledger and not a scalar, so a bust can take the poached fish and leave
+	 * the legal ones. With one number the warden seized "nine hundred coins'
+	 * worth" out of a mixed bucket by value share, which meant ninety legal
+	 * guppies went back in the water so that one stolen pike could stay.
+	 */
+	poached: SpeciesLedger;
 	/** Busts per source, this run. The fine escalates on this. */
 	poachOffences: Partial<Record<FishingSources, number>>;
 	/**

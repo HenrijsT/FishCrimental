@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
 		BOAT_COST,
+		BOAT_MIN_EFFICIENCY,
 		BOAT_SOURCES,
 		BOAT_UPGRADES,
 		BOAT_UPGRADE_IDS,
@@ -24,6 +25,14 @@
 	let sounderGuess = $state(50);
 	let sounderSaid = $state<string | null>(null);
 
+	// The sounder's last answer belongs to the attempt that produced it. Walking
+	// away and sitting again — which is free, and which the panel encourages —
+	// used to open the fresh attempt still showing "Last call: deeper" against a
+	// depth that had been re-rolled.
+	$effect(() => {
+		if (game.exam?.kind !== 'sounder') sounderSaid = null;
+	});
+
 	function callSounder() {
 		const said = game.sounderCall(sounderGuess);
 		sounderSaid = said === 'found' ? 'found it' : said;
@@ -36,6 +45,15 @@
 	);
 	const castsLeft = $derived(boat.fuel.div(game.modifiers.fuelPerCast).floor());
 	const repair = $derived(repairCost(g));
+	/**
+	 * What pressing Repair will actually take.
+	 *
+	 * `repairBoat` falls back to a partial repair for whatever the player has,
+	 * so a short player was shown the full price and charged every coin they
+	 * owned. The fuel button one line above already clamps; this one did not.
+	 */
+	const repairCharge = $derived(Decimal.min(repair, g.coins));
+	const partialRepair = $derived(repair.gt(g.coins) && g.coins.gt(0));
 </script>
 
 <section class="panel">
@@ -62,9 +80,18 @@
 				label="Progress through {definition.name}"
 				active={!game.examDone}
 			/>
-			<p class="progress-line">
+			<!--
+				The one thing the sounder ever tells you is a word, and there was
+				nowhere for a screen reader to hear it. `role="progressbar"` is not
+				a live region, so the whole exam — a binary search whose only
+				feedback is "deeper" or "shallower" — was unplayable without sight,
+				and licences gate everything past the Sea.
+			-->
+			<p class="progress-line" role="status">
 				{exam.progress} of {exam.target}
 				{#if exam.attempts > 0}<span class="faint">· {exam.attempts} calls</span>{/if}
+				{#if sounderSaid}<span class="said">· last call: {sounderSaid}</span>{/if}
+				{#if game.examDone}<span class="passed-inline">· passed</span>{/if}
 			</p>
 
 			{#if game.examDone}
@@ -75,10 +102,10 @@
 			{:else if exam.kind === 'quota'}
 				<p class="task">
 					{#if exam.species}
-						Land <strong>{exam.target}</strong> more {exam.species}. Anything that lands counts —
-						your rod, the crew, the ponds.
+						Land <strong>{exam.target - exam.progress}</strong> more {exam.species}. Anything that
+						lands counts — your rod, the crew, the ponds.
 					{:else}
-						Land <strong>{exam.target}</strong> fish. Anything at all.
+						Land <strong>{exam.target - exam.progress}</strong> more fish. Anything at all.
 					{/if}
 				</p>
 			{:else if exam.kind === 'longline'}
@@ -100,7 +127,6 @@
 			{:else if exam.kind === 'sounder'}
 				<p class="task">
 					Somewhere between <strong>{exam.low}</strong> and <strong>{exam.high}</strong>.
-					{#if sounderSaid}<span class="said">Last call: {sounderSaid}.</span>{/if}
 				</p>
 				<div class="row-buttons">
 					<label class="depth">
@@ -148,6 +174,10 @@
 					<p class="flavour muted">{licence.flavour}</p>
 					{#if blocked && !held}
 						<p class="need">Requires the {LICENCES[licence.requires!].name} first.</p>
+					{:else if !held && !game.sittable.includes(id)}
+						<p class="need faint">
+							Sat for when the water in front of you needs it — {EXAMS[id].name}, no fee.
+						</p>
 					{:else if !held}
 						<p class="need faint">{EXAMS[id].name} — no fee.</p>
 					{/if}
@@ -212,7 +242,9 @@
 				</div>
 				<p class="faint small">
 					A worn boat is slow, never dead — it never drops below
-					{Math.round(game.modifiers.boatEfficiency * 100)}% today, and 40% at its worst.
+					{Math.round(game.modifiers.boatEfficiency * 100)}% today, and {Math.round(
+						BOAT_MIN_EFFICIENCY * 100
+					)}% at its worst.
 				</p>
 			</div>
 		</div>
@@ -227,8 +259,10 @@
 			<button disabled={repair.lte(0) || g.coins.lte(0)} onclick={() => game.repair()}>
 				{#if repair.lte(0)}
 					Nothing to repair
+				{:else if partialRepair}
+					Part-repair · <Num value={repairCharge} tone="coin" />
 				{:else}
-					Repair · <Num value={repair} tone="coin" />
+					Repair · <Num value={repairCharge} tone="coin" />
 				{/if}
 			</button>
 		</div>
@@ -239,6 +273,7 @@
 				{@const config = BOAT_UPGRADES[id]}
 				{@const level = boat.upgrades[id]}
 				{@const maxed = level.gte(config.maxLevel)}
+				{@const capped = !maxed && level.gte(game.boatCeilings[id])}
 				{@const cost = boatUpgradeCost(id, level)}
 				<li class:held={maxed}>
 					<div class="text">
@@ -248,10 +283,19 @@
 						</h4>
 						<p class="flavour muted">{config.description}</p>
 						<p class="effect">{config.format(level.toNumber())}</p>
+						{#if capped}
+							<p class="need">No yard around here fits one. Deeper water has a better yard.</p>
+						{/if}
 					</div>
-					<button disabled={maxed || g.coins.lt(cost)} onclick={() => game.upgradeBoat(id)}>
+					<button
+						aria-label="Fit {config.name}"
+						disabled={maxed || capped || g.coins.lt(cost)}
+						onclick={() => game.upgradeBoat(id)}
+					>
 						{#if maxed}
 							Done
+						{:else if capped}
+							Not fitted here
 						{:else}
 							<Num value={cost} tone="coin" />
 						{/if}
@@ -456,8 +500,13 @@
 		margin: 0.4rem 0;
 	}
 
-	.said {
+	.said,
+	.passed-inline {
 		color: var(--ink-dim);
+	}
+
+	.passed-inline {
+		color: var(--brass);
 	}
 
 	.row-buttons {

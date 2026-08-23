@@ -3,6 +3,15 @@
 	import LipfishModal from './LipfishModal.svelte';
 	import OfflineModal from './OfflineModal.svelte';
 	import PrestigeModal from './PrestigeModal.svelte';
+	import UnlockGuide from './UnlockGuide.svelte';
+	import type { TabId } from '$lib/game/guide';
+
+	interface Props {
+		/** Jump to a tab — the guide offers a link into Help. */
+		onnavigate: (tab: TabId) => void;
+	}
+
+	let { onnavigate }: Props = $props();
 
 	/**
 	 * The single place a modal can appear.
@@ -20,4 +29,10 @@
 	<PrestigeModal />
 {:else if active === 'lipfish'}
 	<LipfishModal />
+{:else if active === 'guide'}
+	<UnlockGuide
+		topic={game.unlockGuide}
+		onclose={() => game.dismissUnlockGuide()}
+		onhelp={onnavigate}
+	/>
 {/if}

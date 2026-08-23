@@ -42,7 +42,18 @@
 	--deep: #06131f;
 	--hull: #0d2135;
 	--hull-raised: #14324f;
-	--edge: #21486e;
+	/* Measured, not guessed. #21486e was 1.48:1 against a panel — the only
+	   thing separating a button from the surface it sits on was a 1px inset
+	   highlight, so a low-vision player could not see where the controls were,
+	   including the Sounder's number field and the Cull's keep/return pair,
+	   which have no other affordance. #4479ab clears the 3:1 non-text-contrast
+	   threshold across the whole panel range: 3.06:1 at the lightest panel,
+	   3.63:1 at the darkest. */
+	--edge: #4479ab;
+	/* The old edge, kept for hairlines that separate content rather than
+	   outline a control — table rules and panel dividers are not targets, and
+	   3:1 there would draw the eye to the furniture instead of the numbers. */
+	--rule: #21486e;
 	--ink: #e8f1f8;
 	--ink-dim: #9db4c8;
 	/* Measured, not guessed. #6d89a1 bottomed out at 3.59:1 against

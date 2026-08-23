@@ -3,10 +3,42 @@
 	import { FishType } from '$lib/fish_types';
 	import { RARITY_LABEL } from '$lib/game/engine';
 	import Num from './Num.svelte';
+
+	/**
+	 * One short line, refreshed at most once a second, for anyone listening
+	 * rather than looking.
+	 */
+	let announcement = $state('');
+	let lastSpoken = 0;
+
+	$effect(() => {
+		const latest = game.recentCatches[0];
+		if (!latest) return;
+
+		const now = Date.now();
+		if (now - lastSpoken < 1000) return;
+		lastSpoken = now;
+		announcement =
+			latest.fish.category === FishType.Jelly
+				? `${latest.fish.name}, worth nothing`
+				: `${latest.fish.name}`;
+	});
 </script>
 
-<section class="panel ticker" aria-live="polite" aria-label="Recent catches">
+<!--
+	The list itself is not a live region.
+	
+	It was one, wrapping the heading, twelve rows and a legend, and `castOnce`
+	prepends to it once per completed cast — up to twenty times a second at the
+	cast-time floor. Every one of those queued a full re-read of the whole list,
+	so a screen reader fell minutes behind and buried every other announcement on
+	the page. The list is still there to read on demand; what is announced is the
+	one-line summary below, throttled to about once a second.
+-->
+<section class="panel ticker" aria-label="Recent catches">
 	<h3>On your line</h3>
+
+	<p class="sr-only" role="status">{announcement}</p>
 	{#if game.recentCatches.length === 0}
 		<p class="faint idle">Nothing yet. Hold the rod and something will turn up.</p>
 	{:else}

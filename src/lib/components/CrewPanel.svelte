@@ -23,6 +23,11 @@
 	const crewLevel = $derived(state.upgrades.crew);
 	const crewStep = $derived(game.upgradeStep('crew'));
 	const crewCost = $derived(crewStep.gt(0) ? upgradeBulkCost('crew', crewLevel, crewStep) : null);
+	// A shopkeeper ceiling is not the top of the track. This panel said "Maxed"
+	// at crew 9 of 60 while the Gear tab said "Not sold here · better is stocked
+	// at the Stream" about the same upgrade.
+	const crewMaxed = $derived(crewLevel.gte(UPGRADES.crew.maxLevel));
+	const crewStockedAt = $derived(game.stockedAt.crew);
 </script>
 
 <section class="panel">
@@ -62,7 +67,11 @@
 					</p>
 				</div>
 
-				<button disabled={!affordable || step.lte(0)} onclick={() => game.hire(source)}>
+				<button
+					aria-label="Hire a deckhand at the {sources[source].name}"
+					disabled={!affordable || step.lte(0)}
+					onclick={() => game.hire(source)}
+				>
 					{#if step.lte(0) || cost === null}
 						Not yet
 					{:else}
@@ -82,13 +91,22 @@
 			</h3>
 			<p class="desc muted">{UPGRADES.crew.description}</p>
 			<p class="effect">{UPGRADES.crew.format(crewLevel.toNumber())}</p>
+			{#if !crewMaxed && crewCost === null}
+				<p class="desc muted">
+					The best one anyone around here sells.
+					{#if crewStockedAt}Better is stocked at the <strong>{crewStockedAt}</strong>.{/if}
+				</p>
+			{/if}
 		</div>
 		<button
+			aria-label="Buy {UPGRADES.crew.name}"
 			disabled={crewCost === null || !state.coins.gte(crewCost)}
 			onclick={() => game.buy('crew')}
 		>
-			{#if crewCost === null}
+			{#if crewMaxed}
 				Maxed
+			{:else if crewCost === null}
+				Not sold here
 			{:else}
 				<span class="amount">+{crewStep.toFixed(0)}</span>
 				<Num value={crewCost} tone="coin" />

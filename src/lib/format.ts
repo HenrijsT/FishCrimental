@@ -55,8 +55,14 @@ export function formatNumber(value: DecimalSource, options: FormatOptions = {}):
 
 	// Layer 1 — mag *is* the base-10 exponent.
 	if (d.layer === 1) {
-		const exponent = Math.floor(d.mag);
-		const mantissa = Math.pow(10, d.mag - exponent);
+		let exponent = Math.floor(d.mag);
+		let mantissa = Math.pow(10, d.mag - exponent);
+		// Rounding can push the mantissa to ten, which is one whole order of
+		// magnitude written in the wrong place. Carry it.
+		if (Number(mantissa.toFixed(precision)) >= 10) {
+			exponent += 1;
+			mantissa = Math.pow(10, d.mag - exponent);
+		}
 		return `${mantissa.toFixed(precision)}e${formatPlainExponent(exponent, precision)}`;
 	}
 
@@ -77,13 +83,27 @@ export function formatNumber(value: DecimalSource, options: FormatOptions = {}):
 	const exponent = Math.floor(Math.log10(magnitude));
 
 	if (exponent < 15 && options.notation !== 'scientific') {
-		const tier = Math.floor(exponent / 3);
-		const mantissa = magnitude / Math.pow(1000, tier);
+		let tier = Math.floor(exponent / 3);
+		let mantissa = magnitude / Math.pow(1000, tier);
+
+		// Rounding can push the mantissa past its own suffix: 999,999 rounds to
+		// "1000.00K", which is a thousand thousand written the long way. Carry
+		// into the next tier instead.
+		if (Number(mantissa.toFixed(precision)) >= 1000 && tier + 1 < SHORT_SUFFIXES.length) {
+			tier += 1;
+			mantissa = magnitude / Math.pow(1000, tier);
+		}
+
 		return `${mantissa.toFixed(precision)}${SHORT_SUFFIXES[tier]}`;
 	}
 
-	const mantissa = magnitude / Math.pow(10, exponent);
-	return `${mantissa.toFixed(precision)}e${exponent}`;
+	let mantissa = magnitude / Math.pow(10, exponent);
+	let scale = exponent;
+	if (Number(mantissa.toFixed(precision)) >= 10) {
+		scale += 1;
+		mantissa = magnitude / Math.pow(10, scale);
+	}
+	return `${mantissa.toFixed(precision)}e${scale}`;
 }
 
 /** Whole numbers with thousands separators, for small counts. */

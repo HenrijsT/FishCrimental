@@ -5,6 +5,8 @@ import { OFFLINE_EFFICIENCY, SOURCE_ORDER, UPGRADES } from './config';
 import { simulateRun } from './balance';
 import {
 	accumulate,
+	bucketCapacity,
+	holdCount,
 	buyUpgrade,
 	catchTable,
 	clearCatchTableCache,
@@ -116,6 +118,10 @@ describe('the manual to idle transition', () => {
 		const state = createInitialState();
 		state.coins = D(1e9);
 		state.deckhands[SOURCE_ORDER[0]] = D(40);
+		// Somebody is minding the catch. Without that, an hour of forty
+		// deckhands fills a thirty-fish bucket in under a minute and the crew
+		// stop — which is correct, and is not what this test is about.
+		state.hasAssistant = true;
 
 		const modifiers = computeModifiers(state);
 		const before = state.holdValue;
@@ -123,6 +129,25 @@ describe('the manual to idle transition', () => {
 
 		expect(state.holdValue.gt(before)).toBe(true);
 		expect(state.totalCasts.gt(1000)).toBe(true);
+	});
+
+	/**
+	 * Casts are no longer minted for fish there is nowhere to put.
+	 *
+	 * `routeCasts` buys fuel and wears the hull for every cast handed to it, and
+	 * the catch was only clamped afterwards — so a bucket-limited open-water
+	 * crew was billed for a whole interval and landed a bucketful. Offline that
+	 * interval is the entire night.
+	 */
+	it('does not mint casts a full bucket has no room for', () => {
+		const state = createInitialState();
+		state.deckhands[SOURCE_ORDER[0]] = D(40);
+
+		accumulate(state, computeModifiers(state), 3600);
+
+		expect(holdCount(state).lte(bucketCapacity(state.bucketLevel))).toBe(true);
+		// Thirty fish is thirty-ish casts, not the thousands an hour would buy.
+		expect(state.totalCasts.lt(100)).toBe(true);
 	});
 
 	it('still lets the player cast by hand at any point', () => {

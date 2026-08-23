@@ -1,6 +1,7 @@
 import Decimal from 'break_eternity.js';
 import { LICENCES, type LicenceId } from './config';
 import { catchTable, missingLicence, nextLockedSource } from './engine';
+import { stopPoaching, trespass } from './police';
 import { SOURCE_ORDER } from './config';
 import type { ExamState, GameState } from './types';
 
@@ -78,6 +79,15 @@ export const EXAMS: Record<LicenceId, ExamDefinition> = {
 		target: 25
 	}
 };
+
+/**
+ * How often a fish has to turn up before the warden is allowed to name it.
+ *
+ * One in fifty. Below that a Quota stops being a task and becomes a wall — and
+ * the Quota is one of the two exams that does not drip, so a wall there is a
+ * wall for good.
+ */
+export const QUOTA_MIN_PROBABILITY = 0.02;
 
 /** The deepest a sounder can be, and the range the first call sees. */
 export const SOUNDER_MAX = 100;
@@ -175,17 +185,34 @@ export function abandonExam(state: GameState): void {
  * than naming nothing and waiting forever.
  */
 function pickQuotaSpecies(state: GameState, random: () => number): string | undefined {
-	const reachable = new Set<string>();
+	// Species name to the best chance it has at any water that is open and legal.
+	const reachable = new Map<string, number>();
 
 	for (const source of SOURCE_ORDER) {
 		if (!state.unlocked[source]) continue;
 		if (missingLicence(state, source)) continue;
-		for (const entry of catchTable(source, 1).species) reachable.add(entry.fish.name);
+		for (const entry of catchTable(source, 1).species) {
+			const best = reachable.get(entry.fish.name) ?? 0;
+			if (entry.probability > best) reachable.set(entry.fish.name, entry.probability);
+		}
 	}
 
-	const known = [...reachable].filter((name) => state.dex[name]?.gt(0)).sort();
+	const known = [...reachable.entries()]
+		.filter(([name]) => state.dex[name]?.gt(0))
+		.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 	if (known.length === 0) return undefined;
-	return known[Math.min(known.length - 1, Math.floor(random() * known.length))];
+
+	// And it has to be a fish that actually turns up.
+	//
+	// Picking uniformly over everything reachable meant a one-in-ten chance the
+	// very first licence asked for forty Lovestruck Lipfish — probability
+	// 1.1e-6, or about thirty-six million casts — and the Quota does not drip,
+	// so the only escape was abandoning an attempt the panel never suggests
+	// abandoning. The floor makes the ask a chore at worst.
+	const common = known.filter(([, probability]) => probability >= QUOTA_MIN_PROBABILITY);
+	const pool = common.length > 0 ? common : [known.reduce((a, b) => (a[1] >= b[1] ? a : b))];
+
+	return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))][0];
 }
 
 function nextCullOffer(random: () => number): string {
@@ -227,6 +254,9 @@ export function cullCall(
 ): void {
 	const exam = state.exam;
 	if (!exam || exam.kind !== 'cull' || exam.offer === undefined) return;
+	// A wrong call after the exam is already passed used to add to the target
+	// and un-pass it, which is the one thing "never a step backwards" forbids.
+	if (exam.progress >= exam.target) return;
 
 	const size = Number(exam.offer);
 	const shouldKeep = size >= CULL_KEEP_FROM;
@@ -248,6 +278,11 @@ export function cullCall(
 export function sounderCall(state: GameState, guess: number): 'deeper' | 'shallower' | 'found' {
 	const exam = state.exam;
 	if (!exam || exam.kind !== 'sounder' || exam.secret === undefined) return 'found';
+	if (exam.progress >= exam.target) return 'found';
+	// An emptied number field binds to `undefined`, and `Math.min(high, NaN)`
+	// is `NaN` for the rest of the attempt — the range then reads "between 1 and
+	// NaN" and the exam becomes unplayable by hand.
+	if (!Number.isFinite(guess)) return guess === exam.secret ? 'found' : 'deeper';
 
 	exam.attempts += 1;
 
@@ -286,6 +321,16 @@ export function claimLicence(state: GameState): LicenceId | null {
 
 	state.licences[exam.licence] = true;
 	state.exam = null;
+
+	// Paper in hand is not poaching any more.
+	//
+	// `state.poaching` outlived the licence that legalised it, so the warden
+	// went on counting and eventually fined a player for water they now held a
+	// card for. `settlePoachOnLoad` caught it on a reload, which is why "poach,
+	// take the licence, reload" looked fine and "poach, take the licence, keep
+	// playing" did not.
+	if (state.poaching && !trespass(state, state.poaching)) stopPoaching(state);
+
 	return exam.licence;
 }
 

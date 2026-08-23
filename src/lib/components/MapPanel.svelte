@@ -289,7 +289,7 @@
 		justify-content: space-between;
 		gap: var(--gap);
 		flex-wrap: wrap;
-		border-top: 1px solid var(--edge);
+		border-top: 1px solid var(--rule);
 		padding-top: 0.6rem;
 	}
 

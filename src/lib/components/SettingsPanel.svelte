@@ -17,11 +17,32 @@
 		message = 'Save copied into the box below. Keep it somewhere safe.';
 	}
 
+	function recoverSave() {
+		const rescued = game.rescuedBlob();
+		if (!rescued) {
+			message = 'There is nothing set aside.';
+			return;
+		}
+		blob = rescued;
+		message =
+			'The save the game refused to overwrite is in the box below. Copy it somewhere safe — it is the only copy.';
+	}
+
 	function runImport() {
 		if (!importText.trim()) return;
-		const ok = game.importBlob(importText);
-		message = ok ? 'Save loaded.' : 'That is not a FishCrimental save — nothing was changed.';
-		if (ok) importText = '';
+		const outcome = game.importBlob(importText);
+
+		if (outcome.state) {
+			message = 'Save loaded.';
+			importText = '';
+		} else if (outcome.failure === 'future') {
+			// Never tell someone their only backup is not a save. It is, and it
+			// is newer than this build — deleting it is the one thing they must
+			// not do next.
+			message = `That save was written by a newer version of FishCrimental (format ${outcome.version}). It has not been touched. Keep it, and update the game.`;
+		} else {
+			message = 'That does not look like a FishCrimental save — nothing was changed.';
+		}
 	}
 
 	function reset() {
@@ -82,6 +103,17 @@
 			</label>
 		</li>
 	</ul>
+
+	{#if game.rescued}
+		<h3>The save that was set aside</h3>
+		<p class="muted small">
+			A save this build could not read was copied aside rather than overwritten. It is still here,
+			and this is the only way to get it out.
+		</p>
+		<p class="row">
+			<button onclick={recoverSave}>Recover it</button>
+		</p>
+	{/if}
 
 	<h3>Your save</h3>
 	<p class="muted small">

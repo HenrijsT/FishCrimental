@@ -20,9 +20,14 @@ export const fishTypeBaseValue: Record<FishType, number> = {
 };
 
 /**
- * Fallback rarity weights. Every source overrides these in
- * `src/lib/game/config.ts`; this table is what a source falls back to when it
- * has no explicit mix.
+ * Fallback rarity weights.
+ *
+ * Nothing reads this any more: every source in `src/lib/game/config.ts` gives
+ * its own `typeWeights`, and `buildCatchTable` uses those. It is kept as the
+ * documented shape of a mix — the numbers a source would fall back to if one
+ * ever shipped without one — and deliberately not deleted along with the
+ * probability model that used to consume it, because it is the only place the
+ * intended relative rarity of the six types is written down.
  */
 export const fishTypeBaseChance = new Map<FishType, number>([
 	[FishType.Small, 90],
@@ -39,6 +44,20 @@ export const RARE_FISH_TYPES: readonly FishType[] = [
 	FishType.Large,
 	FishType.Shark,
 	FishType.Erotic
+];
+
+/**
+ * The rare types luck sorts *between*, shallowest first.
+ *
+ * Erotic is deliberately absent. It is the joke, weighted 0.00011 and worth 999
+ * — sorting toward it would make the punchline the dominant catch at every
+ * source late in a run, which is the opposite of a punchline. It keeps luck's
+ * plain rare-share benefit and nothing more.
+ */
+export const LUCK_TIER_ORDER: readonly FishType[] = [
+	FishType.Medium,
+	FishType.Large,
+	FishType.Shark
 ];
 
 export const fishTypeLabel: Record<FishType, string> = {

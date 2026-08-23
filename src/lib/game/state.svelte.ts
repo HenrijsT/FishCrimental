@@ -117,8 +117,10 @@ import {
 	backupRawSave,
 	exportRawSave,
 	exportSave,
-	importSave,
+	readImport,
+	type ImportOutcome,
 	loadFromStorage,
+	readBackupSave,
 	readRawSave,
 	saveToStorage
 } from './save';
@@ -152,7 +154,7 @@ const BLOCKING_SAVE_PROBLEMS: ReadonlySet<SaveProblem['kind']> = new Set(['futur
  * player cannot get back: it reports up to eight hours of crew work and is
  * gone once dismissed. The joke reveals can wait their turn.
  */
-export const MODAL_ORDER = ['offline', 'prestige', 'lipfish'] as const;
+export const MODAL_ORDER = ['offline', 'prestige', 'lipfish', 'guide'] as const;
 
 export type ModalId = (typeof MODAL_ORDER)[number];
 
@@ -229,6 +231,8 @@ export class Game {
 	#feedbackId = 0;
 	/** The unparsed save this build refused to read, kept so it can be rescued. */
 	#preservedSave: string | null = null;
+	/** Which problem the preserved copy belongs to. See `exportBlob`. */
+	#preservedFor: SaveProblem['kind'] | null = null;
 
 	// -----------------------------------------------------------------------
 	// Lifecycle
@@ -253,12 +257,14 @@ export class Game {
 			settleMarket(this.state);
 		} else if (outcome.kind === 'future') {
 			this.#preservedSave = readRawSave();
+			this.#preservedFor = 'future';
 			this.saveProblem = {
 				kind: 'future',
 				message: `This save was written by a newer version of FishCrimental (save format ${outcome.version}). It has been left untouched — update the game, or export it and start fresh.`
 			};
 		} else if (outcome.kind === 'corrupt') {
 			this.#preservedSave = readRawSave();
+			this.#preservedFor = 'corrupt';
 			this.saveProblem = {
 				kind: 'corrupt',
 				message:
@@ -315,7 +321,25 @@ export class Game {
 
 	tick(now = Date.now()): void {
 		this.now = now;
-		const elapsed = Math.min((now - this.state.lastUpdate) / 1000, RESUME_THRESHOLD_SECONDS);
+		const gap = (now - this.state.lastUpdate) / 1000;
+
+		// A gap this big is a night, not a tick, and it must be settled rather
+		// than clamped away.
+		//
+		// `tick` used to take `min(gap, RESUME_THRESHOLD_SECONDS)` and then write
+		// `lastUpdate = now` regardless, throwing the remainder away with no
+		// settle and no report. `resume()` is the only thing that turns a long
+		// gap into offline progress, and it reads the same `lastUpdate` the tick
+		// had just erased — so whichever fired first won. On a laptop that sleeps
+		// with the tab still *visible*, `visibilitychange` never fires at all,
+		// which means the pending interval callback was guaranteed to win and a
+		// three-hour nap came back as two minutes of fishing.
+		if (gap > RESUME_THRESHOLD_SECONDS) {
+			this.resume(now);
+			return;
+		}
+
+		const elapsed = gap;
 		this.state.lastUpdate = now;
 		if (elapsed <= 0) return;
 
@@ -359,16 +383,20 @@ export class Game {
 	 * them entirely, so a long gap is settled the same way a fresh load is
 	 * rather than being silently clamped away by `tick`.
 	 */
-	resume(): void {
+	resume(now = Date.now()): void {
 		if (!this.loaded) return;
 
-		const gap = (Date.now() - this.state.lastUpdate) / 1000;
+		const gap = (now - this.state.lastUpdate) / 1000;
 		if (gap > RESUME_THRESHOLD_SECONDS) {
-			const report = this.#settleOffline(this.state);
+			const report = this.#settleOffline(this.state, now);
 			if (report) this.offlineReport = report;
+			// The market recovers over wall-clock time whether or not anyone was
+			// fishing. `init()` did this and `resume()` did not, so the two entry
+			// points settled the same gap differently for no stated reason.
+			settleMarket(this.state, now);
 		}
 
-		this.state.lastUpdate = Date.now();
+		this.state.lastUpdate = now;
 	}
 
 	save(): boolean {
@@ -406,9 +434,12 @@ export class Game {
 		// aside first, so Dismiss stops being a one-click total loss.
 		if (BLOCKING_SAVE_PROBLEMS.has(problem.kind) && this.#preservedSave !== null) {
 			backupRawSave(this.#preservedSave);
+			this.rescued = true;
 		}
 
 		this.saveProblem = null;
+		this.#preservedSave = null;
+		this.#preservedFor = null;
 	}
 
 	// -----------------------------------------------------------------------
@@ -433,11 +464,32 @@ export class Game {
 	 * bucket is enforced by `accumulate` on the way in, rather than by trimming
 	 * afterwards.
 	 */
-	#settleOffline(state: GameState): OfflineReport | null {
-		const seconds = (Date.now() - state.lastUpdate) / 1000;
+	#settleOffline(state: GameState, now = Date.now()): OfflineReport | null {
+		const seconds = (now - state.lastUpdate) / 1000;
 		if (!state.settings.offlineProgress || seconds < 30) return null;
 
 		const capped = Math.min(seconds, offlineSeconds(state));
+
+		const modifiers = computeModifiers(state);
+
+		// One eviction, at the front, and then a legal night (R48).
+		//
+		// The warden arrives once — he is not standing over the boat for eight
+		// hours — and after that the crew carry on from wherever they were put
+		// ashore. Working the poach for its grace period first would be modelling
+		// a player who was there to see it.
+		//
+		// **Before the fuel budget is swapped in, not after.** `bust` fines a
+		// share of `state.coins`, and against a halved purse the fine came out
+		// exactly half what it should be — and was then swept into the report as
+		// fuel the boat never bought. A boat owner holding between one and two
+		// tanks' worth escaped the fine entirely, because the coin floor was
+		// compared against half of what they actually had.
+		//
+		// The lockout is dated from when the player left rather than from when
+		// they got back: the warden turned up hours ago, and serving the minute
+		// on return would be serving it twice.
+		const evicted = state.poaching ? bust(state, modifiers, state.lastUpdate) : null;
 
 		const coinsBefore = state.coins;
 
@@ -449,15 +501,15 @@ export class Game {
 		const budget = Decimal.max(d0(), coinsBefore.times(OFFLINE_FUEL_SHARE));
 		state.coins = budget;
 
-		const modifiers = computeModifiers(state);
-
-		// One eviction, at the front, and then a legal night (R48).
+		// No exam sits while you are away.
 		//
-		// The warden arrives once — he is not standing over the boat for eight
-		// hours — and after that the crew carry on from wherever they were put
-		// ashore. Working the poach for its grace period first would be modelling
-		// a player who was there to see it.
-		const evicted = state.poaching ? bust(state, modifiers) : null;
+		// `examSawCatch` hangs off `recordCatch`, which the settle's `accumulate`
+		// calls for every fish — so a Quota filled itself to target overnight and
+		// the licence was claimable off work nobody watched. Every other active
+		// system is kept out of the settle by not being called from it; this one
+		// arrives through the catch, so it is taken off the table instead.
+		const sitting = state.exam;
+		state.exam = null;
 
 		const step = accumulate(
 			state,
@@ -469,6 +521,8 @@ export class Game {
 			state.autoFisherOffline ? 1 : 0,
 			OFFLINE_HOLD_MULTIPLIER
 		);
+
+		state.exam = sitting;
 
 		const fuelSpent = Decimal.max(d0(), budget.minus(state.coins));
 		// Restore rather than subtract when nothing was spent: `0 - 0` is `-0`,
@@ -550,7 +604,6 @@ export class Game {
 	/** One manual cast, rolled for real. */
 	castOnce(): void {
 		const source = this.state.activeSource;
-		const valueMultiplier = SOURCE_CONFIG[source].valueMultiplier;
 
 		// Which species were already in the dex before this cast, so a first
 		// sighting can be told apart from the thousandth. A plain record rather
@@ -560,7 +613,12 @@ export class Game {
 			if (count.gte(1)) known[name] = true;
 		}
 
-		const { caught } = performCast(this.state, source, this.modifiers);
+		// `performCast` reports where the cast was *actually* worked, which is not
+		// where the player is standing when a dry tank sends it inshore. Pricing
+		// and rarity both have to follow the fish, or a fallback catch is priced
+		// at open-water rates and reported at open-water odds.
+		const { caught, source: worked } = performCast(this.state, source, this.modifiers);
+		const valueMultiplier = SOURCE_CONFIG[worked].valueMultiplier;
 
 		const feedback: CastFeedback[] = [];
 		const fresh: Fish[] = [];
@@ -575,7 +633,7 @@ export class Game {
 				fish,
 				count,
 				value,
-				rarity: rarityAt(source, this.modifiers.luck, fish.name)
+				rarity: rarityAt(worked, this.modifiers.luck, fish.name)
 			});
 
 			if (!known[fish.name] && this.state.dex[fish.name]?.gte(1)) fresh.push(fish);
@@ -598,6 +656,11 @@ export class Game {
 		this.#checkJokes();
 		this.#checkSetbacks();
 		this.#checkAchievements();
+	}
+
+	/** Dismiss one, or all of them when no name is given. */
+	dismissSpecies(name: string): void {
+		this.newlyUnlockedSpecies = this.newlyUnlockedSpecies.filter((fish) => fish.name !== name);
 	}
 
 	dismissNewSpecies(): void {
@@ -852,6 +915,15 @@ export class Game {
 	/** What the last trader paid, for a one-line note on the Shore. */
 	lastTraderEarned = $state<Decimal | null>(null);
 
+	/** True once a save has been copied aside where the player can get it back. */
+	rescued = $state(false);
+
+	/** The rescued save, as an export blob, or null if there is none. */
+	rescuedBlob(): string | null {
+		const raw = readBackupSave();
+		return raw === null ? null : exportRawSave(raw);
+	}
+
 	/** The last time a warden turned up, for the banner that says so. */
 	lastBust = $state<Bust | null>(null);
 
@@ -941,6 +1013,18 @@ export class Game {
 	 * report entirely. Rendering at most one is what makes a single Escape
 	 * handler correct.
 	 */
+	/**
+	 * The unlock guide queues behind the rest.
+	 *
+	 * It used to render its own `Modal` outside `ModalHost`, which broke the
+	 * invariant that file states in its own header: two modals mounted at once,
+	 * two Escape handlers, and — because both `inert` guards key on
+	 * `activeModal` — nothing behind the guide's backdrop was inert at all. On
+	 * the first prestige the market topic unlocks in the same instant the Pearl
+	 * report is raised, so one Escape wiped the report.
+	 */
+	unlockGuide = $state<string | null>(null);
+
 	activeModal = $derived<ModalId | null>(
 		this.offlineReport !== null
 			? 'offline'
@@ -948,8 +1032,14 @@ export class Game {
 				? 'prestige'
 				: this.lipfishReveal
 					? 'lipfish'
-					: null
+					: this.unlockGuide !== null
+						? 'guide'
+						: null
 	);
+
+	dismissUnlockGuide(): void {
+		this.unlockGuide = null;
+	}
 
 	boatBlocker = $derived(sourceBlocker(this.state, this.state.activeSource, this.modifiers));
 
@@ -959,6 +1049,14 @@ export class Game {
 			this.endCast();
 			this.recentCatches = [];
 			this.lastCatch = null;
+			// A banner about being stranded in water the previous operation
+			// owned, shown over a fresh run at the Pond, is a banner about
+			// nothing. Same for the warden, the Setbacks and the merchant.
+			this.strandedFrom = null;
+			this.lastBust = null;
+			this.setbackNotices = [];
+			this.setbackHits = [];
+			this.lastTraderEarned = null;
 			this.prestigeResult = result;
 			this.save();
 		}
@@ -998,6 +1096,10 @@ export class Game {
 
 		this.strandedFrom = this.state.activeSource;
 		this.endCast();
+		// Being carried off the water ends the poach with it. Leaving the flag
+		// set kept the clock running and eventually fined the player for water
+		// they had been forcibly removed from.
+		if (this.state.poaching === this.state.activeSource) stopPoaching(this.state);
 		this.state.activeSource = fallback;
 	}
 
@@ -1025,7 +1127,18 @@ export class Game {
 		// that was started in the save's place. Exporting that is exactly the
 		// wrong thing: the banner tells the player to export and start fresh,
 		// and the only copy worth keeping is the one on disk.
-		if (this.#preservedSave !== null && this.saveProblem) {
+		//
+		// Only for the problem that raised it, though. `#preservedSave` was set
+		// once at `init()` and never cleared, so *any* later problem re-armed it,
+		// including the two non-blocking kinds — and a player who dismissed a
+		// corrupt-save banner, played for hours and then hit a quota error was
+		// handed the ancient unreadable blob by the very button the quota banner
+		// told them to press.
+		if (
+			this.#preservedSave !== null &&
+			this.saveProblem &&
+			this.saveProblem.kind === this.#preservedFor
+		) {
 			return exportRawSave(this.#preservedSave);
 		}
 
@@ -1033,9 +1146,10 @@ export class Game {
 		return exportSave(this.state);
 	}
 
-	importBlob(blob: string): boolean {
-		const imported = importSave(blob);
-		if (!imported) return false;
+	importBlob(blob: string): ImportOutcome {
+		const outcome = readImport(blob);
+		const imported = outcome.state;
+		if (!imported) return outcome;
 
 		this.endCast();
 		this.saveProblem = null;
@@ -1044,17 +1158,33 @@ export class Game {
 		this.state.lastUpdate = Date.now();
 		this.recentCatches = [];
 		this.save();
-		return true;
+		return outcome;
 	}
 
 	hardReset(): void {
 		this.endCast();
+
+		// Copy aside anything the game was refusing to overwrite, first.
+		//
+		// The banner tells the player to "update the game, or export it and
+		// start fresh" — and starting fresh went straight to `save()`, wiping
+		// the protected blob with no backup at all, while merely *dismissing*
+		// the same banner preserved it. The destructive path was the one the
+		// banner recommended.
+		if (this.#preservedSave !== null) {
+			backupRawSave(this.#preservedSave);
+			this.rescued = true;
+		}
+
 		this.saveProblem = null;
+		this.#preservedSave = null;
+		this.#preservedFor = null;
 		this.state = createInitialState();
 		this.recentCatches = [];
 		this.offlineReport = null;
 		this.prestigeResult = null;
 		this.newAchievements = [];
+		this.strandedFrom = null;
 		this.setbackNotices = [];
 		this.setbackHits = [];
 		this.lastBust = null;

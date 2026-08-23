@@ -3,6 +3,7 @@ import { D, d0, d1 } from '$lib/decimal';
 import {
 	FISH_TYPES,
 	FishType,
+	LUCK_TIER_ORDER,
 	RARE_FISH_TYPES,
 	fishTypeBaseValue,
 	fishTypeLabel
@@ -72,6 +73,7 @@ import {
 	MAP_BASE_ERROR,
 	MAP_BASE_SIGHT,
 	MAP_COST_GROWTH,
+	LUCK_TIER_SHARE,
 	MAP_MAX_LEVEL,
 	MAX_OFFLINE_SECONDS,
 	SHOPKEEPER_REACH,
@@ -138,6 +140,44 @@ export function buildCatchTable(source: FishingSources, luck: number): CatchTabl
 		const weight = RARE_FISH_TYPES.includes(type) ? configured * luck : configured;
 		typeWeights.set(type, weight);
 		totalWeight += weight;
+	}
+
+	// Luck also sorts *within* the rare block, and does so without changing how
+	// much of the table is rare at all.
+	//
+	// Moving weight from common to rare works beautifully in the shallows and
+	// does nothing in the deep: Offshore is 97% rare by weight already and the
+	// Ocean is 96%, so the lure could only ever reach into the 3% that was left.
+	// Measured ceilings were x1.031 and x1.042 while the button read "rare
+	// weight x66749.59", and the game's own advice bought about seventeen
+	// near-null levels.
+	//
+	// This is a pure redistribution: the rare types are re-weighted by how deep
+	// they sit in `RARE_FISH_TYPES` and then renormalised back to the share they
+	// already had. It cannot inflate the rare/common split — only decide which
+	// rare fish takes the slot — so it lifts the deep water without handing the
+	// Pond a hundredfold at the same time. At luck 1 every exponent is 1 and
+	// nothing changes at all.
+	if (luck > 1) {
+		let tierTotal = 0;
+		for (const type of LUCK_TIER_ORDER) tierTotal += typeWeights.get(type) ?? 0;
+
+		if (tierTotal > 0) {
+			let tilted = 0;
+			const shares = new Map<FishType, number>();
+			for (let rank = 0; rank < LUCK_TIER_ORDER.length; rank++) {
+				const type = LUCK_TIER_ORDER[rank];
+				const weight = typeWeights.get(type);
+				if (weight === undefined) continue;
+				const share = weight * Math.pow(luck, rank * LUCK_TIER_SHARE);
+				shares.set(type, share);
+				tilted += share;
+			}
+
+			for (const [type, share] of shares) {
+				typeWeights.set(type, (share / tilted) * tierTotal);
+			}
+		}
 	}
 
 	const species: SpeciesChance[] = [];
@@ -232,6 +272,39 @@ export function upgradeStockedAt(state: GameState, id: UpgradeId): FishingSource
 		if (Math.floor(UPGRADES[id].maxLevel * SHOPKEEPER_REACH[i]) > ceiling) return SOURCE_ORDER[i];
 	}
 	return null;
+}
+
+/**
+ * The rod level past which buying another one changes nothing.
+ *
+ * `MIN_CAST_SECONDS` clamps every cast time, so once the fastest water is
+ * already at the floor a further rod level costs real coins and does literally
+ * nothing — while the panel cheerfully previews a 57x improvement. The binding
+ * level is around rod 24 with Tide Reader maxed.
+ *
+ * `null` when no level is reached inside the track, which is the normal case
+ * before the Tide Reader is deep.
+ */
+export function rodClampLevel(state: GameState): number | null {
+	const tides = D(PRESTIGE_UPGRADES.pearl_speed.effect).pow(state.prestigeUpgrades.pearl_speed);
+	const fastest = Math.min(...SOURCE_ORDER.map((source) => SOURCE_CONFIG[source].castSeconds));
+
+	for (let level = 0; level <= UPGRADES.rod.maxLevel; level++) {
+		const seconds = fastest * D(UPGRADES.rod.effect).pow(level).times(tides).toNumber();
+		if (seconds <= MIN_CAST_SECONDS) return level;
+	}
+	return null;
+}
+
+/**
+ * What a level of a track is honestly worth to *this* player, for the preview.
+ *
+ * Only the rod has a hard clamp behind it, and only the rod needs this.
+ */
+export function upgradeDoesNothing(state: GameState, id: UpgradeId, level: Decimal): boolean {
+	if (id !== 'rod') return false;
+	const clamp = rodClampLevel(state);
+	return clamp !== null && level.gte(clamp);
 }
 
 export function upgradeCost(id: UpgradeId, level: Decimal | number): Decimal {
@@ -644,10 +717,23 @@ export function sourceBlocker(
 	source: FishingSources,
 	modifiers?: Modifiers
 ): 'locked' | 'licence' | 'boat' | 'fuel' | null {
+	// Water you are actively poaching is not blocked — you are standing on it.
+	// Whether you own it or hold paper for it is exactly the question poaching
+	// answers. Without this the tick's own safety net moves you off again on the
+	// next frame.
+	//
+	// The hull still has to exist, though: there is no poaching your way into
+	// open water without a boat under you.
+	if (state.poaching === source) {
+		if (needsBoat(source)) {
+			if (!state.boat.owned) return 'boat';
+			if (!canSail(state, modifiers ?? computeModifiers(state))) return 'fuel';
+		}
+		return null;
+	}
+
 	if (!state.unlocked[source]) return 'locked';
-	// Water you are actively poaching is not blocked — you are on it. Without
-	// this the tick's own safety net would move you off it again next frame.
-	if (missingLicence(state, source) && state.poaching !== source) return 'licence';
+	if (missingLicence(state, source)) return 'licence';
 	if (needsBoat(source)) {
 		if (!state.boat.owned) return 'boat';
 		if (!canSail(state, modifiers ?? computeModifiers(state))) return 'fuel';
@@ -672,24 +758,52 @@ export function autoCastsPerSecond(
 	modifiers: Modifiers,
 	source: FishingSources
 ): Decimal {
-	// Poached water pays. That is the entire point of poaching, and this is the
-	// second of the two places that has to know it — `accumulate` skipping the
-	// source and this returning zero for it are different bugs with the same
-	// symptom.
-	if (!state.unlocked[source]) return d0();
-	if (missingLicence(state, source) && state.poaching !== source) return d0();
+	if (!state.unlocked[source] || missingLicence(state, source)) return d0();
 	const crew = state.deckhands[source];
 	if (crew.lte(0)) return d0();
 	return crew.times(modifiers.deckhandCastsPerSecond[source]);
 }
 
 /** Coins per second `casts` at a source are worth, before anything gates them. */
-function castIncome(modifiers: Modifiers, source: FishingSources, casts: Decimal): Decimal {
+/**
+ * What one source's catch is really worth per cast, to this player, today.
+ *
+ * `averageSourceValue` is the pre-market, pre-buyer figure. The headline "crew
+ * income" read it straight and was wrong in both directions at once: 1.82x
+ * overstated for the whole pre-bicycle game, because it ignored the trader
+ * taking 45%, and 2.9x *under*stated once the market opened, because it ignored
+ * the knowledge bonus. Ponds meanwhile did include the market, so the two halves
+ * of one total used two different conventions.
+ */
+function speciesAdjustedValue(state: GameState, table: CatchTable): number {
+	if (!marketOpen(state)) return table.averageSourceValue;
+
+	let total = 0;
+	for (const { fish, probability } of table.species) {
+		total += probability * speciesMultiplier(state, fish.name).toNumber();
+	}
+	// `total` is the probability-weighted multiplier; the table's own average is
+	// already probability-weighted, so scaling it is the same sum.
+	return table.averageSourceValue * total;
+}
+
+function castIncome(
+	state: GameState,
+	modifiers: Modifiers,
+	source: FishingSources,
+	casts: Decimal
+): Decimal {
 	const table = catchTable(source, modifiers.luck);
-	return modifiers.fishPerCast
-		.times(casts)
-		.times(table.averageSourceValue)
-		.times(modifiers.sellMultiplier);
+	return (
+		modifiers.fishPerCast
+			.times(casts)
+			.times(speciesAdjustedValue(state, table))
+			.times(modifiers.sellMultiplier)
+			// Whoever is buying takes their cut. Without this the figure was 1.82x
+			// what a player without a bicycle actually banked, for the whole of the
+			// opening act.
+			.times(saleRate(state))
+	);
 }
 
 /**
@@ -708,9 +822,9 @@ export function sourceIncomePerSecond(
 
 	const route = routeCasts(state, modifiers, source, casts);
 
-	let total = route.sailed.gt(0) ? castIncome(modifiers, source, route.sailed) : d0();
+	let total = route.sailed.gt(0) ? castIncome(state, modifiers, source, route.sailed) : d0();
 	if (route.stranded.gt(0) && route.fallback !== null) {
-		total = total.plus(castIncome(modifiers, route.fallback, route.stranded));
+		total = total.plus(castIncome(state, modifiers, route.fallback, route.stranded));
 	}
 	return total;
 }
@@ -725,13 +839,24 @@ export function sourceIncomePerSecond(
  * nothing at all and every one after it take the same.
  */
 export function handIncomePerSecond(state: GameState, modifiers: Modifiers): Decimal {
-	const seconds = modifiers.castSeconds[state.activeSource];
+	const source = state.activeSource;
+	const seconds = modifiers.castSeconds[source];
 	if (!seconds || seconds <= 0) return d0();
 
-	return modifiers.fishPerCast
-		.div(seconds)
-		.times(catchTable(state.activeSource, modifiers.luck).averageSourceValue)
-		.times(modifiers.sellMultiplier);
+	// Routed, like everything else that earns.
+	//
+	// Reading the active source's table straight through reported 20,907/s for
+	// someone standing over the Ocean with a dry tank and no coins, whose casts
+	// were in fact landing at the Sea for 1,418/s — a 14.7x overstatement, and
+	// `strike()` sizes a Setback against this figure.
+	const perSecond = d1().div(seconds);
+	const route = routeCasts(state, modifiers, source, perSecond);
+
+	let total = route.sailed.gt(0) ? castIncome(state, modifiers, source, route.sailed) : d0();
+	if (route.stranded.gt(0) && route.fallback !== null) {
+		total = total.plus(castIncome(state, modifiers, route.fallback, route.stranded));
+	}
+	return total;
 }
 
 export function totalIncomePerSecond(state: GameState, modifiers: Modifiers): Decimal {
@@ -871,7 +996,7 @@ export function distributeCatch(
 		value = value.plus(worth);
 		landed = landed.plus(count);
 		recordCatch(state, fish, count, worth);
-		if (poached) state.poachedValue = state.poachedValue.plus(worth);
+		if (poached) addToLedger(state.poached, fish.name, count, worth);
 	};
 
 	if (whole.lte(ROLL_LIMIT)) {
@@ -1097,21 +1222,44 @@ export function accumulate(
 			break;
 		}
 
-		// Unlicensed water pays nothing, however it came to be unlocked — unless
-		// it is being poached, which is the whole point of poaching. Without
+		// Unlicensed water pays nothing, however it came to be unlocked. Without
 		// this, `accumulate` and `reachableSource` disagree about where the crew
 		// are allowed to work.
-		if (missingLicence(state, source) && state.poaching !== source) continue;
+		//
+		// Deliberately *not* excepted for poaching: a deckhand is hired at a
+		// source, and there is no hiring one at water you do not own. Poaching is
+		// something the player does with their own hands and their own rig.
+		if (missingLicence(state, source)) continue;
 
 		const extra = state.unlocked[source] ? (extraCastsPerSecond?.[source] ?? 0) : 0;
 		const castsPerSecond = autoCastsPerSecond(state, modifiers, source).plus(extra);
 		if (castsPerSecond.lte(0)) continue;
 
-		const casts = takeWhole(
-			state,
-			castCarryKey(source),
-			castsPerSecond.times(seconds).times(efficiency)
-		);
+		// Trim the casts to what the bucket can take **before** minting them.
+		//
+		// `routeCasts(spend = true)` buys fuel and wears the hull for every cast
+		// handed to it, and the catch was only clamped afterwards. The top of the
+		// loop bails out at exactly zero room, so partial room let a whole
+		// interval through — and offline that interval is the entire night. A
+		// bucket-limited open-water crew was billed for eight hours of casts and
+		// landed twenty-four bucketfuls: measured at 1.39e9 of fish against
+		// 1.56e10 of fuel, a hull worn from 100 to 0, and a night that lost money.
+		// `room` is the one read at the top of this iteration — nothing between
+		// there and here touches the hold.
+		let wanted = castsPerSecond.times(seconds).times(efficiency);
+		if (room !== null && modifiers.fishPerCast.gt(0)) {
+			const affordable = room.div(modifiers.fishPerCast);
+			if (affordable.lt(wanted)) {
+				// The bucket, and not the crew, decided this interval. Recorded
+				// here because the clamp below means `roomFor` will never see a
+				// request bigger than the room again.
+				bucketBound = true;
+				wanted = affordable;
+			}
+		}
+		if (wanted.lte(0)) continue;
+
+		const casts = takeWhole(state, castCarryKey(source), wanted);
 		if (casts.lte(0)) continue;
 
 		const route = routeCasts(state, modifiers, source, casts, true);
@@ -1157,8 +1305,7 @@ export function accumulate(
 
 		if (
 			perSecond.gt(0) &&
-			state.unlocked[source] &&
-			(!missingLicence(state, source) || state.poaching === source) &&
+			(state.poaching === source || (state.unlocked[source] && !missingLicence(state, source))) &&
 			(rigRoom === null || rigRoom.gt(0))
 		) {
 			const casts = takeWhole(
@@ -1261,7 +1408,8 @@ export function pondIncomePerSecond(state: GameState, pond: PondState): Decimal 
 	if (!pond.species) return d0();
 	return pondRate(pond)
 		.times(pondFishValue(pond.species))
-		.times(speciesMultiplier(state, pond.species));
+		.times(speciesMultiplier(state, pond.species))
+		.times(saleRate(state));
 }
 
 export function digPond(state: GameState): boolean {
@@ -1691,6 +1839,15 @@ export function traderInStock(state: GameState, id: TraderOfferId): boolean {
 	return traderStock(state).includes(id);
 }
 
+/**
+ * A gap larger than this is time the player was away, not time the tick missed.
+ *
+ * Deliberately the same number as `RESUME_THRESHOLD_SECONDS` in
+ * `state.svelte.ts` — that is the line between "a throttled background tab" and
+ * "a night", and the trader has to draw it in the same place the settle does.
+ */
+const RESUME_THRESHOLD_MS = 120_000;
+
 /** Seconds until the next trader, for the progress bar. */
 export function traderSecondsLeft(state: GameState, now = Date.now()): number {
 	if (state.nextTraderAt <= 0) return TRADER_PERIOD_SECONDS;
@@ -1743,6 +1900,28 @@ export function runTrader(
 	}
 
 	const period = TRADER_PERIOD_SECONDS * 1000;
+
+	// He does not call while you are away (R51).
+	//
+	// `runTrader` is not inside `#settleOffline`, so the passive-only rule looked
+	// safe there — but the catch-up loop below resolves `floor(gap / 45s)`
+	// arrivals on the first tick back, and each one settles a consignment. Eight
+	// hours away paid out 641 visits' worth of coins, credited `lifetimeCoins`
+	// (which mints Pearls), and rotated the stock 641 times, gating the bicycle
+	// and the Assistant behind offers that had spun past. None of it appeared in
+	// the offline report, because none of it happened in the settle.
+	//
+	// So a gap longer than the resume threshold is a gap he slept through: the
+	// appointment is moved to the next one due from now, and nothing is bought.
+	if (now - state.nextTraderAt > RESUME_THRESHOLD_MS) {
+		// `floor + 1`, not `ceil`: an absence that is an exact multiple of the
+		// period would otherwise leave the appointment landing on `now`, and he
+		// would arrive on the very tick the player got back.
+		const missed = Math.floor((now - state.nextTraderAt) / period) + 1;
+		state.nextTraderAt += missed * period;
+		return { visits, earned };
+	}
+
 	while (state.nextTraderAt <= now) {
 		// He settles what was *listed* for him, and nothing else (R65). Taking
 		// the whole hold on arrival was the game making the decision; now the
@@ -2113,7 +2292,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		exam: null,
 		poaching: null,
 		poachElapsed: 0,
-		poachedValue: d0(),
+		poached: emptyLedger(),
 		// Per source, and per run — a fresh operation is not known to anyone.
 		poachOffences: {},
 		bustedUntil: 0,

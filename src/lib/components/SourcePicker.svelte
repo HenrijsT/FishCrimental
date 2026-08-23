@@ -195,7 +195,7 @@
 	.detail {
 		margin-top: 0.9rem;
 		padding-top: 0.75rem;
-		border-top: 1px solid var(--edge);
+		border-top: 1px solid var(--rule);
 	}
 
 	.blurb {

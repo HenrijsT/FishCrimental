@@ -108,7 +108,10 @@ export const TABS: TabDefinition[] = [
 		id: 'dex',
 		label: 'Fishdex',
 		blurb: 'Every species you land is written up here, and pays a permanent bonus.',
-		available: (state) => discoveredCount(state) >= 2
+		// One, not two. The first catch raises a toast that says "tap to see it",
+		// and at a threshold of two that toast navigated to a tab that was not
+		// there yet.
+		available: (state) => discoveredCount(state) >= 1
 	},
 	{
 		id: 'pearls',

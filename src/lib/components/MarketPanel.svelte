@@ -154,7 +154,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--ink-dim);
-		border-bottom: 1px solid var(--edge);
+		border-bottom: 1px solid var(--rule);
 	}
 
 	th[scope='row'],

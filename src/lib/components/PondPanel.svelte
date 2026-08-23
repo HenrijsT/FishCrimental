@@ -67,7 +67,11 @@
 						</div>
 
 						{#if !maxed}
-							<button onclick={() => game.upgradePond(index)} disabled={g.coins.lt(cost)}>
+							<button
+								aria-label="Deepen pond {index + 1}"
+								onclick={() => game.upgradePond(index)}
+								disabled={g.coins.lt(cost)}
+							>
 								<Num value={cost} tone="coin" />
 							</button>
 						{:else}
@@ -89,7 +93,11 @@
 					{/if}
 				</p>
 			</div>
-			<button onclick={() => game.digPond()} disabled={full || g.coins.lt(game.nextPondPrice)}>
+			<button
+				aria-label="Dig another pond"
+				onclick={() => game.digPond()}
+				disabled={full || g.coins.lt(game.nextPondPrice)}
+			>
 				{#if full}
 					Full
 				{:else}
