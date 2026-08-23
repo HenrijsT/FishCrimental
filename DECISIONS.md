@@ -3775,3 +3775,95 @@ all of run 1; `aria-label`s drop the price in the cannot-afford state; and
 The seven refactors deferred out of the cleanup pass — the triple fish storage
 being the largest — are in `design/IDEAS.md` N6, to be verified before any of
 them is implemented.
+
+---
+
+# THE PEARL TREE
+
+A shift paid **one** Pearl the first time, so the shop's only question — hold the
+pile for its passive bonus, or spend it — was all-or-nothing. The arithmetic made
+it a trap: holding one Pearl was worth ×2.3863, spending it on the only
+affordable node was worth ×1.0000 × 2.15 = **×2.1500**. Ten per cent worse,
+permanently, with no refund, at every player's first prestige — and
+`PrestigePanel` printed _"spent or not"_ directly above the number that fell.
+
+## More Pearls, same power
+
+`PEARL_YIELD_SCALE = 70`. A first shift now pays about **290** rather than 1.
+
+This is a change of units, not of power. `pearlMultiplier` divides the pile by
+`PEARL_BONUS_PIVOT` before the logarithm, so a pivot's worth of new Pearls buys
+exactly what one Pearl used to — `1 + 2·ln(2)`, asserted to six places. Nothing
+about the passive bonus moved.
+
+## Six nodes become eleven, and a tree
+
+Four roots — Pearl Brokerage, Tide Reader, Pearl Diver's Eye, Legendary Crew —
+and everything else behind one of them:
+
+| Node              | Opens at            | Does                           |
+| ----------------- | ------------------- | ------------------------------ |
+| Trim Tabs         | Tide Reader 3       | fuel burned ×0.88              |
+| Ironbark Planking | Legendary Crew 4    | hull wear ×0.85                |
+| Standing Charter  | Pearl Brokerage 3   | starts a run deeper            |
+| Night Watch       | Legendary Crew 3    | an hour more offline           |
+| Long Bunker       | Trim Tabs 2         | tank ×1.45                     |
+| Seed Money        | Pearl Brokerage 5   | start a run with coins         |
+| Quiet Oars        | Pearl Diver's Eye 4 | +15s before the warden notices |
+
+Standing Charter and Night Watch used to sit loose; they now hang off a root like
+everything else. `buyPrestigeUpgrade` enforces the route, and the panel shows the
+three tiers and names what opens a locked berth.
+
+**Seed Money pays the run, not the record.** `lifetimeCoins` and `allTimeCoins`
+stay at zero, or `pearlsFor` would read them and a Pearl upgrade would mint
+Pearls.
+
+## Prices follow the pile
+
+Fixed prices could not work. The tree went from unaffordable to irrelevant inside
+a single prestige — measured at **99.997%** of the pile left unspent — so the shop
+asked its question once and never again.
+
+A node now costs a fixed **share** of lifetime Pearls, at any scale. Asserted
+across six orders of magnitude.
+
+**What that does not fix, recorded so nobody claims otherwise later:** the bonus
+lost by spending half the pile is still about **20% at a thousand Pearls and 3%
+at a trillion**, because `pearlMultiplier` is logarithmic and scaling prices
+cannot flatten a logarithm. The decision stops being _irrelevant_; it does not
+become _constant_. There is a test asserting exactly that, so the limit is
+visible rather than discovered later.
+
+## The simulator had to learn the tree
+
+`spendPearls` re-prices on every pass, skips nodes whose route is unwalked, and
+**stops at half the pile**. That last one is not thrift: the bonus reads _unspent_
+Pearls, so a simulated player who spends to the last one models a decision no
+informed human would take, and every pacing figure downstream would be measured
+against it.
+
+## The ladder, re-measured (seed 7)
+
+| Run | Before | **After** |
+| --- | ------ | --------- |
+| 1   | 2h43m  | **2h43m** |
+| 2   | 4m51s  | **3m19s** |
+| 3   | 2m20s  | **2m30s** |
+| 4   | 2m10s  | **2m27s** |
+| 5   | 1m42s  | **2m27s** |
+| 6   | 1m38s  | **2m27s** |
+
+Run 1 is untouched, and has to be — the tree does not exist until the first
+shift. The chain used to keep shrinking, converging to 94 seconds by run nine.
+It now **holds** at 2m27s, because a player who keeps half the pile keeps its
+bonus and the prices rise with it.
+
+## Migration
+
+**None needed.** `readPrestigeUpgrades` and `zeroPrestigeUpgrades` both iterate
+`PRESTIGE_UPGRADE_IDS`, so the five new ids default to zero on every existing
+save. `SAVE_VERSION` is untouched.
+
+Two old assertions were re-baselined deliberately, both of the form "a shift pays
+one Pearl". 644 → **655 tests**.
