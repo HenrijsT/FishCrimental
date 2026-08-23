@@ -65,6 +65,8 @@ import {
 	consignmentCount,
 	consignmentRoom,
 	holdCount,
+	holdMarketValue,
+	consignmentMarketValue,
 	jellyCaught,
 	performCast,
 	performPrestige,
@@ -76,6 +78,7 @@ import {
 	type Rarity
 } from './engine';
 import { evaluateAchievements } from './achievements';
+import { marketDepth, marketOpen, pricedSpecies, settleMarket } from './market';
 import {
 	backupRawSave,
 	exportRawSave,
@@ -209,6 +212,10 @@ export class Game {
 			// assigning to a `$state` field wraps the value in a proxy, and
 			// mutating the raw object afterwards would bypass reactivity.
 			this.offlineReport = this.#settleOffline(this.state);
+			// After the settle, not before: prices recover over wall-clock time
+			// whether or not anyone was fishing, and the settle has just moved
+			// `lastUpdate` to now.
+			settleMarket(this.state);
 		} else if (outcome.kind === 'future') {
 			this.#preservedSave = readRawSave();
 			this.saveProblem = {
@@ -276,6 +283,10 @@ export class Game {
 		const elapsed = Math.min((now - this.state.lastUpdate) / 1000, RESUME_THRESHOLD_SECONDS);
 		this.state.lastUpdate = now;
 		if (elapsed <= 0) return;
+
+		// The market recovers first, so everything below this line trades at
+		// today's price rather than the price when the tab was last awake.
+		settleMarket(this.state, now);
 
 		// The trader keeps his own appointment; the tick just notices he is due.
 		const visit = runTrader(this.state, this.modifiers, now);
@@ -716,7 +727,21 @@ export class Game {
 	/** Fish on the quay waiting for the merchant, and what they are worth. */
 	listedSize = $derived(consignmentCount(this.state));
 	listedRoom = $derived(consignmentRoom(this.state));
-	listedWorth = $derived(this.state.consignmentValue.times(this.modifiers.sellMultiplier));
+	listedWorth = $derived(consignmentMarketValue(this.state).times(this.modifiers.sellMultiplier));
+
+	/**
+	 * What the bucket fetches *today*.
+	 *
+	 * Not `holdValue`: that is what the catch was worth when it was landed,
+	 * before the market had an opinion. Once the market opens the two diverge,
+	 * and the number on the Sell button has to be the one the player will
+	 * actually be paid.
+	 */
+	holdWorth = $derived(holdMarketValue(this.state).times(this.modifiers.sellMultiplier));
+
+	marketOpen = $derived(marketOpen(this.state));
+	marketDepth = $derived(marketDepth(this.state));
+	marketBook = $derived(pricedSpecies(this.state));
 	/** What the travelling merchant pays per coin of catch. Never the town price. */
 	merchantRate = TRADER_RATE;
 	bucketSize = $derived(bucketCapacity(this.state.bucketLevel));

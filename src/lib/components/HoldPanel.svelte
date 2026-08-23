@@ -7,7 +7,8 @@
 	const visible = $derived(FISH_TYPES.filter((type) => state.hold[type].gt(0)));
 
 	const held = $derived(game.holdSize);
-	const worth = $derived(state.holdValue.times(game.modifiers.sellMultiplier));
+	// What it fetches today, not what it was worth when it was landed.
+	const worth = $derived(game.holdWorth);
 
 	/** Fish would move; there is somewhere for them to go. */
 	const canList = $derived(held.gt(0) && (game.listedRoom === null || game.listedRoom.gt(0)));

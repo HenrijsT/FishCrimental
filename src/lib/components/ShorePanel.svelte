@@ -13,11 +13,13 @@
 	import Num from './Num.svelte';
 
 	const g = $derived(game.state);
-	const worth = $derived(g.holdValue.times(game.modifiers.sellMultiplier));
+	const worth = $derived(game.holdWorth);
 	/** What is already on the quay, waiting for him — not the whole bucket. */
 	const traderPays = $derived(game.listedWorth.times(TRADER_RATE));
 
-	const canRide = $derived(canSell(g) && !game.inTown && g.holdValue.gt(0));
+	const canRide = $derived(
+		canSell(g) && !game.inTown && (g.holdValue.gt(0) || g.consignmentValue.gt(0))
+	);
 
 	const maxedBucket = $derived(g.bucketLevel.gte(BUCKET_MAX_LEVEL));
 	const hasBike = $derived(traderInStock(g, 'bicycle'));

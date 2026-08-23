@@ -2861,13 +2861,13 @@ also a super-exponential.** `p^0.9 · 0.5 + 1` reached `1.07e26` by run six,
 **The bonus is now logarithmic: `1 + 2 · ln(1 + p)`.** A logarithm is the only
 shape that survives an input like that. The same six runs read
 
-| Pearls | 1 | 4 | 125 | 30,740 | 1.2e11 | 2.2e21 | 1.8e29 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Old (squared) | 2.3 | 7.5 | 1,568 | 3.0e7 | 2.2e19 | 6.5e37 | 1.1e52 |
-| New | 2.4 | 4.2 | 10.7 | 21.7 | 52.0 | 99.3 | 135.7 |
+| Pearls        | 1   | 4   | 125   | 30,740 | 1.2e11 | 2.2e21 | 1.8e29 |
+| ------------- | --- | --- | ----- | ------ | ------ | ------ | ------ |
+| Old (squared) | 2.3 | 7.5 | 1,568 | 3.0e7  | 2.2e19 | 6.5e37 | 1.1e52 |
+| New           | 2.4 | 4.2 | 10.7  | 21.7   | 52.0   | 99.3   | 135.7  |
 
 `PEARL_MULTIPLIER_SCALE` goes 0.5 → **2**, because the log is so much flatter
-that it has to carry the *early* prestiges, which is where the reward is felt.
+that it has to carry the _early_ prestiges, which is where the reward is felt.
 `PEARL_MULTIPLIER_EXPONENT` is deleted.
 
 ### The Standing Charter stops short of the ladder
@@ -2903,15 +2903,15 @@ against a board of 2e10.
 
 ### The ladder, re-measured (seed 7)
 
-| Run | Before | After |
-| --- | --- | --- |
-| 1 | 3h18m09s | **3h18m09s** |
-| 2 | 20m20s | **36m30s** |
-| 3 | 2m48s | **8m26s** |
-| 4 | 1m35s | **4m33s** |
-| 5 | 48s | **2m02s** |
-| 6 | 46s | **1m56s** |
-| 7–12 | — | 1m51s, 1m47s, 1m44s, 1m42s, 1m39s, 1m38s |
+| Run  | Before   | After                                    |
+| ---- | -------- | ---------------------------------------- |
+| 1    | 3h18m09s | **3h18m09s**                             |
+| 2    | 20m20s   | **36m30s**                               |
+| 3    | 2m48s    | **8m26s**                                |
+| 4    | 1m35s    | **4m33s**                                |
+| 5    | 48s      | **2m02s**                                |
+| 6    | 46s      | **1m56s**                                |
+| 7–12 | —        | 1m51s, 1m47s, 1m44s, 1m42s, 1m39s, 1m38s |
 
 **It converges instead of collapsing.** Runs settle at about a hundred seconds
 and drift down by two seconds a run, while lifetime coins keep climbing —
@@ -2920,3 +2920,144 @@ always a run. Making a hundred seconds feel like more than that is what the
 paradigm shifts are for, not what the Pearl curve is for.
 
 Run 1 is untouched, as it must be: no Pearls exist yet.
+
+## Stage 4 — The fish market (`feat/market`)
+
+Built to `design/ANSWER-RESEARCH.md` §2. `MARKET_IMPACT = 0.25`,
+`MARKET_HALF_LIFE = 1800`, `MARKET_DEPTH_BASE = 6.0e5`,
+`K(n) = 1 + 0.28·ln(1 + n/100)`, sales priced by the integral.
+
+### "The first paradigm shift" is a prestige, and that is a deviation worth naming
+
+R59 gates the market on the first paradigm shift. **Paradigm shifts as
+`SHIFTS-SPEC.md` describes them do not exist yet** — that spec is an unbuilt
+layer, and no stage of this brief builds it. In this codebase the run-ending
+reset *is* the paradigm shift, and it is called a prestige. So the gate is
+`prestigeCount > 0`.
+
+This satisfies R59 exactly as written under the naming the code actually has:
+run 1 has no market, every existing run-1 assertion stands untouched, and every
+shift resets prices because `marketPressure` is not in `CarryOver`. When the
+three tiers land they are prestiges, and this gate carries over unchanged.
+
+### The side-ledger, and why it is a `SpeciesLedger` rather than four records
+
+The market prices a *species*, and species identity does not survive the catch
+anywhere: `hold` is six `FishType` buckets and `holdValue` is one scalar.
+**Both stay exactly as they are.** Beside them runs `holdSpecies`, and — because
+Stage 2 gave listed fish their own life — `consignmentSpecies` too.
+
+The research proposed four flat records (`holdFish`, `holdWorth`, …). With a
+consignment in play that would have been six. One `SpeciesLedger` interface
+holding `{ fish, worth }`, instantiated twice, is the same data with half the
+names and one reader.
+
+`worth` is kept beside `fish` rather than derived from it because the same
+species is worth different money in different water — up to 1232× across the
+sources one species appears in.
+
+### The five sites that had to move in lockstep
+
+1. `recordCatch` — the only place in the codebase that adds to the hold.
+2. `sellHold` — **both** exits. The early return for a worthless hold clears the
+   ledger too; miss it and the market resells fish already paid for.
+3. `listForSale` — the ledger moves with the fish, or the market prices an empty
+   bucket and ignores a full quay.
+4. `settleConsignment` — same two exits again.
+5. `createInitialState` and `save.ts`.
+
+`#settleOffline` needed nothing, because Stage 0 had already stopped it
+snapshotting and restoring the hold. Two of the research's flagged sites
+dissolved rather than needing fixes.
+
+### Legacy value is reconciled, not assumed
+
+The research's answer to a pre-market save was to park its aggregate `holdValue`
+under a reserved empty-species key at migration. That is done — and it is
+generalised: `ledgerValue` takes the aggregate and treats **any** shortfall
+between it and the ledger as `LEGACY_SPECIES` — money with no fish behind it,
+sold once at a neutral price, recorded against nobody.
+
+The migration is then only one case of a standing invariant, and it turned out to
+be load-bearing: a dozen existing tests put value in the hold directly rather
+than through `recordCatch`, and every one of them keeps its old meaning.
+
+### Cold Storage, re-tuned twice, and why the first tuning was wrong
+
+The first tuning — base 40,000, ×4.35 a level, 60 levels — was measured against a
+real chain and **the market was completely inert**: the greedy player bought 35
+levels, depth reached 2.87e23, and *every one of the 47 prices sat at exactly
+1.000*. A track that is always affordable is not a mitigation, it is an off
+switch.
+
+**Cold Storage is now bounded relief: base 250,000, ×5.5 a level, 12 levels.**
+Twelve levels is 1.15e6× depth — about six orders of magnitude of production
+growth — and after that prices fall and stay falling, which is the design:
+*settling and still slowly falling, never blocked.* At maxed storage a
+diversified player's prices sit at **0.80–1.00**, which is visible on the board
+and worth acting on. The whole track costs 6.8e13, a real sink at the point it is
+bought and trivial later, which is exactly when the market is meant to start
+biting.
+
+### Verified against the built game, not the spreadsheet
+
+`market.probe.test.ts` runs mono-farming against rotating five species at the
+real production rates, through the shipped code:
+
+| Fish/s | Model | **Built** |
+| --- | --- | --- |
+| 1 | 1.250 | **1.262** |
+| 39 | 1.130 | **1.163** |
+| 1e3 | 0.865 | **0.930** |
+| 1e4 | 0.755 | **0.786** |
+| 4.1e5 | 0.726 | **0.732** |
+| 1e12 | 0.701 | **0.702** |
+
+Mono is +26% early, crosses over between 39 and 1,000 fish/s — the model's 75–90
+minute window — and settles at 0.702. Recovery from a saturated price of 0.167:
+1h → 0.236, 4h → 0.637, **6h → 0.934**, 8h → 0.995. The model said 0.235, 0.637,
+0.934, 0.995. It reproduces to the third decimal.
+
+### `marketPressure` is `Decimal`
+
+Required, and done. `engine.ts` records a prior incident where an `Infinity` in a
+value chain poisoned `holdValue`, coins and the save file.
+
+### The simulation was lying about the market
+
+`simulateRun` had no market clock, so prices only ever fell inside it and it
+modelled a harsher market than the game has. `settleMarket(state, clock())` now
+runs at the top of every simulated step.
+
+### The price board ships with the mechanic
+
+A Market tab, available only once the market is trading — before that it would be
+a table of ones. Per species: price, knowledge, and the product. Sorted worst
+first, because what a player wants to see is what they have hurt.
+
+It says outright that **batching is worth exactly nothing**, because a sale is
+priced fish by fish as it moves the price. The research's stated risk was that a
+board showing a price recover would make players hoard; the answer is to say so
+on the board rather than hope.
+
+### The ladder, re-measured (seed 7)
+
+| Run | Stage 3 | **Stage 4** |
+| --- | --- | --- |
+| 1 | 3h18m09s | **3h18m09s** |
+| 2 | 36m30s | **11m19s** |
+| 3 | 8m26s | **2m44s** |
+| 4 | 4m33s | **1m56s** |
+| 5 | 2m02s | **1m47s** |
+| 6 | 1m56s | **1m41s** |
+
+Run 1 is untouched to the second, as the gate requires.
+
+Runs 2 onward got *faster*, and the reason is worth recording because it is the
+opposite of what a "penalty" mechanic sounds like: **knowledge is not small.**
+`K = 1 + 0.28·ln(1 + n/100)` looks gentle, but `n` is a lifetime catch count that
+reaches 1e9 and beyond, and `ln` of that is 16 — so knowledge is a 5x-plus
+permanent bonus by run two, carried across prestiges, opposed by a price penalty
+that resets every run and has to be re-earned. That asymmetry *is* the mechanic,
+stated plainly in the research, and this is what it looks like in minutes. The
+chain still converges rather than collapsing.

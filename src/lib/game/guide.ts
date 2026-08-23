@@ -33,6 +33,7 @@ export const TAB_IDS = [
 	'gear',
 	'harbour',
 	'crew',
+	'market',
 	'dex',
 	'pearls',
 	'records',
@@ -91,6 +92,14 @@ export const TABS: TabDefinition[] = [
 		available: (state) =>
 			state.coins.gte(deckhandCost(SOURCE_ORDER[0], 0).times(0.6)) ||
 			SOURCE_ORDER.some((source) => state.deckhands[source].gt(0))
+	},
+	{
+		id: 'market',
+		label: 'Market',
+		blurb: 'Every species has its own price, and your own selling is what moves it.',
+		// Only once there is a market to look at. Before the first paradigm
+		// shift every price is 1 and the board would be a table of ones.
+		available: (state) => state.prestigeCount.gt(0)
 	},
 	{
 		id: 'dex',

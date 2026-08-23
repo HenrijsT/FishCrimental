@@ -1,6 +1,7 @@
 import { describe, it } from 'vitest';
 import { simulatePrestigeChain, simulateRun } from './balance';
 import { SOURCE_ORDER } from './config';
+import { marketDepth, pricedSpecies } from './market';
 
 /**
  * A measuring stick, not an assertion. Nothing here is enforced — it prints the
@@ -31,5 +32,26 @@ describe.runIf(process.env.LADDER === '1')('pacing ladder', () => {
 		const chain = simulatePrestigeChain(6, { maxSeconds: 60 * 60 * 6, seed: 7 });
 		for (const e of chain.history)
 			console.log(JSON.stringify(e, (_k, v) => (v && v.toExponential ? v.toExponential(2) : v)));
+	}, 900000);
+
+	it('prints what a run does to the market', () => {
+		// Mid-chain, not post-chain: `performPrestige` clears the book, so the
+		// state a chain ends on has nothing in it by construction.
+		const chain = simulatePrestigeChain(3, { maxSeconds: 60 * 60 * 6, seed: 7 });
+		const run = simulateRun({
+			maxSeconds: 60 * 60 * 2,
+			stopOnPrestige: false,
+			seed: 7,
+			initialState: chain.state
+		});
+
+		const book = pricedSpecies(run.state);
+		console.log('under pressure:', book.length, 'of', Object.keys(run.state.dex).length);
+		for (const row of book.slice(0, 4))
+			console.log('  worst', row.species, row.price.toNumber().toExponential(2));
+		for (const row of book.slice(-2))
+			console.log('  best ', row.species, row.price.toNumber().toExponential(2));
+		console.log('  storage lv', run.state.upgrades.storage.toFixed(0));
+		console.log('  depth', marketDepth(run.state).toExponential(2));
 	}, 900000);
 });
