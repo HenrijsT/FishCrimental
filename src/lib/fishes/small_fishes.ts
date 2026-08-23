@@ -27,7 +27,7 @@ export const smallFishes = {
 		sources: [FishingSources.MudPool, FishingSources.Pond, FishingSources.Lagoon],
 		baseChance: 24,
 		description:
-			'The guppy is a small, colorful, and popular freshwater aquarium fish. They are known for their lively behavior and wide range of color varieties. Guppies are easy to care for and are suitable for beginners in the aquarium hobby.'
+			'Takes the hook before it has finished sinking, which is the best that can be said for it. Comes up flashing every colour there is, then goes in the bucket with forty others, and forty of them still weigh less than one decent fish.'
 	},
 	[SmallFishes.Tetra]: {
 		name: SmallFishes.Tetra,
@@ -35,7 +35,7 @@ export const smallFishes = {
 		sources: [FishingSources.River, FishingSources.Lake],
 		baseChance: 15,
 		description:
-			'Tetras are a group of small freshwater fish known for their vibrant colors and peaceful nature. They are often found in rivers and streams, and they prefer to swim in schools. Tetras are a popular choice for community aquariums.'
+			'A river fish that moves in a shoal so tight the whole lot turns at once, and one bad cast scatters the stretch for an hour. Bright along the flank. Sells by the scoop rather than by the fish, when it sells at all.'
 	},
 	[SmallFishes.Platy]: {
 		name: SmallFishes.Platy,
@@ -43,7 +43,7 @@ export const smallFishes = {
 		sources: [FishingSources.MudPool, FishingSources.Pond, FishingSources.Lake],
 		baseChance: 18,
 		description:
-			'Platies are colorful and easy-to-care-for freshwater fish. They are peaceful and get along well with other community fish. Platies are known for their active swimming behavior and are a great addition to community aquariums.'
+			'Thrives in the mud pool where the water goes warm and thick and everything better has already left. Blunt, orange, endlessly busy. There is never just one of them, and a poor morning at the pond is usually a morning of platies.'
 	},
 	[SmallFishes.Swordtail]: {
 		name: SmallFishes.Swordtail,
@@ -51,7 +51,7 @@ export const smallFishes = {
 		sources: [FishingSources.Lake, FishingSources.Sea],
 		baseChance: 8,
 		description:
-			'Swordtails are beautiful and hardy freshwater fish. They are named for their distinctive sword-like tail fin, which is most prominent in males. Swordtails are peaceful fish and can coexist with other community fish.'
+			'The males carry a long spike off the underside of the tail, and it catches in the mesh so the net has to be worked loose by hand every time. A lake fish that turns up in the sea often enough to confuse anyone keeping count.'
 	},
 	[SmallFishes.Danio]: {
 		name: SmallFishes.Danio,
@@ -59,7 +59,7 @@ export const smallFishes = {
 		sources: [FishingSources.Stream, FishingSources.River],
 		baseChance: 20,
 		description:
-			'Danios are active and social freshwater fish. They are known for their energetic swimming behavior, and they prefer to be in groups. Danios are relatively easy to care for and are a popular choice for community aquariums.'
+			'Has never once been seen holding still. It runs the top of the stream in short bursts and will chase a bait that is already moving away from it, which no other small fish here bothers to do. Twenty in a morning is a slow morning.'
 	},
 	[SmallFishes.WhiteCloudMountainMinnow]: {
 		name: SmallFishes.WhiteCloudMountainMinnow,
@@ -67,7 +67,7 @@ export const smallFishes = {
 		sources: [FishingSources.Stream],
 		baseChance: 9,
 		description:
-			'The White Cloud Mountain Minnow is a peaceful and hardy fish species. They are native to mountain streams in China and prefer cooler water temperatures. White Cloud Mountain Minnows are well-suited for nano aquariums and peaceful community setups.'
+			'Holds in the coldest water, right up where the stream comes off the hill and the hands stop working after ten minutes. Silver, with a red tail. Nobody climbs that far for minnows, so they get caught on the way back down.'
 	},
 	[SmallFishes.Rasbora]: {
 		name: SmallFishes.Rasbora,
@@ -75,7 +75,7 @@ export const smallFishes = {
 		sources: [FishingSources.River, FishingSources.Lagoon],
 		baseChance: 16,
 		description:
-			'Rasboras are small and colorful freshwater fish. They are peaceful and prefer to be kept in groups. Rasboras are a great choice for planted aquariums and community setups.'
+			'Carries a black wedge on the flank that shows through the water before the fish itself does, so a shoal can be counted from the bank. Works the river and drifts down into the lagoon. Gone the instant anything passes overhead.'
 	},
 	[SmallFishes.EndlersLivebearer]: {
 		name: SmallFishes.EndlersLivebearer,
@@ -83,7 +83,7 @@ export const smallFishes = {
 		sources: [FishingSources.Lagoon, FishingSources.Sea],
 		baseChance: 3,
 		description:
-			"Endler's Livebearers are small and colorful fish that are closely related to guppies. They are known for their striking colors and active nature. Endler's Livebearers are easy to breed and are popular among aquarium hobbyists."
+			'Near enough a guppy that half of them go into the bucket unnoticed, and the ones that get looked at properly turn up perhaps three times a season. Lives along the weed edge of the lagoon, green down the back, black behind the gill.'
 	},
 	[SmallFishes.BettaFish]: {
 		name: SmallFishes.BettaFish,
@@ -91,7 +91,7 @@ export const smallFishes = {
 		sources: [FishingSources.Lagoon, FishingSources.Sea],
 		baseChance: 2,
 		description:
-			'Betta fish, also known as Siamese fighting fish, are known for their vibrant colors and elaborate fins. While beautiful, male bettas are territorial and should not be kept with other bettas. They are best kept alone in their own aquariums.'
+			'Two of them in the same bucket and only one is worth anything by the time the bucket is opened again. Long fins, hard colour, and a temper out of all proportion to a fish that fits in a palm. Rare enough in the lagoon to be worth the walk.'
 	},
 	[SmallFishes.CorydorasCatfish]: {
 		name: SmallFishes.CorydorasCatfish,
@@ -99,7 +99,7 @@ export const smallFishes = {
 		sources: [FishingSources.MudPool, FishingSources.Pond],
 		baseChance: 5,
 		description:
-			"Corydoras catfish, often called 'cories', are small and peaceful bottom-dwelling fish. They are excellent cleaners and can help keep the aquarium substrate free of debris. Corydoras catfish are social and should be kept in groups."
+			'Works the bottom, so it only comes up when the bait has been left to sit a good while. It locks its fins out stiff on being lifted and the spines have drawn blood more than once. Best handled through a rag. Never one alone down there.'
 	},
 	[SmallFishes.KuhliLoach]: {
 		name: SmallFishes.KuhliLoach,
@@ -107,7 +107,7 @@ export const smallFishes = {
 		sources: [FishingSources.MudPool, FishingSources.River],
 		baseChance: 4,
 		description:
-			'Kuhli Loaches are eel-like freshwater fish with a peaceful nature. They are primarily nocturnal and prefer to hide during the day. Kuhli Loaches are best kept in groups and require a well-decorated aquarium with hiding spots.'
+			'An eel the length of a finger that only moves after dark, so it comes up on night lines or not at all. Buries itself in the silt the instant it is dropped, and has got out of the bucket twice by going through the drain hole.'
 	},
 	[SmallFishes.Gourami]: {
 		name: SmallFishes.Gourami,
@@ -115,7 +115,7 @@ export const smallFishes = {
 		sources: [FishingSources.Lake],
 		baseChance: 6,
 		description:
-			'Gouramis are a diverse group of freshwater fish known for their colorful bodies and feelers. They come in various sizes and colors and can be a stunning addition to community aquariums. Gouramis are generally peaceful, but males can be territorial.'
+			'Comes up to gulp air at the surface, and on a flat lake evening that ring is how it gets found at all. Trails two long feelers beneath it and touches the line with them before deciding. The males hold a patch of reed against all comers.'
 	},
 	[SmallFishes.CherryBarb]: {
 		name: SmallFishes.CherryBarb,
@@ -123,7 +123,7 @@ export const smallFishes = {
 		sources: [FishingSources.Stream],
 		baseChance: 11,
 		description:
-			'Cherry Barbs are small, peaceful, and brightly colored freshwater fish. They are well-suited for community aquariums and can coexist with other non-aggressive fish species. Cherry Barbs are hardy and relatively easy to care for.'
+			'The males go a deep red for a few weeks in spring and fade back to the colour of wet sand by summer. Holds in the shade under the bank where the stream slows. Takes a scrap of worm smaller than a fingernail, and takes it gently.'
 	},
 	[SmallFishes.ZebraBarb]: {
 		name: SmallFishes.ZebraBarb,
@@ -131,7 +131,7 @@ export const smallFishes = {
 		sources: [FishingSources.Stream, FishingSources.River],
 		baseChance: 12,
 		description:
-			'Zebra Barbs are lively and sociable freshwater fish. They are named for their distinctive zebra-like stripes. Zebra Barbs are active swimmers and enjoy the company of their own species. They are a great addition to community aquariums.'
+			'Barred dark down the side like a row of tally marks, which makes it the one small fish that can be named from the bank without lifting it out. Holds where the stream runs into the river and takes a bait swung across the flow.'
 	},
 	[SmallFishes.RosyBarb]: {
 		name: SmallFishes.RosyBarb,
@@ -139,6 +139,6 @@ export const smallFishes = {
 		sources: [FishingSources.MudPool, FishingSources.Pond, FishingSources.Lake],
 		baseChance: 10,
 		description:
-			'Rosy Barbs are colorful and active freshwater fish. They are social and prefer to swim in groups. Rosy Barbs are hardy and adaptable, making them suitable for community aquariums. Males develop a bright red coloration during breeding season.'
+			'Turns up in the mud pool, the pond and the lake without seeming to mind which, and is still alive in the bucket long after everything else has gone quiet. Copper along the side. Not worth much, but worth something while it is fresh.'
 	}
 } satisfies Record<SmallFishes, Fish>;

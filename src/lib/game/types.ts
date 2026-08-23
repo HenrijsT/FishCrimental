@@ -24,6 +24,14 @@ export interface GameSettings {
 	reduceMotion: boolean;
 	/** Show the raw exponent instead of K/M/B/T. */
 	scientificNotation: boolean;
+	/**
+	 * Show a short guide when something new opens up (R55).
+	 *
+	 * On by default and opt-**out**, because the players who need it are exactly
+	 * the ones who will not go looking for a setting. It is a pointer at Help,
+	 * never a wall of text, and Help is always there whether this is on or not.
+	 */
+	unlockGuides: boolean;
 }
 
 /**

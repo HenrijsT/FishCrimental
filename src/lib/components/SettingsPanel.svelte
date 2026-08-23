@@ -50,6 +50,18 @@
 		</li>
 		<li>
 			<label>
+				<input type="checkbox" bind:checked={g.settings.unlockGuides} />
+				<span>
+					<strong>Explain new things</strong>
+					<span class="muted">
+						A short note when something opens up for the first time. Turn it off and nothing
+						interrupts you — Help has all of it either way.
+					</span>
+				</span>
+			</label>
+		</li>
+		<li>
+			<label>
 				<input type="checkbox" bind:checked={g.settings.reduceMotion} />
 				<span>
 					<strong>Reduce motion</strong>
