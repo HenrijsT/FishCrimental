@@ -3061,3 +3061,89 @@ permanent bonus by run two, carried across prestiges, opposed by a price penalty
 that resets every run and has to be re-earned. That asymmetry *is* the mechanic,
 stated plainly in the research, and this is what it looks like in minutes. The
 chain still converges rather than collapsing.
+
+## Stage 5 — Fish breeding ponds (`feat/ponds`)
+
+R68, I2. The owner asked for ponds and left the shape open. **This section is the
+design, written before the code**, so the reasoning survives even if the
+implementation changes.
+
+### What a pond is
+
+A tank you dig on your own land, stocked with **one species you have already
+caught**, which then breeds it. It is a producer like a deckhand, with one
+difference that is the whole point: **a deckhand draws from a source's catch
+table and lands whatever comes up; a pond lands exactly what you told it to.**
+
+Ponds are how a player stops being a passenger to the catch tables and starts
+choosing what they are in.
+
+### Why ponds and the market are the same idea
+
+The market punishes concentration. A pond *is* concentration — it is a machine
+for pointing every fish you produce at one species.
+
+So a pond-heavy player craters the price of precisely the fish they committed
+to, and the brief's stated risk is not a risk to be mitigated but **the
+mechanic**. The counterplay is legible and already built: stock different ponds
+with different species, buy Cold Storage, or leave a pond fallow while its price
+recovers. A player who does none of that still has a working pond; rotating is
+optimisation, not maintenance.
+
+There is a second-order effect that fell out rather than being designed, and it
+is a good one: **pond fish count for the Fishdex**, so a pond deepens knowledge
+of its species while it depresses the price. Knowledge is carried across
+prestiges and the price penalty is not — so a long-committed mono-pond player
+ends up genuinely expert in their fish, permanently, having paid for it in price
+for the whole run. That is the market's asymmetry, applied to a machine the
+player built on purpose.
+
+### Decisions, and the reasoning
+
+**Unlock: the first paradigm shift, the same gate as the market.**
+Ponds are the second half of the market's idea, and shipping them behind the same
+gate means run 1 is untouched by both — every run-1 assertion in the repo stands.
+Ungated, a pond in run 1 would be free concentrated income with nothing anywhere
+to oppose it, which is the exact configuration the market exists to prevent.
+Thematically it also reads: you sold one operation and built something of your
+own with the proceeds.
+
+**Cost: coins, geometric per pond, six ponds maximum.** Six is enough for a real
+rotation and few enough that each one is a decision. Each pond levels
+independently.
+
+**What it breeds: any species already in the Fishdex, chosen by the player,
+changeable at any time and for nothing.** A locked choice would be a trap — the
+market moves, and a pond you cannot restock is a pond that becomes worthless
+through no fault of the player. Free restocking makes rotation the counterplay
+rather than a punishment for guessing wrong.
+
+**Value: a flat `POND_VALUE_MULTIPLIER`, not a source's.** A pond is not water on
+the map, so it has no `valueMultiplier` to borrow, and borrowing the deepest open
+source's would make ponds silently scale with progression in a way nothing else
+does. Farmed fish fetch well but less than a genuine deep-water catch.
+
+**Ponds do not survive a prestige.** They are dug with coins on land you sold,
+like the boat, the bucket, the licences and the crew. Nothing coin-bought
+survives, and a pond is not the place to make the first exception.
+
+**Where they live: the Crew tab, under the deckhands.** A pond is passive
+production, which is what a player opens that tab looking for. An eleventh
+top-level tab for one panel would cost more in navigation than it bought in
+discoverability.
+
+### The two constraints that were handed down
+
+**Each pond banks its own remainders under `pond:<index>`.** Fractional fish are
+banked per producer by `takeWhole`, and a shared key would let one pond spend
+another's fraction. The index is a safe id because ponds are only ever added,
+never removed — six slots, filled in order, and a pond you are finished with is
+restocked rather than demolished.
+
+**Nothing is inserted before `SOURCE_ORDER[0]`.** Ponds are not a source at all.
+They are not on the map, they need no licence and no boat, they have no catch
+table, and they never appear in `SOURCE_ORDER`. The first source stays exactly
+where it is.
+
+`accumulate` is already O(producers), so ponds are a second loop inside the
+existing one — no per-pond tick, no new timer.
