@@ -18,6 +18,7 @@ import {
 	type PrestigeUpgradeId,
 	type UpgradeId
 } from './config';
+import { settleMarket } from './market';
 import {
 	accumulate,
 	buyBoat,
@@ -158,6 +159,10 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 	const clockStart = state.lastUpdate || 0;
 	const clock = () => clockStart + elapsed * 1000;
 
+	// The market recovers on the simulation's clock too. Without this the sim's
+	// prices only ever fall, and it models a harsher market than the game has.
+	state.marketUpdatedAt = clockStart;
+
 	let elapsed = 0;
 	let secondsToPrestige: number | null = null;
 	let idleCrossoverAt: number | null = null;
@@ -183,6 +188,8 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 		// The rig covers whatever share of the interval the player is not
 		// holding the rod themselves — the same complement the live game applies
 		// per tick, expressed here as an average over the step.
+		settleMarket(state, clock());
+
 		accumulate(
 			state,
 			modifiers,

@@ -154,7 +154,7 @@ export const SOURCE_ORDER: FishingSources[] = (Object.keys(SOURCE_CONFIG) as Fis
 
 export const DEEPEST_SOURCE = SOURCE_ORDER[SOURCE_ORDER.length - 1];
 
-export type UpgradeId = 'rod' | 'net' | 'lure' | 'market' | 'crew';
+export type UpgradeId = 'rod' | 'net' | 'lure' | 'market' | 'crew' | 'storage';
 
 export interface UpgradeConfig {
 	id: UpgradeId;
@@ -201,6 +201,32 @@ export const UPGRADES: Record<UpgradeId, UpgradeConfig> = {
 		effect: 1.28,
 		maxLevel: 45,
 		format: (level) => `rare weight ×${Math.pow(1.28, level).toFixed(2)}`
+	},
+	/**
+	 * Cold Storage: depth in the fish market (R50).
+	 *
+	 * It is not optional and it is not flavour. Production grows about 250x in
+	 * the hour between t=60m and t=120m, so a fixed market depth would drop
+	 * every price roughly fourfold per mid-game hour and the market would stop
+	 * being a choice and start being a wall. This converts a falling unit price
+	 * into a coin sink, which is what every shipped mitigation of the mechanic
+	 * actually is.
+	 *
+	 * It costs a mono-farming player `log(5)/log(3.2) = 1.38` extra levels
+	 * forever: a permanent, bounded, geometric penalty rather than a block.
+	 *
+	 * Unavailable until the market opens — `upgradeCeiling` returns 0 before
+	 * then — so it cannot be bought uselessly during run 1.
+	 */
+	storage: {
+		id: 'storage',
+		name: 'Cold Storage',
+		description: 'Land the catch over days instead of hours. The market barely notices.',
+		baseCost: 250_000,
+		costGrowth: 5.5,
+		effect: 3.2,
+		maxLevel: 12,
+		format: (level) => `market depth ×${Math.pow(3.2, level).toFixed(2)}`
 	},
 	market: {
 		id: 'market',
@@ -394,6 +420,52 @@ export const AUTO_FISHER: AutoFisherConfig = {
  * source, not a box to tick on the way past.
  */
 export const AUTO_FISHER_OFFLINE_COST = 5e11;
+
+// ---------------------------------------------------------------------------
+// The fish market
+// ---------------------------------------------------------------------------
+
+/**
+ * How hard selling pushes a price down: `price = (1 + p/S) ^ -MARKET_IMPACT`.
+ *
+ * 0.25, so income is proportional to `R^0.75` — numerically the same exponent
+ * as Antimatter Dimensions' Dilation, which is the genre's shipped precedent
+ * for exactly this shape. It gives a permanent mono-farming penalty of about
+ * 30%. The alternative modelled, 0.12, gives `R^0.88` and a 22% penalty, which
+ * is gentler on the existing balance but too quiet to change anyone's
+ * behaviour — and a lever nobody feels is not a lever (R60).
+ */
+export const MARKET_IMPACT = 0.25;
+
+/**
+ * How long a price takes to recover half of its impact.
+ *
+ * Thirty minutes equilibrates in about ninety. Forty-five is more forgiving but
+ * takes two and a quarter hours, which reads as nothing happening.
+ */
+export const MARKET_HALF_LIFE = 1800;
+
+/**
+ * Recovery past this is indistinguishable from a clean book, so the book is
+ * simply cleared. Twenty hours is more than twenty-eight half-lives — a
+ * multiplier below 1e-8.
+ */
+export const MARKET_DECAY_CUTOFF = 20 * 60 * 60;
+
+/** Fish per species it takes to halve-ish a price, before Cold Storage. */
+export const MARKET_DEPTH_BASE = 6.0e5;
+
+/** Each Cold Storage level multiplies the depth by this. */
+export const MARKET_DEPTH_GROWTH = 3.2;
+
+/**
+ * The knowledge bonus: `K(n) = 1 + 0.28 * ln(1 + n/100)`.
+ *
+ * `n` is the lifetime catch count in the Fishdex, which survives a prestige
+ * while market pressure does not. That asymmetry is the whole mechanic.
+ */
+export const KNOWLEDGE_COEFF = 0.28;
+export const KNOWLEDGE_SCALE = 100;
 
 // ---------------------------------------------------------------------------
 // Prestige

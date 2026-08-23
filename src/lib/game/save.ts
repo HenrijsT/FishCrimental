@@ -28,7 +28,8 @@ import {
 	type UpgradeId
 } from './config';
 import { createInitialState } from './engine';
-import type { BoatState, GameState } from './types';
+import { LEGACY_SPECIES } from './market';
+import type { BoatState, GameState, SpeciesLedger } from './types';
 
 const EXPORT_PREFIX = 'FISHC';
 
@@ -131,13 +132,50 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 
 	// 5 → 6: the fifth pass. The one bump the whole pass shares.
 	//
-	// The travelling merchant stopped seizing the hold and started settling a
-	// consignment (R65), so there is a second fish ledger to persist. Everything
-	// else the pass adds reads its own default, but the version is stamped here
-	// so an older build refuses the save outright rather than silently dropping
-	// fish the player has already listed.
-	5: (data) => ({ ...data, consignment: {}, consignmentValue: '0', version: 6 })
+	// Two things arrive together. The travelling merchant stopped seizing the
+	// hold and started settling a consignment (R65), so there is a second fish
+	// ledger to persist. And the fish market (R49/R50) prices per *species*,
+	// which a pre-market save has no record of — `hold` is six `FishType`
+	// buckets and `holdValue` is one scalar, and neither can be un-mixed.
+	//
+	// So the old aggregate is parked under the reserved empty-species key. Both
+	// market functions special-case it to knowledge 1 and price 1: it sells once
+	// at a neutral price and never reappears. Inventing a species split would be
+	// making the fish up.
+	//
+	// The bump also makes an older build refuse the save outright rather than
+	// silently dropping fish the player has already listed.
+	5: (data) => ({
+		...data,
+		consignment: {},
+		consignmentValue: '0',
+		holdSpecies: {
+			fish: {
+				[LEGACY_SPECIES]: floorString(data.holdValue !== undefined ? countOf(data.hold) : '0')
+			},
+			worth: { [LEGACY_SPECIES]: String(data.holdValue ?? '0') }
+		},
+		consignmentSpecies: { fish: {}, worth: {} },
+		marketPressure: {},
+		version: 6
+	})
 };
+
+/** Total fish across the six buckets of a raw hold, as a string. */
+function countOf(raw: unknown): string {
+	const source = isRecord(raw) ? raw : {};
+	let total = d0();
+	for (const value of Object.values(source)) {
+		const parsed = parseDecimal(value);
+		if (parsed && parsed.gt(0)) total = total.plus(parsed);
+	}
+	return total.toJSON() as string;
+}
+
+function floorString(value: string): string {
+	const parsed = parseDecimal(value);
+	return parsed && parsed.gt(0) ? (parsed.floor().toJSON() as string) : '0';
+}
 
 function grandfatherLicences(unlocked: unknown): Raw {
 	const open = isRecord(unlocked) ? unlocked : {};
@@ -253,6 +291,41 @@ function readDex(raw: unknown): Record<string, Decimal> {
 		if (parsed && parsed.gte(1)) dex[name] = parsed.floor();
 	}
 	return dex;
+}
+
+/**
+ * A species-keyed pile of Decimals — the market book, and half a side-ledger.
+ *
+ * Unknown names are dropped exactly as `readDex` drops them: corruption, or
+ * content that no longer exists. The empty-string key is the legacy bucket
+ * (`LEGACY_SPECIES`) where a pre-market save's aggregate `holdValue` is parked,
+ * so it is allowed through.
+ */
+function readSpeciesPile(raw: unknown, floorIt: boolean): Record<string, Decimal> {
+	const source = isRecord(raw) ? raw : {};
+	const pile: Record<string, Decimal> = {};
+	for (const [name, value] of Object.entries(source)) {
+		if (name !== LEGACY_SPECIES && !KNOWN_SPECIES.has(name)) continue;
+		const parsed = parseDecimal(value);
+		if (!parsed || parsed.lte(0)) continue;
+		pile[name] = floorIt ? parsed.floor() : parsed;
+	}
+	return pile;
+}
+
+/**
+ * A side-ledger.
+ *
+ * Counts are floored and worths are not, which mirrors the v1 `floorHold`
+ * migration: `hold` holds whole fish and `holdValue` is money. Flooring one and
+ * not the other is what keeps the two sources of truth from diverging on load.
+ */
+function readLedger(raw: unknown): SpeciesLedger {
+	const source = isRecord(raw) ? raw : {};
+	return {
+		fish: readSpeciesPile(source.fish, true),
+		worth: readSpeciesPile(source.worth, false)
+	};
 }
 
 function readUpgrades(raw: unknown): Record<UpgradeId, Decimal> {
@@ -374,6 +447,13 @@ export function fromRaw(data: Raw): GameState {
 
 		consignment: readHold(migrated.consignment),
 		consignmentValue: positive(migrated.consignmentValue),
+
+		holdSpecies: readLedger(migrated.holdSpecies),
+		consignmentSpecies: readLedger(migrated.consignmentSpecies),
+		marketPressure: readSpeciesPile(migrated.marketPressure, false),
+		// A book loaded with no timestamp has not decayed yet, not decayed
+		// forever. `settleMarket` runs immediately after the load.
+		marketUpdatedAt: num(migrated.marketUpdatedAt, Date.now()),
 
 		dex: readDex(migrated.dex),
 		carry: readCarry(migrated.carry),

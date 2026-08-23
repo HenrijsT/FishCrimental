@@ -44,6 +44,13 @@ describe('the upgrade tree', () => {
 
 	it('needs Decimal — costs leave exact integers behind almost immediately', () => {
 		for (const id of UPGRADE_IDS) {
+			// Cold Storage is deliberately short — twelve levels of bounded
+			// relief from the market rather than a track you finish — so its top
+			// is the one that lands inside the safe-integer range.
+			if (id === 'storage') {
+				expect(UPGRADES[id].maxLevel).toBeLessThan(20);
+				continue;
+			}
 			const top = upgradeCost(id, UPGRADES[id].maxLevel);
 			expect(top.gt(Number.MAX_SAFE_INTEGER)).toBe(true);
 			expect(top.toJSON().length).toBeGreaterThan(0);

@@ -12,6 +12,14 @@ import { fishes, sourcesToFish } from '$lib/fishes';
 import type { Fish } from '$lib/fishes/fish';
 import { RandomIndex } from '$lib/random_picker';
 import {
+	addToLedger,
+	drainLedger,
+	emptyLedger,
+	ledgerValue,
+	marketOpen,
+	moveLedger
+} from './market';
+import {
 	BOAT_BASE_FUEL_CAPACITY,
 	BOAT_BASE_FUEL_PER_CAST,
 	BOAT_BASE_WEAR_PER_CAST,
@@ -194,6 +202,11 @@ export function deepestOpenIndex(state: GameState): number {
  * settle, and a gate there would strand the boat while the player slept.
  */
 export function upgradeCeiling(state: GameState, id: UpgradeId): number {
+	// Cold Storage buys depth in a market that is not trading yet. Selling it
+	// before the first paradigm shift would be selling nothing, and the greedy
+	// reference player in `balance.ts` would buy it anyway.
+	if (id === 'storage' && !marketOpen(state)) return 0;
+
 	const reach = SHOPKEEPER_REACH[Math.min(deepestOpenIndex(state), SHOPKEEPER_REACH.length - 1)];
 	return Math.floor(UPGRADES[id].maxLevel * reach);
 }
@@ -695,9 +708,17 @@ export function totalIncomePerSecond(state: GameState, modifiers: Modifiers): De
 	return total;
 }
 
+/**
+ * The one place in the codebase that adds to the hold.
+ *
+ * The species side-ledger is written here, beside `dex`, because this is the
+ * last moment species identity exists — `hold` is six `FishType` buckets and
+ * `holdValue` is a scalar, and neither can be un-mixed afterwards.
+ */
 function recordCatch(state: GameState, fish: Fish, count: Decimal, value: Decimal): void {
 	state.hold[fish.category] = state.hold[fish.category].plus(count);
 	state.holdValue = state.holdValue.plus(value);
+	addToLedger(state.holdSpecies, fish.name, count, value);
 	state.dex[fish.name] = (state.dex[fish.name] ?? d0()).plus(count);
 	state.totalFish = state.totalFish.plus(count);
 }
@@ -1154,11 +1175,18 @@ export function holdCount(state: GameState): Decimal {
  */
 export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RATE): Decimal {
 	if (state.holdValue.lte(0)) {
+		// Both ledgers clear here too. Worthless fish still take up the bucket
+		// and still move a price, and a species ledger that outlived the fish
+		// would let the market sell them a second time.
 		for (const type of FISH_TYPES) state.hold[type] = d0();
+		drainLedger(state, state.holdSpecies);
 		return d0();
 	}
 
-	const earned = state.holdValue.times(modifiers.sellMultiplier).times(rate);
+	// Priced species by species, by the integral, and the prices move as it
+	// sells. `drainLedger` does all of it and empties the ledger.
+	const gross = drainLedger(state, state.holdSpecies, state.holdValue);
+	const earned = gross.times(modifiers.sellMultiplier).times(rate);
 
 	state.coins = state.coins.plus(earned);
 	state.lifetimeCoins = state.lifetimeCoins.plus(earned);
@@ -1167,6 +1195,16 @@ export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RAT
 	for (const type of FISH_TYPES) state.hold[type] = d0();
 
 	return earned;
+}
+
+/** What the bucket would actually fetch today, market and knowledge included. */
+export function holdMarketValue(state: GameState): Decimal {
+	return ledgerValue(state, state.holdSpecies, state.holdValue);
+}
+
+/** What the quay would actually fetch today. */
+export function consignmentMarketValue(state: GameState): Decimal {
+	return ledgerValue(state, state.consignmentSpecies, state.consignmentValue);
 }
 
 /**
@@ -1230,6 +1268,10 @@ export function listForSale(state: GameState, count?: Decimal): Decimal {
 	state.holdValue = Decimal.max(d0(), state.holdValue.minus(movingValue));
 	state.consignmentValue = state.consignmentValue.plus(movingValue);
 
+	// The species ledger moves with the fish. If it did not, the market would
+	// price a bucket that is empty and ignore a quay that is not.
+	moveLedger(state.holdSpecies, state.consignmentSpecies, fraction);
+
 	return listed;
 }
 
@@ -1247,10 +1289,12 @@ export function settleConsignment(
 ): Decimal {
 	if (state.consignmentValue.lte(0)) {
 		for (const type of FISH_TYPES) state.consignment[type] = d0();
+		drainLedger(state, state.consignmentSpecies);
 		return d0();
 	}
 
-	const earned = state.consignmentValue.times(modifiers.sellMultiplier).times(rate);
+	const gross = drainLedger(state, state.consignmentSpecies, state.consignmentValue);
+	const earned = gross.times(modifiers.sellMultiplier).times(rate);
 
 	state.coins = state.coins.plus(earned);
 	state.lifetimeCoins = state.lifetimeCoins.plus(earned);
@@ -1833,6 +1877,13 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		holdValue: d0(),
 		consignment: emptyHold(),
 		consignmentValue: d0(),
+
+		holdSpecies: emptyLedger(),
+		consignmentSpecies: emptyLedger(),
+		// Never carried across a prestige. `dex` is; this is not; that is the
+		// mechanic. See `market.ts`.
+		marketPressure: {},
+		marketUpdatedAt: now,
 
 		dex: keep?.dex ?? {},
 		carry: {},

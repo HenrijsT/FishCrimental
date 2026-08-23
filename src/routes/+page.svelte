@@ -15,6 +15,7 @@
 	import HarbourPanel from '$lib/components/HarbourPanel.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import MapPanel from '$lib/components/MapPanel.svelte';
+	import MarketPanel from '$lib/components/MarketPanel.svelte';
 	import ModalHost from '$lib/components/ModalHost.svelte';
 	import NextStep from '$lib/components/NextStep.svelte';
 	import PrestigePanel from '$lib/components/PrestigePanel.svelte';
@@ -146,6 +147,8 @@
 					<HarbourPanel />
 				{:else if active === 'crew'}
 					<CrewPanel />
+				{:else if active === 'market'}
+					<MarketPanel />
 				{:else if active === 'dex'}
 					<Fishdex {focus} />
 				{:else if active === 'pearls'}

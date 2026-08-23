@@ -24,7 +24,14 @@ import {
 } from './engine';
 import type { GameState } from './types';
 
-/** Everything up to and including `upTo` is open. */
+/**
+ * Everything up to and including `upTo` is open.
+ *
+ * One prestige is banked, so the market is trading. Cold Storage is the one
+ * track whose ceiling is not only the shopkeeper ladder — it is unavailable
+ * outright until the market opens — and these tests are about the ladder.
+ * Its gate has a test of its own below.
+ */
 function openTo(upTo: FishingSources): GameState {
 	const state = createInitialState();
 	for (const source of SOURCE_ORDER) {
@@ -32,6 +39,7 @@ function openTo(upTo: FishingSources): GameState {
 		if (source === upTo) break;
 	}
 	state.coins = D('1e40');
+	state.prestigeCount = D(1);
 	return state;
 }
 
@@ -62,7 +70,7 @@ describe('the reach ladder', () => {
 
 describe('what a shopkeeper will sell', () => {
 	it('is less at the mud pool than at the ocean, for every track', () => {
-		const start = createInitialState();
+		const start = openTo(SOURCE_ORDER[0]);
 		const end = openTo(SOURCE_ORDER[SOURCE_ORDER.length - 1]);
 		for (const id of UPGRADE_IDS) {
 			expect(upgradeCeiling(start, id)).toBeLessThan(upgradeCeiling(end, id));
@@ -78,6 +86,22 @@ describe('what a shopkeeper will sell', () => {
 				previous = ceiling;
 			}
 		}
+	});
+
+	/**
+	 * Cold Storage buys depth in a market that is not trading yet.
+	 *
+	 * Without this the greedy reference player in `balance.ts` buys it during
+	 * run 1, where it does nothing at all, and every run-1 pacing figure moves
+	 * for no gameplay reason.
+	 */
+	it('will not sell Cold Storage before the market opens', () => {
+		const beforeShift = createInitialState();
+		beforeShift.unlocked[FishingSources.Ocean] = true;
+		expect(upgradeCeiling(beforeShift, 'storage')).toBe(0);
+
+		beforeShift.prestigeCount = D(1);
+		expect(upgradeCeiling(beforeShift, 'storage')).toBeGreaterThan(0);
 	});
 
 	it('names where the next tier is stocked', () => {

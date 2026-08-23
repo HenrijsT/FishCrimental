@@ -24,6 +24,24 @@ export interface GameSettings {
 	scientificNotation: boolean;
 }
 
+/**
+ * Fish in a container, by species, alongside what they were worth when caught.
+ *
+ * The market prices a *species*, and species identity does not survive the
+ * catch anywhere else: `hold` is six `FishType` buckets and `holdValue` is one
+ * scalar. Both of those stay exactly as they are — this runs beside them.
+ *
+ * `worth` is separate from `fish` rather than derived from it because the same
+ * species is worth different money in different water: `valueMultiplier` spans
+ * up to 1232x for one species across the sources it appears in.
+ */
+export interface SpeciesLedger {
+	/** Species name to count. */
+	fish: Record<string, Decimal>;
+	/** Species name to coin worth, before the market has its say. */
+	worth: Record<string, Decimal>;
+}
+
 export interface GameState {
 	version: number;
 
@@ -50,6 +68,25 @@ export interface GameState {
 	consignment: Record<FishType, Decimal>;
 	/** Coin value of the consignment, at full price. */
 	consignmentValue: Decimal;
+
+	/** The same fish as `hold`, by species, for the market to price. */
+	holdSpecies: SpeciesLedger;
+	/** The same fish as `consignment`, by species. */
+	consignmentSpecies: SpeciesLedger;
+
+	/**
+	 * Selling pressure standing against each species.
+	 *
+	 * **`Decimal`, not `number`.** Sales at depth run to arbitrary magnitudes,
+	 * and an `Infinity` here would flow straight into `holdValue`, coins and the
+	 * save file — which has happened in this codebase before.
+	 *
+	 * Deliberately **not** in `CarryOver`: `dex` is carried and this is not, and
+	 * that asymmetry is the mechanic.
+	 */
+	marketPressure: Record<string, Decimal>;
+	/** One timestamp for the whole book — the decay factor is species-independent. */
+	marketUpdatedAt: number;
 
 	// Progress
 	/** Lifetime catches per species name — the Fishdex. */
