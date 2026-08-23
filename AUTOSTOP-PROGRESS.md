@@ -10,7 +10,7 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - [x] Stage 1 chore/one-frontend — MERGED
 - [x] Stage 2 feat/selling — MERGED
 - [x] Stage 3 fix/pearls — MERGED
-- [ ] Stage 4 feat/market
+- [x] Stage 4 feat/market — MERGED
 - [ ] Stage 5 feat/ponds
 - [ ] Stage 6 feat/minigames
 - [ ] Stage 7 feat/consequences
@@ -35,14 +35,17 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - Measure with: LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
 
 ## Next steps
-1. Stage 4: feat/market -- ANSWER-RESEARCH.md section 2. MARKET_IMPACT 0.25,
-   MARKET_HALF_LIFE 1800, K(n)=1+0.28*ln(1+n/100). Unlocks at first shift, every
-   shift resets prices, NOT in CarryOver. hold/holdValue unchanged, species
-   side-ledger. Price by the integral. marketPressure MUST be Decimal.
-   Cold Storage sink mandatory. Ship the price board.
-   NOTE: shifts do not exist yet -- check SHIFTS-SPEC.md; may need a minimal
-   shift hook, or gate the market on prestigeCount as a stand-in and say so.
+1. Stage 5: feat/ponds -- DESIGN FIRST into DECISIONS.md, then build.
+   Constraints: per-pond remainder key `pond:${id}`; nothing before
+   SOURCE_ORDER[0]; ponds feed the market so check a pond-heavy player does not
+   crater their own prices; accumulate() is already O(producers).
+   Decide + record: unlock, cost, upgrades, what it breeds, chosen vs fixed
+   species, survives prestige?, where in the UI.
 
 ## Notes / decisions
-- SAVE_VERSION currently 5 (config.ts). Bump ONCE to 6 for the whole pass,
-  one MIGRATIONS[5]. Decide the bump stage when the first stage needs it.
+- SAVE_VERSION is 6 with MIGRATIONS[5]. DO NOT BUMP AGAIN this pass.
+- Market gate is prestigeCount > 0 (shifts are unbuilt; recorded as a deviation).
+- Ladder after Stage 4 (seed 7): 3h18m09s / 11m19 / 2m44 / 1m56 / 1m47 / 1m41.
+  Run 1 untouched. Measure: LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
+- market.probe.test.ts verifies mono/rotate against the built game.
+- Tests 473 passing, 5 skipped (probes are LADDER-gated).
