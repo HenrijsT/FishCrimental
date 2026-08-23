@@ -9,7 +9,7 @@ import {
 	BUCKET_MAX_LEVEL,
 	LICENCE_IDS,
 	MAX_OFFLINE_SECONDS,
-	OFFLINE_CHUNKS,
+	OFFLINE_HOLD_MULTIPLIER,
 	OFFLINE_EFFICIENCY,
 	SOURCE_ORDER,
 	TOWN_TRIP_SECONDS,
@@ -293,7 +293,7 @@ describe('the Game refuses to cast while you are in town', () => {
 		expect(game.casting).toBe(false);
 	});
 
-	it('sells offline at the trader rate, not the town rate', () => {
+	it('does not sell offline at all, at any rate (R51)', () => {
 		const game = boot();
 		game.state.deckhands[SOURCE_ORDER[0]] = D(20);
 		game.state.hasBicycle = true;
@@ -301,10 +301,11 @@ describe('the Game refuses to cast while you are in town', () => {
 
 		const before = game.state.coins;
 		game.resume();
-		const withBike = game.state.coins.minus(before);
 
-		// Nobody rides to town while the game is shut.
-		expect(withBike.gt(0)).toBe(true);
+		// Nobody rides to town while the game is shut, and nobody comes past
+		// either. The night is fish in the hold, not coins in the purse.
+		expect(game.state.coins.toNumber()).toBe(before.toNumber());
+		expect(game.offlineReport!.fish.gt(0)).toBe(true);
 		expect(game.state.fishingBlockedUntil).toBe(0);
 	});
 });
@@ -429,24 +430,32 @@ describe('the bucket', () => {
 });
 
 describe('a night offline still scales with the crew', () => {
-	/** Coins earned over eight hours away, settled the way the game settles it. */
-	function nightEarnings(crew: number, bucketLevel: number, assistant = false): number {
+	/**
+	 * Fish landed over eight hours away, settled the way the game now settles
+	 * it: one passive step, no selling, the keepnet holding
+	 * `OFFLINE_HOLD_MULTIPLIER` bucketfuls (R51).
+	 *
+	 * This used to measure coins. It cannot any more — nothing is sold while
+	 * the game is shut — so the night is measured in what it actually is.
+	 */
+	function nightCatch(crew: number, bucketLevel: number, assistant = false): number {
 		const state = createInitialState();
 		state.bucketLevel = D(bucketLevel);
 		state.hasAssistant = assistant;
 		state.deckhands[SOURCE_ORDER[0]] = D(crew);
 
-		const capped = MAX_OFFLINE_SECONDS;
-		const chunks = Math.max(1, Math.min(OFFLINE_CHUNKS, Math.ceil(capped / 60)));
-		const chunkSeconds = capped / chunks;
-
-		let coins = d0();
-		for (let i = 0; i < chunks; i++) {
-			const modifiers = computeModifiers(state);
-			accumulate(state, modifiers, chunkSeconds, OFFLINE_EFFICIENCY);
-			coins = coins.plus(sellHold(state, modifiers, saleRate(state)));
-		}
-		return coins.toNumber();
+		const modifiers = computeModifiers(state);
+		const step = accumulate(
+			state,
+			modifiers,
+			MAX_OFFLINE_SECONDS,
+			OFFLINE_EFFICIENCY,
+			undefined,
+			undefined,
+			0,
+			OFFLINE_HOLD_MULTIPLIER
+		);
+		return step.fish.toNumber();
 	}
 
 	it('doubles the crew, roughly doubles the night — at a bucket the player can afford', () => {
@@ -454,31 +463,31 @@ describe('a night offline still scales with the crew', () => {
 		// Assistant's 26,000 — so this is a bucket a player genuinely has while
 		// still owning a real crew. That is the worst moment for the cap.
 		const level = 5;
-		const small = nightEarnings(10, level);
-		const large = nightEarnings(20, level);
+		const small = nightCatch(10, level);
+		const large = nightCatch(20, level);
 
 		expect(small).toBeGreaterThan(0);
-		// Clipped by the bucket, this ratio collapses towards 1.
+		// Clipped by the keepnet, this ratio collapses towards 1.
 		expect(large / small).toBeGreaterThan(1.8);
 	});
 
 	it('is the bucket, not the crew, that would have clipped it', () => {
 		// The same doubling against a level-0 bucket does get clipped — which is
 		// exactly why the bucket has to be upgradeable.
-		const clipped = nightEarnings(20, 0) / nightEarnings(10, 0);
-		const roomy = nightEarnings(20, 6) / nightEarnings(10, 6);
+		const clipped = nightCatch(20, 0) / nightCatch(10, 0);
+		const roomy = nightCatch(20, 6) / nightCatch(10, 6);
 		expect(roomy).toBeGreaterThan(clipped);
 	});
 
 	it('an Assistant removes the ceiling completely', () => {
-		// Same settle, same crew, same chunks — the only difference is the cap.
-		// A level-0 bucket is where the clipping is worst.
-		expect(nightEarnings(20, 0, true)).toBeGreaterThan(nightEarnings(20, 0, false));
+		// Same settle, same crew — the only difference is the cap. A level-0
+		// bucket is where the clipping is worst.
+		expect(nightCatch(20, 0, true)).toBeGreaterThan(nightCatch(20, 0, false));
 	});
 
 	it('and an Assistant is never worse than the biggest bucket', () => {
-		expect(nightEarnings(20, 0, true)).toBeGreaterThanOrEqual(
-			nightEarnings(20, BUCKET_MAX_LEVEL, false) * 0.999
+		expect(nightCatch(20, 0, true)).toBeGreaterThanOrEqual(
+			nightCatch(20, BUCKET_MAX_LEVEL, false) * 0.999
 		);
 	});
 });

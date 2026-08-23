@@ -6,7 +6,7 @@
 		TOWN_TRIP_SECONDS,
 		TRADER_RATE
 	} from '$lib/game/config';
-	import { bucketCapacity, traderInStock } from '$lib/game/engine';
+	import { bucketCapacity, canSell, traderInStock } from '$lib/game/engine';
 	import CastBar from './CastBar.svelte';
 	import { game } from '$lib/game/state.svelte';
 	import { D } from '$lib/decimal';
@@ -16,7 +16,7 @@
 	const worth = $derived(g.holdValue.times(game.modifiers.sellMultiplier));
 	const traderPays = $derived(worth.times(TRADER_RATE));
 
-	const canRide = $derived(g.hasBicycle && !game.inTown && g.holdValue.gt(0));
+	const canRide = $derived(canSell(g) && !game.inTown && g.holdValue.gt(0));
 
 	const maxedBucket = $derived(g.bucketLevel.gte(BUCKET_MAX_LEVEL));
 	const hasBike = $derived(traderInStock(g, 'bicycle'));
@@ -28,31 +28,40 @@
 <section class="panel">
 	<h2>The shore</h2>
 
-	<p class="muted intro">
-		A fisherman with no transport sells to whoever comes past, at whatever they feel like paying.
-		Getting to town yourself is worth {Math.round((1 / TRADER_RATE - 1) * 100)}% more — and costs
-		you the time it takes to get there and back.
-	</p>
-
-	<div class="trader">
-		<div class="trader-head">
-			<h3 class="name">The next trader</h3>
-			<span class="countdown">{Math.ceil(game.traderLeft)}s</span>
-		</div>
-		<CastBar progress={game.traderFill} label="Time until the next trader" active />
-		<p class="desc muted">
-			He takes the whole bucket at {Math.round(TRADER_RATE * 100)}% of what it is worth — right now
-			that is <Num value={traderPays} tone="coin" /> — and brings whatever he happens to be carrying.
+	{#if g.hasAssistant}
+		<p class="muted intro">
+			The Assistant runs the catch in for you, at full price, without you ever leaving the water. No
+			trader, no trip, no bucket.
 		</p>
-		{#if game.lastTraderEarned}
-			<p class="last">Last trader paid <Num value={game.lastTraderEarned} tone="coin" />.</p>
-		{/if}
-	</div>
+	{:else}
+		<p class="muted intro">
+			A fisherman with no transport sells to whoever comes past, at whatever they feel like paying.
+			Getting to town yourself is worth {Math.round((1 / TRADER_RATE - 1) * 100)}% more — and costs
+			you the time it takes to get there and back.
+		</p>
+	{/if}
 
-	{#if g.hasBicycle}
+	{#if !g.hasAssistant}
+		<div class="trader">
+			<div class="trader-head">
+				<h3 class="name">The next trader</h3>
+				<span class="countdown">{Math.ceil(game.traderLeft)}s</span>
+			</div>
+			<CastBar progress={game.traderFill} label="Time until the next trader" active />
+			<p class="desc muted">
+				He takes the whole bucket at {Math.round(TRADER_RATE * 100)}% of what it is worth — right
+				now that is <Num value={traderPays} tone="coin" /> — and brings whatever he happens to be carrying.
+			</p>
+			{#if game.lastTraderEarned}
+				<p class="last">Last trader paid <Num value={game.lastTraderEarned} tone="coin" />.</p>
+			{/if}
+		</div>
+	{/if}
+
+	{#if canSell(g)}
 		<div class="row">
 			<div class="text">
-				<h3 class="name">Ride into town</h3>
+				<h3 class="name">{g.hasAssistant ? 'Sell the catch' : 'Ride into town'}</h3>
 				<p class="desc muted">
 					Full price.
 					{#if g.hasAssistant}

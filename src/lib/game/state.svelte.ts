@@ -1,12 +1,13 @@
 import Decimal from 'break_eternity.js';
 import { D, d0 } from '$lib/decimal';
-import { FISH_TYPES, fishTypeBaseValue } from '$lib/fish_types';
+import { fishTypeBaseValue } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
 import type { Fish } from '$lib/fishes/fish';
 import {
 	AUTOSAVE_MS,
 	MAX_OFFLINE_SECONDS,
-	OFFLINE_CHUNKS,
+	OFFLINE_FUEL_SHARE,
+	OFFLINE_HOLD_MULTIPLIER,
 	OFFLINE_EFFICIENCY,
 	SAVE_KEY,
 	SOURCE_CONFIG,
@@ -64,7 +65,6 @@ import {
 	performCast,
 	performPrestige,
 	rarityAt,
-	sellHold,
 	totalIncomePerSecond,
 	unlockSource,
 	RARITY_ORDER,
@@ -358,12 +358,22 @@ export class Game {
 	// -----------------------------------------------------------------------
 
 	/**
-	 * Settle time away in a handful of chunks rather than one step.
+	 * Settle time away.
 	 *
-	 * One step would be closed form, but the standing fuel order pays for fuel
-	 * out of coins, and coins only arrive when the catch is sold. Selling every
-	 * chunk lets the boat keep itself fuelled for the whole window. Twenty-four
-	 * chunks covers eight hours — it is not a per-cast simulation.
+	 * **Offline is passive (R51).** The crew fish and the ponds fill. Nobody
+	 * sells, no trader calls, and no decision is taken on the player's behalf.
+	 * The whole night is what the crew landed, sitting in the keepnet waiting
+	 * to be sold.
+	 *
+	 * With no order-dependent call left there is nothing to chunk: one
+	 * `accumulate` over the whole window is the same answer as twenty-four,
+	 * which is why `OFFLINE_CHUNKS` is gone. The night's ceiling it used to set
+	 * lives on as `OFFLINE_HOLD_MULTIPLIER`.
+	 *
+	 * The hold is *not* taken out of play first. It stays exactly where it is,
+	 * so the keepnet's room is measured against what is genuinely in it and the
+	 * bucket is enforced by `accumulate` on the way in, rather than by trimming
+	 * afterwards.
 	 */
 	#settleOffline(state: GameState): OfflineReport | null {
 		const seconds = (Date.now() - state.lastUpdate) / 1000;
@@ -371,101 +381,46 @@ export class Game {
 
 		const capped = Math.min(seconds, MAX_OFFLINE_SECONDS);
 
-		// Take the hold out of play before settling, not after.
-		//
-		// `sellHold` inside the loop is there to fund the standing fuel order
-		// out of the offline catch. It used to sell the fish the player already
-		// had along with it, and the restore below put those fish back without
-		// ever rolling back the coins — paying for the hold and handing it back,
-		// on every reload more than thirty seconds after the last save, and
-		// silently when there were no deckhands. It inflated `lifetimeCoins`
-		// too, minting Pearls out of nothing.
-		const holdBefore = FISH_TYPES.map((type) => [type, state.hold[type]] as const);
-		const valueBefore = state.holdValue;
 		const coinsBefore = state.coins;
 
-		for (const type of FISH_TYPES) state.hold[type] = d0();
-		state.holdValue = d0();
+		// The standing fuel order can only ever draw on coins banked before
+		// leaving, because under R51 none arrive while away. Cap what it may
+		// take: `runBoat` reads `state.coins` directly, so handing it a smaller
+		// purse for the duration is the whole enforcement, and no engine code
+		// has to know that this is a night rather than a tick.
+		const budget = Decimal.max(d0(), coinsBefore.times(OFFLINE_FUEL_SHARE));
+		state.coins = budget;
 
-		let fish = d0();
-		let value = d0();
-		let fellBack = false;
-		let fuelSpent = d0();
-		let traderVisits = 0;
-		let traderEarned = d0();
+		const modifiers = computeModifiers(state);
+		const step = accumulate(
+			state,
+			modifiers,
+			capped,
+			OFFLINE_EFFICIENCY,
+			undefined,
+			Math.random,
+			state.autoFisherOffline ? 1 : 0,
+			OFFLINE_HOLD_MULTIPLIER
+		);
 
-		const chunks = Math.max(1, Math.min(OFFLINE_CHUNKS, Math.ceil(capped / 60)));
-		const chunkSeconds = capped / chunks;
+		const fuelSpent = Decimal.max(d0(), budget.minus(state.coins));
+		// Restore rather than subtract when nothing was spent: `0 - 0` is `-0`,
+		// and a negative zero in the purse is a thing nobody should have to read.
+		state.coins = fuelSpent.gt(0) ? coinsBefore.minus(fuelSpent) : coinsBefore;
 
-		for (let i = 0; i < chunks; i++) {
-			const modifiers = computeModifiers(state);
-			const coinsAtChunkStart = state.coins;
-
-			const step = accumulate(
-				state,
-				modifiers,
-				chunkSeconds,
-				OFFLINE_EFFICIENCY,
-				undefined,
-				Math.random,
-				state.autoFisherOffline ? 1 : 0
-			);
-
-			fish = fish.plus(step.fish);
-			value = value.plus(step.value);
-			fellBack = fellBack || step.fellBack;
-
-			// runBoat may have spent coins on fuel through the standing order.
-			const spent = coinsAtChunkStart.minus(state.coins);
-			if (spent.gt(0)) fuelSpent = fuelSpent.plus(spent);
-
-			// Who empties the hold while the game is shut.
-			//
-			// With an Assistant it is sold as it lands, at full price, once per
-			// chunk — which is also what keeps `runBoat`'s standing fuel order
-			// funded, since that buys fuel out of coins and coins only arrive on
-			// a sale.
-			//
-			// Without one it is the trader, and he keeps his own schedule: the
-			// visits due inside this chunk are resolved by walking his deadline
-			// forward, so a settle split into twenty-four chunks and one done in
-			// a single step resolve the same number of arrivals. At a 90-second
-			// period there is at least one arrival in every chunk of any real
-			// length, so the fuel order stays funded either way.
-			if (state.hasAssistant) {
-				sellHold(state, modifiers, saleRate(state));
-			} else {
-				const chunkEnd = state.lastUpdate + (i + 1) * chunkSeconds * 1000;
-				const visit = runTrader(state, modifiers, chunkEnd);
-				traderVisits += visit.visits;
-				traderEarned = traderEarned.plus(visit.earned);
-			}
-		}
-
-		if (fish.lte(0) && fuelSpent.lte(0)) {
-			for (const [type, amount] of holdBefore) state.hold[type] = amount;
-			state.holdValue = valueBefore;
-			return null;
-		}
-
-		// Put the hold back the way the player left it; only the offline catch
-		// was sold.
-		for (const [type, amount] of holdBefore) state.hold[type] = amount;
-		state.holdValue = valueBefore;
+		if (step.fish.lte(0) && fuelSpent.lte(0)) return null;
 
 		return {
 			seconds,
 			cappedSeconds: capped,
-			fish,
-			value,
-			// Gross, so the modal can show earnings and the fuel bill as two
-			// separate lines without the reader subtracting twice.
-			coins: state.coins.minus(coinsBefore).plus(fuelSpent),
-			autoSold: true,
+			fish: step.fish,
+			value: step.value,
 			fuelSpent,
-			fellBack,
-			traderVisits,
-			traderEarned
+			fellBack: step.fellBack,
+			// What is waiting to be sold, all of it, not just tonight's.
+			holdAfter: holdCount(state),
+			// True when the keepnet filled and the rest went back in the water.
+			holdFull: step.bucketBound
 		};
 	}
 

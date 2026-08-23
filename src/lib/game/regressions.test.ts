@@ -4,7 +4,7 @@ import { D } from '$lib/decimal';
 import { formatNumber } from '$lib/format';
 import { FISH_TYPES, FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
-import { SAVE_VERSION, SOURCE_ORDER } from './config';
+import { SAVE_VERSION, SOURCE_ORDER, TOWN_RATE } from './config';
 import {
 	accumulate,
 	autoCastsPerSecond,
@@ -15,9 +15,12 @@ import {
 	deckhandBulkCost,
 	deckhandCost,
 	performCast,
+	runTrader,
+	saleRate,
 	sellHold
 } from './engine';
 import { fromRaw, serialize } from './save';
+import type { GameState } from './types';
 
 /**
  * Every test here is tied to a specific defect found in the round-two hunt.
@@ -208,5 +211,65 @@ describe('round two: version 1 saves carried fractional fish', () => {
 		// Not a literal: this asserts the migration chain runs all the way to
 		// the current format, whatever that is today.
 		expect(loaded.version).toBe(SAVE_VERSION);
+	});
+});
+
+/**
+ * R63. Buying the Assistant is the most expensive thing in the opening act, and
+ * it used to make the player 45% poorer per fish.
+ *
+ * `runTrader` was called unguarded from the live tick, so the trader kept
+ * arriving every forty-five seconds and taking the whole hold at `TRADER_RATE`,
+ * while `saleRate` told that same player they were on `TOWN_RATE`. Nothing in
+ * the UI said otherwise. Offline already branched correctly; the tick did not.
+ */
+describe('the trader stops buying once there is an Assistant (R63)', () => {
+	function stocked(): GameState {
+		const state = createInitialState();
+		state.hold[FishType.Small] = D(10);
+		state.holdValue = D(1_000);
+		state.nextTraderAt = 1_000;
+		return state;
+	}
+
+	it('does not take the hold', () => {
+		const state = stocked();
+		state.hasAssistant = true;
+
+		const result = runTrader(state, computeModifiers(state), 10_000);
+
+		expect(result.visits).toBe(0);
+		expect(result.earned.toNumber()).toBe(0);
+		expect(state.holdValue.toNumber()).toBe(1_000);
+		expect(state.hold[FishType.Small].toNumber()).toBe(10);
+		expect(state.coins.toNumber()).toBe(0);
+	});
+
+	it('still takes it from a player who has not hired one', () => {
+		const state = stocked();
+
+		const result = runTrader(state, computeModifiers(state), 10_000);
+
+		expect(result.visits).toBeGreaterThan(0);
+		expect(state.holdValue.toNumber()).toBe(0);
+	});
+
+	it('does not bank a pile of arrivals to spring on someone who lets him go', () => {
+		const state = stocked();
+		state.hasAssistant = true;
+
+		// A long absence with the Assistant on the books.
+		runTrader(state, computeModifiers(state), 10_000_000);
+		state.hasAssistant = false;
+
+		// At most one visit is due immediately, not the two hundred that elapsed.
+		const result = runTrader(state, computeModifiers(state), 10_000_000);
+		expect(result.visits).toBeLessThanOrEqual(1);
+	});
+
+	it('pays the Assistant owner the full price they were promised', () => {
+		const state = stocked();
+		state.hasAssistant = true;
+		expect(saleRate(state)).toBe(TOWN_RATE);
 	});
 });

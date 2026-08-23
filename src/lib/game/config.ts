@@ -485,10 +485,34 @@ export const MAX_OFFLINE_SECONDS = 8 * 60 * 60;
 export const OFFLINE_EFFICIENCY = 0.75;
 
 /**
- * Time away is settled in at most this many chunks, selling between each, so a
- * standing fuel order has coins to spend across the whole window.
+ * How many bucketfuls a night is worth.
+ *
+ * Offline is passive (R51): the crew fish, and nothing else happens. Nobody
+ * sells, so the hold is the only place the night can go, and a bucket that
+ * held thirty fish would make an eight-hour night worth about forty-five
+ * seconds of watched play.
+ *
+ * This number is not new. The settle used to run in `OFFLINE_CHUNKS = 24`
+ * chunks and sell between each, so the night's ceiling was already
+ * `24 x capacity`. Keeping 24 keeps that ceiling exactly and changes only what
+ * you come back to: fish in the keepnet rather than coins in the purse, which
+ * you now sell yourself. It also keeps the bucket's reason to exist — it is
+ * still what sizes a night, x24.
  */
-export const OFFLINE_CHUNKS = 24;
+export const OFFLINE_HOLD_MULTIPLIER = 24;
+
+/**
+ * The most of your banked coins the standing fuel order may spend while you
+ * are away.
+ *
+ * `runBoat` buys fuel out of `state.coins` and under R51 no coins arrive
+ * offline, so the order can only ever draw on what was banked before leaving.
+ * Left uncapped it would draw on *all* of it, and coming back to an empty
+ * purse because the boat sailed all night is a worse outcome than the boat
+ * stopping and the crew working inshore — which is a state the game already
+ * handles and reports.
+ */
+export const OFFLINE_FUEL_SHARE = 0.5;
 
 export const SAVE_KEY = 'fishcrimental.save';
 /**

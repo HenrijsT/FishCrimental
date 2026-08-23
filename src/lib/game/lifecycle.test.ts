@@ -1,7 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { D, d0 } from '$lib/decimal';
 import { FISH_TYPES, FishType } from '$lib/fish_types';
-import { SAVE_KEY, SOURCE_ORDER } from './config';
+import { OFFLINE_HOLD_MULTIPLIER, SAVE_KEY, SOURCE_ORDER } from './config';
+import { bucketCapacity, holdCount } from './engine';
 import { Game } from './state.svelte';
 
 /**
@@ -130,23 +131,24 @@ describe('offline settlement', () => {
 		expect(game.state.lifetimeCoins.toNumber()).toBe(before.toNumber());
 	});
 
-	it('still pays for what the crew landed while away, and only that', () => {
+	it('pays nothing at all — offline is passive, and the night is fish (R51)', () => {
 		const game = boot();
 		game.state.deckhands[SOURCE_ORDER[0]] = D(5);
-		stockHold(game, 1000, 1_000_000);
+		stockHold(game, 10, 1_000);
+		const coinsBefore = game.state.coins;
 
 		game.state.lastUpdate = Date.now() - 3_600_000;
 		game.resume();
 
 		const report = game.offlineReport;
 		expect(report).not.toBeNull();
+		expect(report!.fish.gt(0)).toBe(true);
 
-		// The modal's coin figure and the balance must agree: the report used to
-		// say 11,171 next to a balance of 62,757.
-		expect(game.state.coins.toNumber()).toBeCloseTo(report!.coins.toNumber(), 6);
-		// And the hold is exactly as the player left it.
-		expect(game.state.holdValue.toNumber()).toBe(1_000_000);
-		expect(game.state.hold[FishType.Small].toNumber()).toBe(1000);
+		// Nobody sold anything. No trader, no dock, no coins.
+		expect(game.state.coins.toNumber()).toBe(coinsBefore.toNumber());
+		// The night is in the hold, on top of what the player left there.
+		expect(report!.holdAfter.gt(10)).toBe(true);
+		expect(game.state.hold[FishType.Small].gte(10)).toBe(true);
 	});
 
 	it('leaves the hold untouched when nothing happened while away', () => {
@@ -260,5 +262,58 @@ describe('a save this build cannot read', () => {
 		expect(game.saveProblem?.kind).toBe('corrupt');
 		game.dismissSaveProblem();
 		expect(store.getItem(`${SAVE_KEY}.bak`)).toBe('not json at all');
+	});
+});
+
+/**
+ * The night's catch has to survive the settle.
+ *
+ * `#settleOffline` takes the hold out of play before settling and puts it back
+ * afterwards. It used to put it back by *assignment*, which was only ever
+ * correct because `sellHold` emptied the hold on every chunk — so by the end of
+ * the loop there was nothing of the night's to overwrite. Take offline selling
+ * away (R51) and that assignment silently deletes everything the crew landed.
+ */
+describe('the offline catch and the hold the player left', () => {
+	/** Push the trader's appointment past the whole window, so he never lands. */
+	function noTraderTonight(game: Game): void {
+		game.state.nextTraderAt = Date.now() + 24 * 60 * 60 * 1000;
+	}
+
+	it('adds the night to the hold instead of overwriting it', () => {
+		const game = boot();
+		game.state.deckhands[SOURCE_ORDER[0]] = D(5);
+		// Room to spare: five fish against a starting bucket of thirty.
+		stockHold(game, 5, 500);
+		noTraderTonight(game);
+
+		game.state.lastUpdate = Date.now() - 3_600_000;
+		game.resume();
+
+		const report = game.offlineReport;
+		expect(report).not.toBeNull();
+		expect(report!.fish.gt(0)).toBe(true);
+
+		// The five the player left are still there, and so is the night's work.
+		expect(holdCount(game.state).gt(5)).toBe(true);
+		expect(game.state.holdValue.gt(500)).toBe(true);
+	});
+
+	it('never lets the merged hold exceed the bucket', () => {
+		const game = boot();
+		game.state.deckhands[SOURCE_ORDER[0]] = D(200);
+		// Twenty-five of a thirty-fish bucket already spoken for.
+		stockHold(game, 25, 2_500);
+		noTraderTonight(game);
+
+		game.state.lastUpdate = Date.now() - 8 * 3_600_000;
+		game.resume();
+
+		// A night away is worth `OFFLINE_HOLD_MULTIPLIER` bucketfuls, no more.
+		const cap = bucketCapacity(game.state.bucketLevel).times(OFFLINE_HOLD_MULTIPLIER);
+		expect(holdCount(game.state).lte(cap)).toBe(true);
+		expect(game.offlineReport?.holdFull).toBe(true);
+		// And what the player already had was not thrown away to make room.
+		expect(game.state.hold[FishType.Small].gte(25)).toBe(true);
 	});
 });
