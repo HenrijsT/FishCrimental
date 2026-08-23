@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { game } from '$lib/game/state.svelte';
+	import { canSell } from '$lib/game/engine';
 	import { FISH_TYPES, FishType, fishTypeBaseValue } from '$lib/fish_types';
 	import Num from './Num.svelte';
 
@@ -15,7 +16,7 @@
 				<span class="cap"><Num value={game.holdSize} /> / <Num value={game.bucketSize} /></span>
 			{/if}
 		</h2>
-		{#if state.hasBicycle}
+		{#if canSell(state)}
 			<button onclick={() => game.ride()} disabled={state.holdValue.lte(0) || game.inTown}>
 				{#if game.inTown}
 					In town · {Math.ceil(game.townLeft)}s
@@ -32,7 +33,7 @@
 	<p class="faint note">
 		Fish are sorted by size. The bigger the fish the more it fetches, and where you caught it
 		matters more than what it is.
-		{#if !state.hasBicycle}
+		{#if !canSell(state)}
 			With no way into town, you sell to whoever comes past — and he pays what he likes.
 		{/if}
 	</p>

@@ -146,19 +146,26 @@ export interface CatchOutcome {
 	value: Decimal;
 }
 
+/**
+ * What the crew did while the game was shut.
+ *
+ * There is no `coins` line and no trader: offline is passive (R51), so nothing
+ * was sold and the night is fish, not money. The only coins that move are the
+ * fuel the standing order bought out of what was banked before leaving.
+ */
 export interface OfflineReport {
 	seconds: number;
 	cappedSeconds: number;
+	/** Fish landed while away. */
 	fish: Decimal;
+	/** What they are worth at full price, before whoever buys them takes a cut. */
 	value: Decimal;
-	coins: Decimal;
-	autoSold: boolean;
 	/** Coins spent on fuel by the standing order while you were away. */
 	fuelSpent: Decimal;
 	/** True if the boat ran dry and the crew worked inshore instead. */
 	fellBack: boolean;
-	/** How many traders came past while you were away. */
-	traderVisits: number;
-	/** What they paid, in total. Part of `coins`, not on top of it. */
-	traderEarned: Decimal;
+	/** Everything in the hold now, tonight's catch included. */
+	holdAfter: Decimal;
+	/** True if the keepnet filled and the rest went back in the water. */
+	holdFull: boolean;
 }

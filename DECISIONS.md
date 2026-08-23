@@ -2611,3 +2611,125 @@ complete one.
 
 `pnpm check` 0 errors · `pnpm lint` clean · `pnpm build` ok · `pnpm test`
 **406 passing** · `pnpm audit:ui` **100/100/100 on both routes**.
+
+---
+
+# FIFTH PASS
+
+The finishing pass. Brief: `design/promt_goals/FIFTH_GOAL.md`.
+
+## Stage 0 — Unbreak offline (`fix/offline`)
+
+### The merge, fixed first and on its own
+
+`#settleOffline` snapshotted the hold, settled, and restored it by
+**assignment**. That was correct only because `sellHold` emptied the hold on
+every chunk, so by the end of the loop there was never anything of the night's
+work left to overwrite. Removing offline selling — which is the whole of R51 —
+turns that assignment into silent deletion of the entire night.
+
+So it was fixed first, in its own commit, with a test that failed against the
+previous code: a crewed player, the trader's appointment pushed past the window,
+one hour away. Before: the hold came back exactly as it was left. After: the
+night is added on top of it.
+
+The passive-only change then made the snapshot unnecessary altogether. The hold
+now simply stays where it is for the duration of the settle, so the room the
+keepnet has is measured against what is genuinely in it and the bucket is
+enforced by `accumulate` on the way in, rather than by trimming afterwards.
+
+### Offline is passive (R51)
+
+`sellHold` and `runTrader` are gone from the settle. The crew fish, the boat
+burns fuel, and nothing else happens. With no order-dependent call left, the
+settle is closed form — one `accumulate` over the whole window — so
+**`OFFLINE_CHUNKS` is deleted**.
+
+### The fuel hole: banked coins, capped at half
+
+`runBoat` buys fuel out of `state.coins`, and under R51 no coins arrive while
+away. It therefore draws on coins banked before leaving, and that is now
+explicit: `OFFLINE_FUEL_SHARE = 0.5`. The settle hands `runBoat` half the purse
+for the duration and reconciles afterwards.
+
+Half rather than all, because coming back to an empty purse because the boat
+sailed all night is a worse outcome than the boat stopping — and the boat
+stopping is a state the game already handles and already reports (`fellBack`).
+The mechanism is a smaller `state.coins` during the settle, so no engine code
+has to know that this is a night rather than a tick.
+
+### What a night is worth: 24 bucketfuls, deliberately
+
+With nothing selling, the hold is the only place the night can go, and a
+thirty-fish bucket would make eight hours worth about forty-five seconds of
+watched play.
+
+**`OFFLINE_HOLD_MULTIPLIER = 24`.** This is not a new number. The settle used to
+run in `OFFLINE_CHUNKS = 24` chunks and sell between each, so the night's ceiling
+was _already_ `24 x capacity`. Keeping 24 keeps that ceiling exactly and changes
+only what the player comes back to: fish in the keepnet rather than coins in the
+purse, sold by them, at their price, when they choose. It also preserves the
+bucket's reason to exist — it is still what sizes a night, times 24.
+
+### The best water gets the room
+
+`SOURCE_ORDER` runs cheapest first, so a bucket-limited crew filled the bucket
+with mud pool fish and the open-water crew landed nothing: the deeper the water
+you had bought your way into, the less of it you came back to. This was survivable
+while the hold was emptied twenty-four times a night. It is not survivable now.
+
+When the bucket binds, `accumulate` works the sources in reverse — best water
+first, shallows get what is left. With an Assistant there is no bucket and the
+order cannot matter, so nothing changes there.
+
+`accumulate` also now returns `bucketBound`, so "the keepnet filled" is decided
+by the arithmetic that did the stopping. Inspecting the leftovers does not work:
+the bulk catch path banks per-species remainders, so a genuinely full bucket
+reads a few fish short of capacity.
+
+### The trader stops buying once there is an Assistant (R63)
+
+`runTrader` was called unguarded from the live tick, so the trader kept arriving
+every forty-five seconds and taking the whole hold at `TRADER_RATE = 0.55` while
+`saleRate` told that same player they were on `TOWN_RATE`. The most expensive
+purchase of the opening act made them 45% poorer per fish, and nothing said so.
+
+The guard is inside `runTrader`, in the one place a visit is resolved, so no
+caller can forget it. The appointment keeps moving while the Assistant is on the
+books, so shelving one is not a windfall of two hundred banked arrivals. The
+arrival panel and its progress bar are hidden. Four regression tests.
+
+**This exposed a second hole:** nothing requires the bicycle before the
+Assistant, and a player who bought the Assistant first would have had no buyer at
+all — the trader stops coming and `rideToTown` refuses without a bicycle. The
+Assistant is sold as _no trip, no cooldown, full price_, so it now counts as
+transport on its own: `saleRate` and the new `canSell` both accept it.
+
+### Pacing, re-measured (seed 7)
+
+|                |                             |
+| -------------- | --------------------------- |
+| First prestige | **3h23m59s** (was 3h25m12s) |
+| Idle crossover | 0h27m02s                    |
+| Boat           | 1h29m11s                    |
+| Ocean open     | 2h05m00s                    |
+
+Unmoved, as expected: `simulateRun` sells constantly while online and never goes
+offline, so none of the above touches it. The figure is recorded to establish the
+pass's baseline rather than to claim an effect.
+
+**The prestige chain is the collapse Stage 3 exists to fix**, and it is worse
+than the headline suggests:
+
+| Run | Time   | Lifetime coins |
+| --- | ------ | -------------- |
+| 1   | 3h23m  | 3.5e16         |
+| 2   | 20m00s | 9.2e19         |
+| 3   | 3m30s  | 4.8e25         |
+| 4   | 1m35s  | 2.3e41         |
+| 5   | 48s    | 6.4e65         |
+| 6   | 46s    | 4.6e84         |
+
+`src/lib/game/ladder.probe.test.ts` prints this ladder. It asserts nothing —
+it is a measuring stick for a human — and is off unless `LADDER=1` is set,
+because a full chain is ninety seconds of CPU.

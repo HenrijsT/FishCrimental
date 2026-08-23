@@ -19,26 +19,25 @@
 		</p>
 		<ul class="lines">
 			<li><span>Fish landed</span><Num value={report.fish} /></li>
-			<li><span>Sold on the dock</span><Num value={report.coins} tone="coin" /></li>
-			{#if report.traderVisits > 0}
-				<li class="trader">
-					<span>
-						{report.traderVisits}
-						{report.traderVisits === 1 ? 'trader came' : 'traders came'} past
-					</span>
-					<Num value={report.traderEarned} tone="coin" />
-				</li>
-			{/if}
+			<li><span>Worth, at full price</span><Num value={report.value} tone="coin" /></li>
 			{#if report.fuelSpent.gt(0)}
 				<li class="expense">
 					<span>Fuel, billed by the yard</span>−<Num value={report.fuelSpent} tone="coin" />
 				</li>
-				<li class="net">
-					<span>Net</span><Num value={report.coins.minus(report.fuelSpent)} tone="coin" />
-				</li>
 			{/if}
+			<li class="net"><span>In the hold now</span><Num value={report.holdAfter} /></li>
 		</ul>
 
+		<p class="faint small">
+			Nobody sold anything while you were gone — the catch is still in the hold, waiting for you.
+		</p>
+
+		{#if report.holdFull}
+			<p class="fell-back">
+				The keepnet filled and everything after it went back in the water. A bigger bucket holds a
+				bigger night, and an Assistant does away with the limit entirely.
+			</p>
+		{/if}
 		{#if report.fellBack}
 			<p class="fell-back">
 				The boat ran out of fuel while you were away, so the crew worked inshore instead. They kept
@@ -71,10 +70,6 @@
 
 	.small {
 		font-size: 0.78rem;
-	}
-
-	.trader span {
-		color: var(--ink-dim);
 	}
 
 	.expense {

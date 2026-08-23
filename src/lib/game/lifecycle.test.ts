@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { D, d0 } from '$lib/decimal';
 import { FISH_TYPES, FishType } from '$lib/fish_types';
-import { SAVE_KEY, SOURCE_ORDER } from './config';
+import { OFFLINE_HOLD_MULTIPLIER, SAVE_KEY, SOURCE_ORDER } from './config';
 import { bucketCapacity, holdCount } from './engine';
 import { Game } from './state.svelte';
 
@@ -131,23 +131,24 @@ describe('offline settlement', () => {
 		expect(game.state.lifetimeCoins.toNumber()).toBe(before.toNumber());
 	});
 
-	it('still pays for what the crew landed while away, and only that', () => {
+	it('pays nothing at all — offline is passive, and the night is fish (R51)', () => {
 		const game = boot();
 		game.state.deckhands[SOURCE_ORDER[0]] = D(5);
-		stockHold(game, 1000, 1_000_000);
+		stockHold(game, 10, 1_000);
+		const coinsBefore = game.state.coins;
 
 		game.state.lastUpdate = Date.now() - 3_600_000;
 		game.resume();
 
 		const report = game.offlineReport;
 		expect(report).not.toBeNull();
+		expect(report!.fish.gt(0)).toBe(true);
 
-		// The modal's coin figure and the balance must agree: the report used to
-		// say 11,171 next to a balance of 62,757.
-		expect(game.state.coins.toNumber()).toBeCloseTo(report!.coins.toNumber(), 6);
-		// And the hold is exactly as the player left it.
-		expect(game.state.holdValue.toNumber()).toBe(1_000_000);
-		expect(game.state.hold[FishType.Small].toNumber()).toBe(1000);
+		// Nobody sold anything. No trader, no dock, no coins.
+		expect(game.state.coins.toNumber()).toBe(coinsBefore.toNumber());
+		// The night is in the hold, on top of what the player left there.
+		expect(report!.holdAfter.gt(10)).toBe(true);
+		expect(game.state.hold[FishType.Small].gte(10)).toBe(true);
 	});
 
 	it('leaves the hold untouched when nothing happened while away', () => {
@@ -308,8 +309,10 @@ describe('the offline catch and the hold the player left', () => {
 		game.state.lastUpdate = Date.now() - 8 * 3_600_000;
 		game.resume();
 
-		const cap = bucketCapacity(game.state.bucketLevel);
+		// A night away is worth `OFFLINE_HOLD_MULTIPLIER` bucketfuls, no more.
+		const cap = bucketCapacity(game.state.bucketLevel).times(OFFLINE_HOLD_MULTIPLIER);
 		expect(holdCount(game.state).lte(cap)).toBe(true);
+		expect(game.offlineReport?.holdFull).toBe(true);
 		// And what the player already had was not thrown away to make room.
 		expect(game.state.hold[FishType.Small].gte(25)).toBe(true);
 	});

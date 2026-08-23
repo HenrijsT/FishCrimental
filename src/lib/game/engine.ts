@@ -951,22 +951,59 @@ export function accumulate(
 	 * interval when they are not (1), and offline it is whatever the offline
 	 * purchase allows.
 	 */
-	autoFisherShare = 1
-): { fish: Decimal; value: Decimal; fellBack: boolean } {
+	autoFisherShare = 1,
+	/**
+	 * How many bucketfuls the hold may take for this interval. Always 1 while
+	 * the player is watching; `OFFLINE_HOLD_MULTIPLIER` for a night away, where
+	 * the keepnet goes in the water and nobody is emptying it (R51).
+	 */
+	holdMultiplier: Decimal | number = 1
+): { fish: Decimal; value: Decimal; fellBack: boolean; bucketBound: boolean } {
 	let fishTotal = d0();
 	let valueTotal = d0();
 	let fellBack = false;
+	/** True once the bucket, rather than the crew, decided the catch. */
+	let bucketBound = false;
 
-	if (seconds <= 0) return { fish: fishTotal, value: valueTotal, fellBack };
+	if (seconds <= 0) return { fish: fishTotal, value: valueTotal, fellBack, bucketBound };
 
-	for (const source of SOURCE_ORDER) {
+	/**
+	 * Room for `want` fish, noting when there was not enough of it.
+	 *
+	 * Every clamp in this function goes through here, so "the bucket stopped
+	 * you" is decided by the same arithmetic that does the stopping rather than
+	 * by inspecting the leftovers afterwards — the bulk catch path banks
+	 * per-species remainders, so a bucket that is genuinely full still reads a
+	 * few fish short of its capacity.
+	 */
+	const roomFor = (want: Decimal): Decimal | null => {
+		const room = holdRoom(state, holdMultiplier);
+		if (room !== null && room.lt(want)) bucketBound = true;
+		return room;
+	};
+
+	// Which water gets the room when there is not enough of it.
+	//
+	// `SOURCE_ORDER` runs cheapest first, so a bucket-limited crew filled the
+	// bucket with mud pool fish and the open-water crew landed nothing — the
+	// deeper the water you had bought your way into, the less of it you came
+	// back to. When the bucket binds, the best water is worked first and the
+	// shallows get whatever is left, which is what a fisherman with one bucket
+	// does. With an Assistant there is no bucket and the order cannot matter.
+	const order =
+		holdRoom(state, holdMultiplier) === null ? SOURCE_ORDER : [...SOURCE_ORDER].reverse();
+
+	for (const source of order) {
 		// A full bucket stops the work before it starts. This has to be checked
 		// here, at the top, rather than at the catch: below this line the loop
 		// mints casts through `takeWhole` and `runBoat` burns fuel and hull
 		// condition, all of which would be spent on a fish there is nowhere to
 		// put.
-		const room = holdRoom(state);
-		if (room !== null && room.lte(0)) break;
+		const room = holdRoom(state, holdMultiplier);
+		if (room !== null && room.lte(0)) {
+			bucketBound = true;
+			break;
+		}
 
 		// Unlicensed water pays nothing, however it came to be unlocked. Without
 		// this, `accumulate` and `reachableSource` disagree about where the crew
@@ -993,7 +1030,7 @@ export function accumulate(
 				route.sailed.times(modifiers.fishPerCast),
 				modifiers,
 				random,
-				holdRoom(state)
+				roomFor(route.sailed.times(modifiers.fishPerCast))
 			);
 			fishTotal = fishTotal.plus(fish);
 			valueTotal = valueTotal.plus(value);
@@ -1007,7 +1044,7 @@ export function accumulate(
 				route.stranded.times(modifiers.fishPerCast),
 				modifiers,
 				random,
-				holdRoom(state)
+				roomFor(route.stranded.times(modifiers.fishPerCast))
 			);
 			fishTotal = fishTotal.plus(fish);
 			valueTotal = valueTotal.plus(value);
@@ -1023,7 +1060,7 @@ export function accumulate(
 	if (autoFisherShare > 0) {
 		const source = state.activeSource;
 		const perSecond = autoFisherCastsPerSecond(state, modifiers);
-		const rigRoom = holdRoom(state);
+		const rigRoom = holdRoom(state, holdMultiplier);
 
 		if (
 			perSecond.gt(0) &&
@@ -1047,7 +1084,7 @@ export function accumulate(
 						route.sailed.times(modifiers.fishPerCast),
 						modifiers,
 						random,
-						holdRoom(state)
+						roomFor(route.sailed.times(modifiers.fishPerCast))
 					);
 					fishTotal = fishTotal.plus(fish);
 					valueTotal = valueTotal.plus(value);
@@ -1060,7 +1097,7 @@ export function accumulate(
 						route.stranded.times(modifiers.fishPerCast),
 						modifiers,
 						random,
-						holdRoom(state)
+						roomFor(route.stranded.times(modifiers.fishPerCast))
 					);
 					fishTotal = fishTotal.plus(fish);
 					valueTotal = valueTotal.plus(value);
@@ -1072,7 +1109,7 @@ export function accumulate(
 		}
 	}
 
-	return { fish: fishTotal, value: valueTotal, fellBack };
+	return { fish: fishTotal, value: valueTotal, fellBack, bucketBound };
 }
 
 // ---------------------------------------------------------------------------
@@ -1123,9 +1160,10 @@ export function bucketCost(level: Decimal | number): Decimal {
  * `null` rather than a very large number so the limit can be switched off
  * outright: an Assistant minds the catch, so there is no bucket to fill.
  */
-export function holdRoom(state: GameState): Decimal | null {
+export function holdRoom(state: GameState, multiplier: Decimal | number = 1): Decimal | null {
 	if (state.hasAssistant) return null;
-	return Decimal.max(d0(), bucketCapacity(state.bucketLevel).minus(holdCount(state)));
+	const cap = bucketCapacity(state.bucketLevel).times(multiplier);
+	return Decimal.max(d0(), cap.minus(holdCount(state)));
 }
 
 export function buyBucket(state: GameState): boolean {
@@ -1141,9 +1179,21 @@ export function buyBucket(state: GameState): boolean {
 	return true;
 }
 
-/** What the player gets per coin of catch right now. */
+/**
+ * What the player gets per coin of catch right now.
+ *
+ * The Assistant counts as transport on its own. It is sold as "no trip, no
+ * cooldown, full price", and with the trader now guarded behind it (R63) a
+ * player who bought the Assistant before the bicycle would otherwise have no
+ * buyer at all — the trader stops coming and `rideToTown` refuses.
+ */
 export function saleRate(state: GameState): number {
-	return state.hasBicycle ? TOWN_RATE : TRADER_RATE;
+	return state.hasBicycle || state.hasAssistant ? TOWN_RATE : TRADER_RATE;
+}
+
+/** Is there anyone at all who will buy the catch right now? */
+export function canSell(state: GameState): boolean {
+	return state.hasBicycle || state.hasAssistant;
 }
 
 /** Is manual casting currently refused because you are in town? */
@@ -1293,6 +1343,22 @@ export function runTrader(
 	let earned = d0();
 	let visits = 0;
 
+	// Once there is an Assistant the trader stops buying (R63).
+	//
+	// He kept arriving every forty-five seconds and taking the whole hold at
+	// `TRADER_RATE`, while `saleRate` told that same player they were getting
+	// `TOWN_RATE` — so the most expensive purchase of the opening act made the
+	// player 45% poorer per fish and nothing said so. The guard lives here, in
+	// the one place the visit is resolved, so no caller can forget it.
+	if (state.hasAssistant) {
+		// Keep the appointment moving so shelving the Assistant is not a windfall.
+		if (state.nextTraderAt > 0) {
+			const period = TRADER_PERIOD_SECONDS * 1000;
+			while (state.nextTraderAt <= now) state.nextTraderAt += period;
+		}
+		return { visits, earned };
+	}
+
 	// A fresh save has no appointment yet; make one and let it come round.
 	if (state.nextTraderAt <= 0) {
 		state.nextTraderAt = now + TRADER_PERIOD_SECONDS * 1000;
@@ -1344,7 +1410,7 @@ export function rideToTown(
 	modifiers: Modifiers,
 	now = Date.now()
 ): { earned: Decimal; until: number } | null {
-	if (!state.hasBicycle) return null;
+	if (!canSell(state)) return null;
 	if (inTown(state, now)) return null;
 
 	const earned = sellHold(state, modifiers, TOWN_RATE);
