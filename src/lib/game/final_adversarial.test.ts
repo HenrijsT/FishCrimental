@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { D } from '$lib/decimal';
 import { describePerCast, formatDuration, formatNumber } from '$lib/format';
 import { FishingSources } from '$lib/fishing_sources';
-import { BOAT_UPGRADE_IDS, LICENCE_IDS, SAVE_VERSION, SOURCE_ORDER, UPGRADE_IDS } from './config';
+import {
+	BOAT_UPGRADE_IDS,
+	LICENCE_IDS,
+	PEARL_YIELD_SCALE,
+	SAVE_VERSION,
+	SOURCE_ORDER,
+	UPGRADE_IDS
+} from './config';
 import {
 	accumulate,
 	buyBoatUpgrade,
@@ -116,7 +123,9 @@ describe('prestige at every boundary', () => {
 
 	it('refuses one coin under and accepts exactly at', () => {
 		expect(performPrestige(ready('999999999999999'))).toBeNull();
-		expect(performPrestige(ready('1000000000000000'))?.gained.eq(1)).toBe(true);
+		// Exactly at the threshold pays a full shift's worth, not one Pearl —
+		// re-baselined with `PEARL_YIELD_SCALE`.
+		expect(performPrestige(ready('1000000000000000'))?.gained.eq(PEARL_YIELD_SCALE)).toBe(true);
 	});
 
 	it('handles layered lifetimes without breaking', () => {

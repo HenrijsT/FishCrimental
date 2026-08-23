@@ -24,41 +24,42 @@ import {
 	speciesMultiplier
 } from './market';
 import {
+	ASSISTANT_COST,
+	AUTO_FISHER,
+	AUTO_FISHER_OFFLINE_COST,
+	AUTO_FISHER_START,
+	BICYCLE_COST,
 	BOAT_BASE_FUEL_CAPACITY,
 	BOAT_BASE_FUEL_PER_CAST,
 	BOAT_BASE_WEAR_PER_CAST,
 	BOAT_COST,
 	BOAT_MIN_EFFICIENCY,
-	BOAT_UPGRADES,
 	BOAT_UPGRADE_IDS,
-	DECKHAND_BASE_EFFICIENCY,
-	DECKHAND_COST_GROWTH,
-	FUEL_PRICE,
-	LICENCES,
-	LICENCE_IDS,
-	REPAIR_COST_PER_POINT,
-	SOURCE_LICENCE,
-	needsBoat,
-	ASSISTANT_COST,
-	AUTO_FISHER,
+	BOAT_UPGRADES,
 	BUCKET_BASE_CAPACITY,
 	BUCKET_BASE_COST,
 	BUCKET_COST_GROWTH,
 	BUCKET_GROWTH,
 	BUCKET_MAX_LEVEL,
-	AUTO_FISHER_OFFLINE_COST,
-	BICYCLE_COST,
-	TOWN_RATE,
-	TOWN_TRIP_SECONDS,
-	TRADER_CATALOGUE,
-	TRADER_PERIOD_SECONDS,
-	TRADER_RATE,
-	TRADER_STOCK_SIZE,
-	type TraderOfferId,
-	AUTO_FISHER_START,
+	DECKHAND_BASE_EFFICIENCY,
+	DECKHAND_COST_GROWTH,
+	FUEL_PRICE,
+	LICENCE_IDS,
+	LICENCES,
+	LUCK_TIER_SHARE,
+	MAP_BASE_COST,
+	MAP_BASE_ERROR,
+	MAP_BASE_SIGHT,
+	MAP_COST_GROWTH,
+	MAP_MAX_LEVEL,
+	MAX_OFFLINE_SECONDS,
 	MIN_CAST_SECONDS,
+	needsBoat,
+	PEARL_BONUS_PIVOT,
+	PEARL_COST_PIVOT,
 	PEARL_EXPONENT,
 	PEARL_MULTIPLIER_SCALE,
+	PEARL_YIELD_SCALE,
 	POND_BASE_COST,
 	POND_BASE_RATE,
 	POND_COST_GROWTH,
@@ -69,25 +70,27 @@ import {
 	POND_RATE_GROWTH,
 	POND_VALUE_MULTIPLIER,
 	PRESTIGE_THRESHOLD,
-	PRESTIGE_UPGRADES,
-	MAP_BASE_COST,
-	MAP_BASE_ERROR,
-	MAP_BASE_SIGHT,
-	MAP_COST_GROWTH,
-	LUCK_TIER_SHARE,
-	MAP_MAX_LEVEL,
-	MAX_OFFLINE_SECONDS,
-	SHOPKEEPER_REACH,
 	PRESTIGE_UPGRADE_IDS,
-	SAVE_VERSION,
-	SOURCE_CONFIG,
-	SOURCE_ORDER,
+	PRESTIGE_UPGRADES,
+	REPAIR_COST_PER_POINT,
 	RESUME_THRESHOLD_SECONDS,
-	UPGRADES,
+	SAVE_VERSION,
+	SHOPKEEPER_REACH,
+	SOURCE_CONFIG,
+	SOURCE_LICENCE,
+	SOURCE_ORDER,
+	TOWN_RATE,
+	TOWN_TRIP_SECONDS,
+	TRADER_CATALOGUE,
+	TRADER_PERIOD_SECONDS,
+	TRADER_RATE,
+	TRADER_STOCK_SIZE,
 	UPGRADE_IDS,
+	UPGRADES,
 	type BoatUpgradeId,
 	type LicenceId,
 	type PrestigeUpgradeId,
+	type TraderOfferId,
 	type UpgradeId
 } from './config';
 import type { GameState, Modifiers, PondState, SpeciesLedger } from './types';
@@ -437,9 +440,32 @@ export function buyAutoFisherOffline(state: GameState): boolean {
 	return true;
 }
 
-export function prestigeUpgradeCost(id: PrestigeUpgradeId, level: Decimal | number): Decimal {
+/**
+ * What the pile does to the price list.
+ *
+ * One, until the player has earned more than a shift's worth of Pearls; then
+ * proportional. Prices that follow the pile are what keep the tree a budget:
+ * with fixed prices, `spendPearls` left **99.997%** of the pile untouched, so
+ * the only real question the shop asked was answered once and never again.
+ */
+export function pearlCostScale(allTimePearls: Decimal): Decimal {
+	return Decimal.max(d1(), allTimePearls.div(PEARL_COST_PIVOT));
+}
+
+export function prestigeUpgradeCost(
+	id: PrestigeUpgradeId,
+	level: Decimal | number,
+	scale: Decimal = d1()
+): Decimal {
 	const config = PRESTIGE_UPGRADES[id];
-	return D(config.baseCost).times(D(config.costGrowth).pow(level)).floor();
+	return D(config.baseCost).times(D(config.costGrowth).pow(level)).times(scale).ceil();
+}
+
+/** Is this node's prerequisite met? Roots always are. */
+export function prestigeUpgradeUnlocked(state: GameState, id: PrestigeUpgradeId): boolean {
+	const gate = PRESTIGE_UPGRADES[id].requires;
+	if (!gate) return true;
+	return state.prestigeUpgrades[gate.id].gte(gate.level);
 }
 
 /**
@@ -481,7 +507,9 @@ export function affordableDeckhands(
  */
 export function pearlMultiplier(pearls: Decimal): Decimal {
 	if (pearls.lte(0)) return d1();
-	return pearls.plus(1).ln().times(PEARL_MULTIPLIER_SCALE).plus(1);
+	// Divided by the pivot so `PEARL_YIELD_SCALE` re-denominates the currency
+	// without re-pricing the bonus. A hundred Pearls is worth what one used to be.
+	return pearls.div(PEARL_BONUS_PIVOT).plus(1).ln().times(PEARL_MULTIPLIER_SCALE).plus(1);
 }
 
 /**
@@ -548,14 +576,18 @@ export function computeModifiers(state: GameState): Modifiers {
 	}
 
 	const boat = state.boat;
-	const fuelPerCast = D(BOAT_BASE_FUEL_PER_CAST).times(
-		D(BOAT_UPGRADES.engine.effect).pow(boat.upgrades.engine)
-	);
+	// The boat's three coin-bought tracks each have a Pearl node behind them, so
+	// a run's gear and a career's gear multiply rather than compete.
+	const fuelPerCast = D(BOAT_BASE_FUEL_PER_CAST)
+		.times(D(BOAT_UPGRADES.engine.effect).pow(boat.upgrades.engine))
+		.times(D(PRESTIGE_UPGRADES.pearl_fuel.effect).pow(state.prestigeUpgrades.pearl_fuel));
 	const wearPerCast =
-		BOAT_BASE_WEAR_PER_CAST * Math.pow(BOAT_UPGRADES.hull.effect, boat.upgrades.hull.toNumber());
-	const fuelCapacity = D(BOAT_BASE_FUEL_CAPACITY).times(
-		D(BOAT_UPGRADES.tank.effect).pow(boat.upgrades.tank)
-	);
+		BOAT_BASE_WEAR_PER_CAST *
+		Math.pow(BOAT_UPGRADES.hull.effect, boat.upgrades.hull.toNumber()) *
+		Math.pow(PRESTIGE_UPGRADES.pearl_hull.effect, state.prestigeUpgrades.pearl_hull.toNumber());
+	const fuelCapacity = D(BOAT_BASE_FUEL_CAPACITY)
+		.times(D(BOAT_UPGRADES.tank.effect).pow(boat.upgrades.tank))
+		.times(D(PRESTIGE_UPGRADES.pearl_tank.effect).pow(state.prestigeUpgrades.pearl_tank));
 
 	return {
 		castSeconds,
@@ -2256,8 +2288,9 @@ export function buyDeckhand(
 export function buyPrestigeUpgrade(state: GameState, id: PrestigeUpgradeId): boolean {
 	const level = state.prestigeUpgrades[id];
 	if (level.gte(PRESTIGE_UPGRADES[id].maxLevel)) return false;
+	if (!prestigeUpgradeUnlocked(state, id)) return false;
 
-	const cost = prestigeUpgradeCost(id, level);
+	const cost = prestigeUpgradeCost(id, level, pearlCostScale(state.allTimePearls));
 	if (state.pearls.lt(cost)) return false;
 
 	state.pearls = state.pearls.minus(cost);
@@ -2271,7 +2304,7 @@ export function buyPrestigeUpgrade(state: GameState, id: PrestigeUpgradeId): boo
 
 export function pearlsFor(lifetimeCoins: Decimal): Decimal {
 	if (lifetimeCoins.lt(PRESTIGE_THRESHOLD)) return d0();
-	return lifetimeCoins.div(PRESTIGE_THRESHOLD).pow(PEARL_EXPONENT).floor();
+	return lifetimeCoins.div(PRESTIGE_THRESHOLD).pow(PEARL_EXPONENT).times(PEARL_YIELD_SCALE).floor();
 }
 
 export function canPrestige(state: GameState): boolean {
@@ -2464,9 +2497,14 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		SOURCE_ORDER.filter((source) => unlocked[source] && !needsBoat(source)).pop() ??
 		SOURCE_ORDER[0];
 
+	// Seed Money is paid into the run, not the record: `lifetimeCoins` and
+	// `allTimeCoins` stay at zero, or `pearlsFor` would mint Pearls out of a
+	// Pearl upgrade.
+	const seed = D(PRESTIGE_UPGRADES.pearl_seed.effect).pow(prestigeUpgrades.pearl_seed ?? d0());
+
 	return {
 		version: SAVE_VERSION,
-		coins: d0(),
+		coins: seed.gt(1) ? seed : d0(),
 		lifetimeCoins: d0(),
 		allTimeCoins: keep?.allTimeCoins ?? d0(),
 

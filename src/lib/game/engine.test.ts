@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { D, d0 } from '$lib/decimal';
 import { FISH_TYPES, FishType, fishTypeBaseValue } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
-import { SOURCE_CONFIG, SOURCE_ORDER } from './config';
+import { PEARL_BONUS_PIVOT, PEARL_YIELD_SCALE, SOURCE_CONFIG, SOURCE_ORDER } from './config';
 import {
-	ALL_SPECIES,
 	accumulate,
+	ALL_SPECIES,
 	buyDeckhand,
 	buyUpgrade,
 	canPrestige,
@@ -18,6 +18,7 @@ import {
 	eroticCaught,
 	holdCount,
 	jellyCaught,
+	pearlMultiplier,
 	pearlsFor,
 	performCast,
 	performPrestige,
@@ -338,10 +339,31 @@ describe('prestige', () => {
 	});
 
 	it('prices Pearls off lifetime earnings', () => {
+		// Re-baselined when a shift went from paying one Pearl to paying about a
+		// hundred (`PEARL_YIELD_SCALE`). The curve is unchanged; the unit is not,
+		// and `pearlMultiplier` divides by the same constant so the pile is worth
+		// exactly what it was.
 		expect(pearlsFor(D('1e14')).eq(0)).toBe(true);
-		expect(pearlsFor(D('1e15')).eq(1)).toBe(true);
+		expect(pearlsFor(D('1e15')).eq(PEARL_YIELD_SCALE)).toBe(true);
 		expect(pearlsFor(D('1e18')).gt(pearlsFor(D('1e16')))).toBe(true);
 		expect(pearlsFor(D('1e30')).gt(1000)).toBe(true);
+	});
+
+	it('pays a first shift enough Pearls to make spending a choice', () => {
+		// The whole point of the rework: at one Pearl the only decision the shop
+		// offered was all-or-nothing, and holding beat spending outright.
+		const gained = pearlsFor(D('3.18e15'));
+		expect(gained.gt(50)).toBe(true);
+		expect(gained.lt(200)).toBe(true);
+	});
+
+	it('is worth the same held, whatever the Pearls are denominated in', () => {
+		// A pivot's worth of new Pearls buys exactly what one Pearl used to:
+		// 1 + 2*ln(2) = 2.3863. Re-denominating the currency must not re-price it.
+		expect(pearlMultiplier(D(PEARL_BONUS_PIVOT)).toNumber()).toBeCloseTo(1 + 2 * Math.log(2), 6);
+		// And it still climbs, forever, without ever running away.
+		expect(pearlMultiplier(D('1e9')).gt(pearlMultiplier(D('1e6')))).toBe(true);
+		expect(pearlMultiplier(D('1e30')).lt(150)).toBe(true);
 	});
 
 	it('resets the run but keeps the Fishdex, Pearls and achievements', () => {
