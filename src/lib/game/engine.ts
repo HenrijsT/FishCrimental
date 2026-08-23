@@ -18,6 +18,7 @@ import {
 	drainLedger,
 	emptyLedger,
 	ledgerValue,
+	ledgerWorth,
 	marketOpen,
 	moveLedger,
 	speciesMultiplier
@@ -1752,14 +1753,30 @@ export function listForSale(state: GameState, count?: Decimal): Decimal {
 
 	// Value follows the fish that actually moved, not the fish that were asked
 	// for, or the two accounts drift by whatever the flooring left behind.
+	//
+	// The species ledger moves first, and what it moved is what the aggregate
+	// moves. If it did not, the market would price a bucket that is empty and
+	// ignore a quay that is not — and, worse, the two would drift apart in a
+	// direction that pays: `moveLedger` moves *whole* fish, so a species with
+	// fewer than `1/fraction` of them stays entirely in the bucket, while
+	// `holdValue` handed over the full proportional share. `holdValue` then sat
+	// below `ledgerWorth(holdSpecies)`, and `holdMarketValue` prices the ledger
+	// and treats the difference as nothing at all — so the bucket sold for more
+	// than the fish in it were worth, once per listing. R51 makes every listing a
+	// partial one: the night's hold is up to `OFFLINE_HOLD_MULTIPLIER` bucketfuls
+	// and the quay holds one.
 	const fraction = listed.div(held);
-	const movingValue = state.holdValue.times(fraction);
+	const ledgerBefore = ledgerWorth(state.holdSpecies);
+	const movedFromLedger = moveLedger(state.holdSpecies, state.consignmentSpecies, fraction);
+
+	// Coins in the aggregate with no species behind them — a pre-market save's
+	// parked `holdValue`, or anything put in the hold without `recordCatch` —
+	// have no fish to be flooded by, so they move in plain proportion.
+	const shortfall = Decimal.max(d0(), state.holdValue.minus(ledgerBefore));
+	const movingValue = Decimal.min(state.holdValue, movedFromLedger.plus(shortfall.times(fraction)));
+
 	state.holdValue = Decimal.max(d0(), state.holdValue.minus(movingValue));
 	state.consignmentValue = state.consignmentValue.plus(movingValue);
-
-	// The species ledger moves with the fish. If it did not, the market would
-	// price a bucket that is empty and ignore a quay that is not.
-	moveLedger(state.holdSpecies, state.consignmentSpecies, fraction);
 
 	return listed;
 }
@@ -2209,7 +2226,8 @@ export function buyUpgrade(state: GameState, id: UpgradeId, count: Decimal | num
  *
  * **This touches `state.coins` and nothing else.** Not `lifetimeCoins`, not
  * `allTimeCoins`. `pearlsFor` reads `lifetimeCoins` directly as
- * `floor((lifetime / 1e15) ^ 0.42)`, so crediting a refund there would silently
+ * `floor((lifetime / PRESTIGE_THRESHOLD) ^ PEARL_EXPONENT)`, so crediting a
+ * refund there would silently
  * mint a whole prestige for a player standing near the boundary — a Setback
  * that *gave* you a Pearl. There is a test asserting both fields come out
  * byte-identical.

@@ -1,24 +1,32 @@
 <script lang="ts">
 	import { SOURCE_ORDER, UPGRADES } from '$lib/game/config';
-	import { deckhandBulkCost, sourceIncomePerSecond, upgradeBulkCost } from '$lib/game/engine';
+	import {
+		deckhandBulkCost,
+		handIncomePerSecond,
+		sourceIncomePerSecond,
+		upgradeBulkCost
+	} from '$lib/game/engine';
 	import { game } from '$lib/game/state.svelte';
 	import { sources } from '$lib/fishing_sources';
-	import { catchTable } from '$lib/game/engine';
 	import BuyAmountPicker from './BuyAmountPicker.svelte';
 	import Num from './Num.svelte';
 
 	const state = $derived(game.state);
 	const open = $derived(SOURCE_ORDER.filter((source) => state.unlocked[source]));
 
-	/** What the player earns per second holding the rod at the active source. */
-	const manualIncome = $derived.by(() => {
-		const source = state.activeSource;
-		const table = catchTable(source, game.modifiers.luck);
-		return game.modifiers.fishPerCast
-			.times(table.averageSourceValue)
-			.times(game.modifiers.sellMultiplier)
-			.div(game.modifiers.castSeconds[source]);
-	});
+	/**
+	 * What the player earns per second holding the rod at the active source.
+	 *
+	 * Through `handIncomePerSecond`, because the number beside it is
+	 * `totalIncomePerSecond` and the two have to be the same convention. The
+	 * inline copy this replaces read the catch table straight — no buyer's rate,
+	 * no market, no routing — so pre-bicycle it was 1.82x high (the trader takes
+	 * 45%), it ignored knowledge and price once the market opened, and it read
+	 * open-water money for a dry tank whose casts were landing at the Sea. The
+	 * handover line below compares the two directly, so the crossover was
+	 * announced late for the whole opening act.
+	 */
+	const manualIncome = $derived(handIncomePerSecond(state, game.modifiers));
 
 	const crewLevel = $derived(state.upgrades.crew);
 	const crewStep = $derived(game.upgradeStep('crew'));
@@ -26,7 +34,15 @@
 	// A shopkeeper ceiling is not the top of the track. This panel said "Maxed"
 	// at crew 9 of 60 while the Gear tab said "Not sold here · better is stocked
 	// at the Stream" about the same upgrade.
+	//
+	// And a ceiling is not a price, either: `upgradeStep` is zero both when the
+	// shopkeeper has nothing better *and* when the player simply cannot afford a
+	// level at Buy Max, so keying the wording off `crewCost === null` alone told
+	// a broke player the best crew quarters "are not sold here" — and offered to
+	// send them to a source that stocks exactly what they already have. The Gear
+	// tab has always distinguished the two; this one now does too.
 	const crewMaxed = $derived(crewLevel.gte(UPGRADES.crew.maxLevel));
+	const crewCapped = $derived(!crewMaxed && crewLevel.gte(game.ceilings.crew));
 	const crewStockedAt = $derived(game.stockedAt.crew);
 </script>
 
@@ -93,7 +109,7 @@
 			</h3>
 			<p class="desc muted">{UPGRADES.crew.description}</p>
 			<p class="effect">{UPGRADES.crew.format(crewLevel.toNumber())}</p>
-			{#if !crewMaxed && crewCost === null}
+			{#if crewCapped}
 				<p class="desc muted">
 					The best one anyone around here sells.
 					{#if crewStockedAt}Better is stocked at the <strong>{crewStockedAt}</strong>.{/if}
@@ -103,16 +119,20 @@
 		<button
 			aria-label={crewMaxed
 				? `${UPGRADES.crew.name}: maxed`
-				: crewCost === null
+				: crewCapped
 					? `${UPGRADES.crew.name}: not sold here`
-					: `Buy ${UPGRADES.crew.name}`}
+					: crewCost === null
+						? `${UPGRADES.crew.name}: not yet`
+						: `Buy ${UPGRADES.crew.name}`}
 			disabled={crewCost === null || !state.coins.gte(crewCost)}
 			onclick={() => game.buy('crew')}
 		>
 			{#if crewMaxed}
 				Maxed
-			{:else if crewCost === null}
+			{:else if crewCapped}
 				Not sold here
+			{:else if crewCost === null}
+				Not yet
 			{:else}
 				<span class="amount">+{crewStep.toFixed(0)}</span>
 				<Num value={crewCost} tone="coin" />

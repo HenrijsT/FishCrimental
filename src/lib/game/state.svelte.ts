@@ -1182,11 +1182,37 @@ export class Game {
 		if (!imported) return outcome;
 
 		this.endCast();
+
+		// Copy aside anything the game was refusing to overwrite, first — the
+		// same guard `hardReset` carries, for the same reason. Importing is the
+		// other thing the corrupt/future banner sends a player off to do, and it
+		// went straight to `save()`, wiping the protected blob with no backup at
+		// all while merely *dismissing* the banner preserved it.
+		if (this.#preservedSave !== null) {
+			backupRawSave(this.#preservedSave);
+			this.rescued = true;
+		}
+
 		this.saveProblem = null;
+		this.#preservedSave = null;
+		this.#preservedFor = null;
 		this.state = imported;
+		// Everything `init()` does to a save on the way in, because this is the
+		// other way one gets in. A poach flag the imported run is no longer
+		// trespassing on would otherwise keep counting toward a fine for water
+		// the player holds a card for.
+		settlePoachOnLoad(this.state);
 		this.offlineReport = this.#settleOffline(this.state);
+		settleMarket(this.state);
 		this.state.lastUpdate = Date.now();
 		this.recentCatches = [];
+		// Banners about the game that was here a moment ago are banners about
+		// nothing — the same sweep `prestige()` and `hardReset()` do.
+		this.strandedFrom = null;
+		this.lastBust = null;
+		this.setbackNotices = [];
+		this.setbackHits = [];
+		this.lastTraderEarned = null;
 		this.save();
 		return outcome;
 	}

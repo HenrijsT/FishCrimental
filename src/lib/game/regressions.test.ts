@@ -34,9 +34,11 @@ import {
 	runTrader,
 	saleRate,
 	sellHold,
+	settleConsignment,
 	upgradeCeiling,
 	upgradeStockedAt
 } from './engine';
+import { addToLedger, ledgerWorth } from './market';
 import { nextStep } from './guide';
 import { poachSource, runPolice, stopPoaching } from './police';
 import { fromRaw, serialize } from './save';
@@ -598,5 +600,82 @@ describe('review: a market mark from the future froze every price', () => {
 		raw.marketUpdatedAt = Date.now() + 24 * 60 * 60 * 1000;
 
 		expect(fromRaw(raw).marketUpdatedAt).toBeLessThanOrEqual(Date.now());
+	});
+});
+
+describe('review: listing part of the bucket paid for it twice', () => {
+	/**
+	 * `listForSale` moved `listed / held` of `holdValue` while `moveLedger` moved
+	 * *whole* fish per species — so anything with fewer than `1/fraction` fish in
+	 * it stayed entirely in the bucket while its share of the money left. The
+	 * species ledger was then worth more than `holdValue`, and `holdMarketValue`
+	 * prices the ledger and treats the difference as nothing: the bucket sold for
+	 * the full catch and the quay was paid on top.
+	 *
+	 * R51 makes every listing a partial one — the night's hold is up to
+	 * `OFFLINE_HOLD_MULTIPLIER` bucketfuls and the quay holds one.
+	 */
+	function singletons(): GameState {
+		const state = createInitialState();
+		const names = ['Guppy', 'Platy', 'Rosy Barb', 'Corydoras Catfish', 'Kuhli Loach'];
+		for (const name of names) addToLedger(state.holdSpecies, name, D(1), D(2));
+		state.hold[FishType.Small] = D(names.length);
+		state.holdValue = D(names.length * 2);
+		return state;
+	}
+
+	it('never leaves the bucket worth more than the coins say it is', () => {
+		const state = singletons();
+
+		listForSale(state, D(3));
+
+		expect(ledgerWorth(state.holdSpecies).toNumber()).toBeLessThanOrEqual(
+			state.holdValue.toNumber() + 1e-9
+		);
+	});
+
+	it('pays the catch out exactly once across the bucket and the quay', () => {
+		const state = singletons();
+		const modifiers = computeModifiers(state);
+		const before = state.holdValue;
+
+		listForSale(state, D(3));
+		const earned = sellHold(state, modifiers, TOWN_RATE).plus(
+			settleConsignment(state, modifiers, TOWN_RATE)
+		);
+
+		expect(earned.toNumber()).toBeCloseTo(before.toNumber(), 6);
+	});
+
+	it('sends the money with the fish rather than stranding it either side', () => {
+		const state = singletons();
+
+		listForSale(state, D(3));
+
+		expect(consignmentCount(state).toNumber()).toBe(3);
+		expect(state.consignmentValue.toNumber()).toBeCloseTo(6, 6);
+		expect(holdCount(state).toNumber()).toBe(2);
+		expect(state.holdValue.toNumber()).toBeCloseTo(4, 6);
+	});
+});
+
+describe('review: worthless fish moved a price nobody is ever paid', () => {
+	// `fishTypeBaseValue[Jelly]` is 0, so `ledgerValue` skips a jelly while
+	// `drainLedger` pressed its price anyway — putting it top of the price board
+	// as the thing the player had "hurt" most, and spending the Cold Storage
+	// depth bought to protect real fish.
+	it('leaves the book alone when a sale realises nothing', () => {
+		const state = createInitialState();
+		state.prestigeCount = D(1);
+		addToLedger(state.holdSpecies, 'Moon Jelly', D(5_000_000), D(0));
+		addToLedger(state.holdSpecies, 'Guppy', D(1_000), D(2_000));
+		state.hold[FishType.Jelly] = D(5_000_000);
+		state.hold[FishType.Small] = D(1_000);
+		state.holdValue = D(2_000);
+
+		sellHold(state, computeModifiers(state), TOWN_RATE);
+
+		expect(state.marketPressure['Moon Jelly']).toBeUndefined();
+		expect(state.marketPressure['Guppy']?.toNumber()).toBe(1_000);
 	});
 });

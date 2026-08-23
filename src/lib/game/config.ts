@@ -362,11 +362,11 @@ export const TRADER_CATALOGUE: TraderOfferId[] = ['bicycle', 'bucket', 'assistan
  * A poor fisherman carries what he can carry. The bucket filling is the whole
  * reason the trader matters, and the reason the Assistant is worth hiring.
  *
- * It is upgradeable for a reason that is not flavour: `#settleOffline` sells
- * between chunks, so offline throughput is `chunks x capacity` — at most
- * `OFFLINE_CHUNKS` bucketfuls a night, whatever the crew size. A fixed cap
- * would turn an implementation detail into the game's offline income ceiling,
- * so capacity has to outrun the crew until the Assistant retires it.
+ * It is upgradeable for a reason that is not flavour: a night away is worth at
+ * most `OFFLINE_HOLD_MULTIPLIER` bucketfuls, whatever the crew size, because
+ * nothing sells while the game is shut (R51). A fixed cap would turn an
+ * implementation detail into the game's offline income ceiling, so capacity has
+ * to outrun the crew until the Assistant retires it.
  */
 export const BUCKET_BASE_CAPACITY = 30;
 /**

@@ -266,6 +266,13 @@ export function drainLedger(state: GameState, ledger: SpeciesLedger, aggregate?:
 	const earned = ledgerValue(state, ledger, aggregate);
 
 	for (const species of Object.keys(ledger.fish)) {
+		// Only what was actually sold moves a price. `ledgerValue` skips a species
+		// with no worth behind it and this has to skip the same ones, or the
+		// jellies — `fishTypeBaseValue[Jelly]` is 0, and they are a third of the
+		// Lagoon table — walk down a price nobody is ever paid, put themselves at
+		// the top of the price board as the thing the player has "hurt" most, and
+		// eat the Cold Storage depth that was bought to protect real fish.
+		if ((ledger.worth[species] ?? d0()).lte(0)) continue;
 		applyPressure(state, species, ledger.fish[species]);
 	}
 
@@ -280,17 +287,68 @@ export function drainLedger(state: GameState, ledger: SpeciesLedger, aggregate?:
  * Used when listing part of the bucket for the merchant: the side-ledger has to
  * move with the fish or the two accounts drift and the market prices something
  * that is not there.
+ *
+ * Returns the coin worth that actually moved. The caller moves exactly that much
+ * of the aggregate and no more — see `listForSale` — because whole fish and a
+ * fraction of the money cannot both be honoured, and the ledger is the thing the
+ * market prices.
+ *
+ * The move is **whole fish**, for the same reason `listForSale` moves whole
+ * fish: `readSpeciesPile` floors every count on load, so a fraction left behind
+ * is a fish deleted on the next reload.
  */
-export function moveLedger(from: SpeciesLedger, to: SpeciesLedger, fraction: Decimal): void {
-	if (fraction.lte(0)) return;
+export function moveLedger(from: SpeciesLedger, to: SpeciesLedger, fraction: Decimal): Decimal {
+	let moved = d0();
+	if (fraction.lte(0)) return moved;
 	const whole = fraction.gte(1);
+	const names = Object.keys(from.fish);
 
-	for (const species of Object.keys(from.fish)) {
+	/** How many fish of each species are going. */
+	const take: Record<string, Decimal> = {};
+
+	if (!whole) {
+		// Flooring each species on its own is not enough.
+		//
+		// It loses up to one fish per species, and at the small end it loses all
+		// of them: five species holding one fish each, listing three, floors
+		// `1 x 0.6` five times and moves nothing at all — while the bucket handed
+		// three fish over. The aggregate then followed the ledger and no money
+		// moved with them, so the quay held three fish worth nothing.
+		//
+		// So: the floored share first, then the shortfall handed to whoever still
+		// has fish, exactly as `listForSale` does it for the six type buckets.
+		let total = d0();
+		for (const species of names) {
+			const held = from.fish[species];
+			if (held?.gt(0)) total = total.plus(held);
+		}
+		const target = total.times(fraction).floor();
+
+		let count = d0();
+		for (const species of names) {
+			const held = from.fish[species];
+			if (!held || held.lte(0)) continue;
+			const share = Decimal.min(held, held.times(fraction).floor());
+			if (share.lte(0)) continue;
+			take[species] = share;
+			count = count.plus(share);
+		}
+
+		for (const species of names) {
+			if (count.gte(target)) break;
+			const held = from.fish[species];
+			if (!held || held.lte(0)) continue;
+			const left = held.minus(take[species] ?? d0());
+			if (left.lte(0)) continue;
+			const extra = Decimal.min(left, target.minus(count));
+			take[species] = (take[species] ?? d0()).plus(extra);
+			count = count.plus(extra);
+		}
+	}
+
+	for (const species of names) {
 		const held = from.fish[species];
-		// Whole fish, for the same reason `listForSale` moves whole fish: the
-		// counts here are floored on load, so a fraction left behind is a fish
-		// deleted on the next reload.
-		const fish = whole || held.lte(0) ? held : held.times(fraction).floor();
+		const fish = whole || held.lte(0) ? held : (take[species] ?? d0());
 		// A species with no fish left still has to be swept, or its stale worth
 		// sits in the old ledger for ever and the market prices a bucket that is
 		// not there.
@@ -303,6 +361,7 @@ export function moveLedger(from: SpeciesLedger, to: SpeciesLedger, fraction: Dec
 
 		to.fish[species] = (to.fish[species] ?? d0()).plus(fish);
 		to.worth[species] = (to.worth[species] ?? d0()).plus(worth);
+		moved = moved.plus(worth);
 
 		if (whole || fish.gte(held)) {
 			delete from.fish[species];
@@ -312,6 +371,8 @@ export function moveLedger(from: SpeciesLedger, to: SpeciesLedger, fraction: Dec
 			from.worth[species] = stored.minus(worth);
 		}
 	}
+
+	return moved;
 }
 
 /**
