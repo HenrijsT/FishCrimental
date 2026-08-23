@@ -8,7 +8,7 @@
 	import CastBar from './CastBar.svelte';
 	import Num from './Num.svelte';
 	import { POACH_BUSTED_SECONDS } from '$lib/game/config';
-	import { finePercent } from '$lib/game/police';
+	import { canPoach, finePercent } from '$lib/game/police';
 	import SourceThumb from './SourceThumb.svelte';
 
 	const g = $derived(game.state);
@@ -27,7 +27,8 @@
 			{@const config = SOURCE_CONFIG[source]}
 			{@const open = g.unlocked[source]}
 			{@const isNext = next === source}
-			{#if open || isNext}
+			{@const poachable = !open && canPoach(g, source)}
+			{#if open || isNext || poachable}
 				{@const affordable = g.coins.gte(config.unlockCost)}
 				{@const licence = missingLicence(g, source)}
 				{@const blocker = sourceBlocker(g, source, game.modifiers)}
@@ -79,7 +80,7 @@
 						</span>
 					</button>
 
-					{#if open && blocker === 'licence' && !game.busted}
+					{#if poachable && !game.busted}
 						<button
 							class="poach"
 							onclick={() => game.poach(source)}

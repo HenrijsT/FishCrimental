@@ -305,6 +305,10 @@ describe('nothing is spent on fish there is nowhere to put', () => {
 });
 
 describe('poaching is reachable at all', () => {
+	// This asserts the *engine predicate*. It passed while the button in
+	// `SourcePicker` was gated on `unlocked && missingLicence` — a pair the
+	// engine cannot construct — so the whole subsystem was unreachable for a
+	// player. The surface is covered in `src/lib/components/render.test.ts`.
 	it('is offered on water the player has not bought', () => {
 		const state = createInitialState();
 		state.mapLevel = D(3);
@@ -478,6 +482,13 @@ describe('the save layer keeps what it promised', () => {
 });
 
 describe('a rod past the clamp does not pretend to be worth buying', () => {
+	// These cover a player who has only opened the first water, where the clamp
+	// is unambiguous. They were the *only* coverage until the audit found that
+	// `rodClampLevel` measured `Math.min` across every source in the game rather
+	// than the deepest water the player had open — so the rod was called inert
+	// while an unopened Ocean was still eight times above the floor. The pair
+	// chosen here happens to give the same answer either way, which is why it
+	// never caught it. The deep-water cases live in `audit.test.ts`.
 	it('is flagged inert once every cast is at the floor', () => {
 		const state = createInitialState();
 		state.prestigeUpgrades.pearl_speed = D(20);
