@@ -1,11 +1,11 @@
 /* ---------------------------------------------------------------------------
-   Base — the only stylesheet every route shares.
+   Base — the reset the layout loads, and the only stylesheet it loads.
 
-   The game has two front-ends: a dark instrument panel at `/` and a paper
-   ledger at `/logbook`. They share a game, not a look, so the layout must not
-   load either one's theme. Anything genuinely universal lives here; everything
-   with an opinion lives in `app.css` (the panel) or `logbook.css` (the ledger),
-   each imported by the route that wants it.
+   Anything genuinely universal — box sizing, the body defaults, the reduced
+   motion rule — lives here. Anything with an opinion about how the game looks
+   lives in `app.css`, imported by the route that wants it. There was briefly a
+   second front-end with its own theme; the split survives it because keeping
+   the layout free of opinion is worth doing on its own.
    --------------------------------------------------------------------------- */
 
 *,

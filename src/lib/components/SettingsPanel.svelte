@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { MAX_OFFLINE_SECONDS } from '$lib/game/config';
 	import { game } from '$lib/game/state.svelte';
 	import { formatDuration } from '$lib/format';
@@ -72,15 +71,6 @@
 		</li>
 	</ul>
 
-	<h3>How it looks</h3>
-	<p class="muted small">
-		The same game, kept two ways. This is the instrument panel; the Logbook is the same water
-		written down on paper.
-	</p>
-	<p class="row">
-		<a class="skin" href={resolve('/logbook')}>Open the Logbook</a>
-	</p>
-
 	<h3>Your save</h3>
 	<p class="muted small">
 		The game saves to this browser every 10 seconds and when you leave the page. Export it as text
@@ -129,26 +119,6 @@
 </section>
 
 <style>
-	.skin {
-		display: inline-block;
-		font-family: var(--display);
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		color: var(--ink);
-		text-decoration: none;
-		border: 1px solid var(--edge);
-		background:
-			linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 45%),
-			var(--hull-raised);
-		border-radius: var(--radius-sm);
-		padding: 0.42rem 0.85rem;
-	}
-
-	.skin:hover {
-		background: #1a4066;
-		border-color: #2f6597;
-	}
-
 	h3 {
 		margin-top: 1.2rem;
 	}
