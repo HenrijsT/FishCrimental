@@ -11,6 +11,7 @@ import { FishingSources } from '$lib/fishing_sources';
 import { fishes, sourcesToFish } from '$lib/fishes';
 import type { Fish } from '$lib/fishes/fish';
 import { RandomIndex } from '$lib/random_picker';
+import { examSawCatch } from './exams';
 import {
 	addToLedger,
 	drainLedger,
@@ -476,19 +477,15 @@ export function hasLicence(state: GameState, id: LicenceId): boolean {
 	return state.licences[id] === true;
 }
 
-export function canBuyLicence(state: GameState, id: LicenceId): boolean {
-	if (hasLicence(state, id)) return false;
-	const required = LICENCES[id].requires;
-	if (required && !hasLicence(state, required)) return false;
-	return state.coins.gte(LICENCES[id].cost);
-}
-
-export function buyLicence(state: GameState, id: LicenceId): boolean {
-	if (!canBuyLicence(state, id)) return false;
-	state.coins = state.coins.minus(LICENCES[id].cost);
-	state.licences[id] = true;
-	return true;
-}
+/**
+ * A licence cannot be bought. It is sat for (R42).
+ *
+ * `canBuyLicence` and `buyLicence` are gone, along with `LicenceConfig.cost`.
+ * Paying *and* passing was explicitly rejected, and leaving a coin path in
+ * place would have meant two ways to get the same card with only one of them
+ * designed. See `exams.ts`, and `canSit` for the prerequisite check that
+ * `canBuyLicence` used to do alongside the price.
+ */
 
 /** The licence a source needs, if it has not been bought yet. */
 export function missingLicence(state: GameState, source: FishingSources): LicenceId | null {
@@ -734,6 +731,11 @@ function recordCatch(state: GameState, fish: Fish, count: Decimal, value: Decima
 	addToLedger(state.holdSpecies, fish.name, count, value);
 	state.dex[fish.name] = (state.dex[fish.name] ?? d0()).plus(count);
 	state.totalFish = state.totalFish.plus(count);
+
+	// A licence exam watches from here, because this is the one place a fish can
+	// arrive — so every route into the hold is covered and none of them has to
+	// know an exam exists.
+	if (state.exam) examSawCatch(state, fish.name, count, RARE_FISH_TYPES.includes(fish.category));
 }
 
 /**
@@ -2052,6 +2054,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		marketUpdatedAt: now,
 		// Dug with coins on land you just sold, like the boat and the crew.
 		ponds: [],
+		exam: null,
 
 		dex: keep?.dex ?? {},
 		carry: {},

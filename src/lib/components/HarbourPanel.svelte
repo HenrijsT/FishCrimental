@@ -9,6 +9,8 @@
 		LICENCE_IDS
 	} from '$lib/game/config';
 	import { boatUpgradeCost, fuelRoom, hasLicence, repairCost } from '$lib/game/engine';
+	import { CULL_KEEP_FROM, EXAMS } from '$lib/game/exams';
+	import CastBar from './CastBar.svelte';
 	import { game } from '$lib/game/state.svelte';
 	import { sources } from '$lib/fishing_sources';
 	import Decimal from 'break_eternity.js';
@@ -17,6 +19,15 @@
 	// Named `g` rather than `state` — see the note in Fishdex.svelte.
 	const g = $derived(game.state);
 	const boat = $derived(g.boat);
+	const exam = $derived(game.exam);
+
+	let sounderGuess = $state(50);
+	let sounderSaid = $state<string | null>(null);
+
+	function callSounder() {
+		const said = game.sounderCall(sounderGuess);
+		sounderSaid = said === 'found' ? 'found it' : said;
+	}
 	const room = $derived(fuelRoom(g, game.modifiers));
 	const tankFraction = $derived(
 		game.modifiers.fuelCapacity.lte(0)
@@ -31,10 +42,95 @@
 	<h2>Harbour</h2>
 	<p class="muted intro">
 		Water is not just a price. Moving water and salt water need a licence, and past the Sea you need
-		a hull under you.
+		a hull under you. A licence costs nothing — you sit an examination for it, and you can walk away
+		and come back as often as you like.
 	</p>
 
 	<h3>Licences</h3>
+
+	{#if exam}
+		{@const definition = EXAMS[exam.licence]}
+		<div class="exam">
+			<div class="exam-head">
+				<h4>{definition.name}</h4>
+				<span class="faint">for the {LICENCES[exam.licence].name}</span>
+			</div>
+			<p class="flavour muted">{definition.brief}</p>
+
+			<CastBar
+				progress={game.examProgress}
+				label="Progress through {definition.name}"
+				active={!game.examDone}
+			/>
+			<p class="progress-line">
+				{exam.progress} of {exam.target}
+				{#if exam.attempts > 0}<span class="faint">· {exam.attempts} calls</span>{/if}
+			</p>
+
+			{#if game.examDone}
+				<p class="passed">Passed. The card is yours.</p>
+				<div class="row-buttons">
+					<button class="go" onclick={() => game.takeLicence()}>Take the licence</button>
+				</div>
+			{:else if exam.kind === 'quota'}
+				<p class="task">
+					{#if exam.species}
+						Land <strong>{exam.target}</strong> more {exam.species}. Anything that lands counts —
+						your rod, the crew, the ponds.
+					{:else}
+						Land <strong>{exam.target}</strong> fish. Anything at all.
+					{/if}
+				</p>
+			{:else if exam.kind === 'longline'}
+				<p class="task">
+					Land <strong>{exam.target}</strong> fish that are rare or better. Glimmer Lure and the Pearl
+					Diver's Eye are what move this along.
+				</p>
+			{:else if exam.kind === 'cull'}
+				<p class="task">
+					Keep everything <strong>{CULL_KEEP_FROM} and over</strong>. Put the rest back.
+				</p>
+				<p class="offer">
+					In your hands: <strong>a {exam.offer}</strong>
+				</p>
+				<div class="row-buttons">
+					<button onclick={() => game.cullCall(true)}>Keep it</button>
+					<button onclick={() => game.cullCall(false)}>Put it back</button>
+				</div>
+			{:else if exam.kind === 'sounder'}
+				<p class="task">
+					Somewhere between <strong>{exam.low}</strong> and <strong>{exam.high}</strong>.
+					{#if sounderSaid}<span class="said">Last call: {sounderSaid}.</span>{/if}
+				</p>
+				<div class="row-buttons">
+					<label class="depth">
+						<span class="faint">Call a depth</span>
+						<input
+							type="number"
+							min={exam.low}
+							max={exam.high}
+							bind:value={sounderGuess}
+							onkeydown={(event) => {
+								if (event.key === 'Enter') callSounder();
+							}}
+						/>
+					</label>
+					<button onclick={callSounder}>Sound it</button>
+				</div>
+			{/if}
+
+			{#if !game.examDone}
+				<div class="row-buttons">
+					<button class="quiet" onclick={() => game.abandonExam()}>Walk away</button>
+				</div>
+				<p class="faint small">
+					Walking away costs nothing. Neither does reloading the page — an attempt is not saved, and
+					starting again is free.
+				</p>
+			{/if}
+		</div>
+	{/if}
+
 	<ul class="list">
 		{#each LICENCE_IDS as id (id)}
 			{@const licence = LICENCES[id]}
@@ -52,14 +148,17 @@
 					<p class="flavour muted">{licence.flavour}</p>
 					{#if blocked && !held}
 						<p class="need">Requires the {LICENCES[licence.requires!].name} first.</p>
+					{:else if !held}
+						<p class="need faint">{EXAMS[id].name} — no fee.</p>
 					{/if}
 				</div>
 				{#if !held}
-					<button
-						disabled={blocked || g.coins.lt(licence.cost)}
-						onclick={() => game.takeLicence(id)}
-					>
-						<Num value={licence.cost} tone="coin" />
+					<button disabled={blocked || exam !== null} onclick={() => game.sitExam(id)}>
+						{#if exam !== null}
+							Busy
+						{:else}
+							Sit {EXAMS[id].name}
+						{/if}
 					</button>
 				{/if}
 			</li>
@@ -312,5 +411,83 @@
 		gap: 0.5rem;
 		flex-wrap: wrap;
 		margin-top: 0.7rem;
+	}
+
+	.exam {
+		border: 1px solid var(--brass-dim);
+		border-radius: var(--radius-sm);
+		padding: 0.7rem 0.8rem;
+		margin: 0.6rem 0 1rem;
+		background: rgba(4, 16, 27, 0.55);
+	}
+
+	.exam-head {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.exam-head h4 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.progress-line {
+		font-size: 0.78rem;
+		font-variant-numeric: tabular-nums;
+		margin: 0.3rem 0;
+	}
+
+	.task,
+	.offer {
+		font-size: 0.85rem;
+		margin: 0.4rem 0;
+		max-width: 60ch;
+	}
+
+	.offer strong {
+		color: var(--brass);
+	}
+
+	.passed {
+		color: var(--brass);
+		font-weight: 600;
+		margin: 0.4rem 0;
+	}
+
+	.said {
+		color: var(--ink-dim);
+	}
+
+	.row-buttons {
+		display: flex;
+		gap: 0.4rem;
+		align-items: flex-end;
+		flex-wrap: wrap;
+		margin-top: 0.4rem;
+	}
+
+	.depth {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		font-size: 0.72rem;
+	}
+
+	.depth input {
+		font: inherit;
+		font-size: 0.9rem;
+		width: 6rem;
+		color: var(--ink);
+		background: var(--hull-raised);
+		border: 1px solid var(--edge);
+		border-radius: var(--radius-sm);
+		padding: 0.25rem 0.4rem;
+	}
+
+	.small {
+		font-size: 0.72rem;
+		margin-top: 0.4rem;
 	}
 </style>

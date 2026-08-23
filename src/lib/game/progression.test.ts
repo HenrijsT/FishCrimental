@@ -19,8 +19,6 @@ import {
 	buyBoat,
 	buyBoatUpgrade,
 	buyFuel,
-	buyLicence,
-	canBuyLicence,
 	canUnlock,
 	computeModifiers,
 	createInitialState,
@@ -34,8 +32,10 @@ import {
 	sourceBlocker,
 	unlockSource
 } from './engine';
+import { EXAMS, canSit, claimLicence, startExam } from './exams';
 import { fromRaw, serialize } from './save';
 import type { GameState } from './types';
+import type { LicenceId } from './config';
 
 function openTo(state: GameState, upTo: FishingSources) {
 	for (const source of SOURCE_ORDER) {
@@ -45,27 +45,79 @@ function openTo(state: GameState, upTo: FishingSources) {
 	for (const id of LICENCE_IDS) state.licences[id] = true;
 }
 
+/**
+ * Sit and pass one exam, which is the only way a licence is ever issued.
+ *
+ * `canSit` requires that the next locked water is the water this licence
+ * covers, so the sources up to it are opened first — which is the same order a
+ * player meets them in.
+ */
+function grantLicence(state: GameState, id: LicenceId): void {
+	for (const source of SOURCE_ORDER) {
+		if (SOURCE_LICENCE[source] === id) break;
+		state.unlocked[source] = true;
+	}
+	startExam(state, id, () => 0);
+	state.exam!.progress = state.exam!.target;
+	claimLicence(state);
+}
+
+/** Open every source up to, but not including, the first one `id` gates. */
+function upToLicence(state: GameState, id: LicenceId): void {
+	for (const source of SOURCE_ORDER) {
+		if (SOURCE_LICENCE[source] === id) break;
+		state.unlocked[source] = true;
+	}
+}
+
 describe('licences', () => {
-	it('are a chain — you cannot buy the fourth first', () => {
+	it('are a chain — you cannot sit the fourth first', () => {
 		const state = createInitialState();
 		state.coins = D('1e12');
+		upToLicence(state, 'inland');
 
-		expect(canBuyLicence(state, 'deep')).toBe(false);
-		expect(canBuyLicence(state, 'coastal')).toBe(false);
-		expect(canBuyLicence(state, 'inland')).toBe(true);
+		expect(canSit(state, 'deep')).toBe(false);
+		expect(canSit(state, 'coastal')).toBe(false);
+		expect(canSit(state, 'inland')).toBe(true);
 
-		buyLicence(state, 'inland');
-		expect(canBuyLicence(state, 'lakes')).toBe(true);
-		expect(canBuyLicence(state, 'deep')).toBe(false);
+		grantLicence(state, 'inland');
+		upToLicence(state, 'lakes');
+		expect(canSit(state, 'lakes')).toBe(true);
+		expect(canSit(state, 'deep')).toBe(false);
 	});
 
-	it('cost coins, once', () => {
+	/**
+	 * You sit the exam when the water in front of you needs it — not the moment
+	 * the previous card is in your hand. Without this, all four were sat inside
+	 * fourteen minutes, three of them before the tenth.
+	 */
+	it('are not sittable until the water in front of you needs them', () => {
 		const state = createInitialState();
-		state.coins = D(LICENCES.inland.cost);
+		// Nothing bought yet: the next locked water is the Pond, which is free
+		// of paper, so no exam is open at all.
+		expect(canSit(state, 'inland')).toBe(false);
 
-		expect(buyLicence(state, 'inland')).toBe(true);
-		expect(state.coins.eq(0)).toBe(true);
-		expect(buyLicence(state, 'inland')).toBe(false);
+		upToLicence(state, 'inland');
+		expect(canSit(state, 'inland')).toBe(true);
+	});
+
+	/**
+	 * R42. The double gate — pay *and* pass — was explicitly rejected, so there
+	 * must be no coin path to a licence left anywhere, not even an unused one.
+	 */
+	it('cost nothing at all; a coin pile buys none of them', () => {
+		const state = createInitialState();
+		state.coins = D('1e30');
+		upToLicence(state, 'inland');
+
+		expect(state.licences.inland).toBe(false);
+		expect(canUnlock(state, FishingSources.Stream)).toBe(false);
+
+		// The only way through is the exam.
+		expect(startExam(state, 'inland', () => 0)).toBe(true);
+		state.exam!.progress = state.exam!.target;
+		expect(claimLicence(state)).toBe('inland');
+		expect(state.coins.eq(D('1e30'))).toBe(true);
 	});
 
 	it('gate the water they cover, and nothing else', () => {
@@ -84,17 +136,18 @@ describe('licences', () => {
 		// The Pond is licence-free and is now the first purchase; the Stream is
 		// the first thing paper actually gates.
 		unlockSource(state, FishingSources.Pond);
+		upToLicence(state, 'inland');
 
 		expect(canUnlock(state, FishingSources.Stream)).toBe(false);
 
-		buyLicence(state, 'inland');
+		grantLicence(state, 'inland');
 		expect(canUnlock(state, FishingSources.Stream)).toBe(true);
 	});
 
-	it('rise in price with the water they open', () => {
-		for (let i = 1; i < LICENCE_IDS.length; i++) {
-			expect(LICENCES[LICENCE_IDS[i]].cost).toBeGreaterThan(LICENCES[LICENCE_IDS[i - 1]].cost);
-		}
+	it('have an exam each, and no two the same', () => {
+		const kinds = LICENCE_IDS.map((id) => EXAMS[id].kind);
+		expect(kinds).toHaveLength(LICENCE_IDS.length);
+		expect(new Set(kinds).size).toBe(kinds.length);
 	});
 
 	it('cover every source except the two free ones, exactly once', () => {

@@ -477,6 +477,9 @@ export function fromRaw(data: Raw): GameState {
 		marketUpdatedAt: num(migrated.marketUpdatedAt, Date.now()),
 
 		ponds: readPonds(migrated.ponds),
+		// Never read, never written. An exam in progress is free to restart and
+		// is not worth a persisted, validated, migratable record — see `ExamState`.
+		exam: null,
 
 		dex: readDex(migrated.dex),
 		carry: readCarry(migrated.carry),
