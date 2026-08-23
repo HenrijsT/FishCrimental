@@ -16,7 +16,7 @@ package-lock.json
 USER-REQUIREMENTS.md
 ideas.txt
 design/
-
-# Harness scratch space — agent worktrees and the autostop progress log
-.claude/
 AUTOSTOP-PROGRESS.md
+
+# Harness scratch space — agent worktrees
+.claude/
