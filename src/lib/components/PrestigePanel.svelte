@@ -1,18 +1,31 @@
 <script lang="ts">
 	import { PRESTIGE_THRESHOLD, PRESTIGE_UPGRADES, PRESTIGE_UPGRADE_IDS } from '$lib/game/config';
-	import { pearlMultiplier, pearlsFor, prestigeUpgradeCost } from '$lib/game/engine';
+	import {
+		pearlCostScale,
+		pearlMultiplier,
+		pearlsFor,
+		prestigeUpgradeCost,
+		prestigeUpgradeUnlocked
+	} from '$lib/game/engine';
+
+	/** Presentation only — `requires` on each node is what is enforced. */
+	const TIERS = [
+		{ tier: 1 as const, label: 'The four berths' },
+		{ tier: 2 as const, label: 'Worked ground' },
+		{ tier: 3 as const, label: 'Deep water' }
+	];
 	import { game } from '$lib/game/state.svelte';
 	import { shiftName, tierFor } from '$lib/game/shifts';
 	import Num from './Num.svelte';
 
 	// Named `g` rather than `state` — see the note in Fishdex.svelte.
 	const g = $derived(game.state);
+	const scale = $derived(pearlCostScale(g.allTimePearls));
 	const pending = $derived(pearlsFor(g.lifetimeCoins));
 	// One application, on `sellMultiplier`. It used to land on `fishPerCast`
 	// too, so income carried it squared and the prestige chain collapsed.
 	const pearlBonus = $derived(pearlMultiplier(g.pearls));
 	/** What one more Pearl would be worth, for the panel's "next" line. */
-	const nextBonus = $derived(pearlMultiplier(g.pearls.plus(1)));
 
 	const tier = $derived(tierFor(g.prestigeCount));
 
@@ -99,48 +112,83 @@
 
 	<h3 class="tree-heading">Spend Pearls</h3>
 	<p class="faint small">
-		Held Pearls are worth <Num value={pearlBonus} />× on every sale on their own, spent or not — one
-		more would make it <Num value={nextBonus} />×. Spending them is where the real gains are.
+		Held Pearls are worth <Num value={pearlBonus} />× on every sale just for sitting in the tin —
+		spend them and that falls. The tree fans out from four roots; deeper berths open once the ones
+		before them are worked.
 	</p>
 
-	<ul class="tree">
-		{#each PRESTIGE_UPGRADE_IDS as id (id)}
-			{@const config = PRESTIGE_UPGRADES[id]}
-			{@const level = g.prestigeUpgrades[id]}
-			{@const maxed = level.gte(config.maxLevel)}
-			{@const cost = prestigeUpgradeCost(id, level)}
-			<li class:maxed>
-				<div class="text">
-					<h3 class="name">
-						{config.name}
-						<span class="level">lv {level.toFixed(0)}{maxed ? ' · max' : ''}</span>
-					</h3>
-					<p class="desc muted">{config.description}</p>
-					<p class="effect">
-						{config.format(level.toNumber())}
-						{#if !maxed}
-							<span class="faint">→</span>
-							<span class="next">{config.format(level.plus(1).toNumber())}</span>
+	{#each TIERS as tier (tier.tier)}
+		{@const ids = PRESTIGE_UPGRADE_IDS.filter((id) => PRESTIGE_UPGRADES[id].tier === tier.tier)}
+		<h4 class="tier-heading">{tier.label}</h4>
+		<ul class="tree">
+			{#each ids as id (id)}
+				{@const config = PRESTIGE_UPGRADES[id]}
+				{@const level = g.prestigeUpgrades[id]}
+				{@const maxed = level.gte(config.maxLevel)}
+				{@const open = prestigeUpgradeUnlocked(g, id)}
+				{@const cost = prestigeUpgradeCost(id, level, scale)}
+				{@const gate = config.requires}
+				<li class:maxed class:shut={!open}>
+					<div class="text">
+						<h3 class="name">
+							{config.name}
+							<span class="level">lv {level.toFixed(0)}{maxed ? ' · max' : ''}</span>
+						</h3>
+						<p class="desc muted">{config.description}</p>
+						{#if open}
+							<p class="effect">
+								{config.format(level.toNumber())}
+								{#if !maxed}
+									<span class="faint">→</span>
+									<span class="next">{config.format(level.plus(1).toNumber())}</span>
+								{/if}
+							</p>
+						{:else if gate}
+							<p class="effect gated">
+								Opens at {PRESTIGE_UPGRADES[gate.id].name} lv {gate.level}
+							</p>
 						{/if}
-					</p>
-				</div>
-				<button
-					aria-label={maxed ? `${config.name}: maxed` : `Buy ${config.name}`}
-					disabled={maxed || g.pearls.lt(cost)}
-					onclick={() => game.buyPearlUpgrade(id)}
-				>
-					{#if maxed}
-						Maxed
-					{:else}
-						<Num value={cost} tone="pearl" />
-					{/if}
-				</button>
-			</li>
-		{/each}
-	</ul>
+					</div>
+					<button
+						aria-label={maxed
+							? `${config.name}: maxed`
+							: !open && gate
+								? `${config.name}: needs ${PRESTIGE_UPGRADES[gate.id].name} level ${gate.level}`
+								: `Buy ${config.name} for ${cost.toFixed(0)} Pearls`}
+						disabled={maxed || !open || g.pearls.lt(cost)}
+						onclick={() => game.buyPearlUpgrade(id)}
+					>
+						{#if maxed}
+							Maxed
+						{:else if !open}
+							Locked
+						{:else}
+							<Num value={cost} tone="pearl" />
+						{/if}
+					</button>
+				</li>
+			{/each}
+		</ul>
+	{/each}
 </section>
 
 <style>
+	.tier-heading {
+		margin: 1rem 0 0.4rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--ink-faint);
+	}
+
+	li.shut {
+		opacity: 0.62;
+	}
+
+	.effect.gated {
+		font-style: italic;
+	}
+
 	.intro {
 		font-size: 0.8rem;
 		margin: 0.4rem 0 0.8rem;

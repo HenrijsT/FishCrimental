@@ -31,50 +31,52 @@ import {
 import { settleMarket } from './market';
 import {
 	accumulate,
-	buyBoat,
 	autoFisherCost,
 	boatUpgradeCeiling,
-	upgradeCeiling,
+	boatUpgradeCost,
 	bucketCost,
 	buyAssistant,
 	buyAutoFisher,
-	buyBucket,
 	buyAutoFisherOffline,
 	buyBicycle,
+	buyBoat,
 	buyBoatUpgrade,
-	inTown,
+	buyBucket,
+	buyDeckhand,
+	buyFuel,
+	buyPrestigeUpgrade,
+	buyUpgrade,
+	canPrestige,
+	canUnlock,
+	computeModifiers,
+	createInitialState,
+	deckhandCost,
 	digPond,
+	handIncomePerSecond,
+	hasStandingOrder,
+	inTown,
 	listForSale,
+	nextLicence,
+	nextLockedSource,
+	pearlCostScale,
+	performPrestige,
 	pondCost,
 	pondFishValue,
 	pondLevelCost,
 	pondsOpen,
-	stockPond,
-	upgradePond,
-	rideToTown,
-	runTrader,
-	buyDeckhand,
-	buyFuel,
-	boatUpgradeCost,
-	canUnlock,
-	hasStandingOrder,
-	nextLicence,
+	prestigeUpgradeCost,
+	prestigeUpgradeUnlocked,
 	repairBoat,
 	repairCost,
-	canPrestige,
-	computeModifiers,
-	createInitialState,
-	deckhandCost,
-	nextLockedSource,
-	performPrestige,
-	buyPrestigeUpgrade,
-	buyUpgrade,
-	prestigeUpgradeCost,
+	rideToTown,
+	runTrader,
 	sellHold,
-	handIncomePerSecond,
+	stockPond,
 	totalIncomePerSecond,
 	unlockSource,
-	upgradeCost
+	upgradeCeiling,
+	upgradeCost,
+	upgradePond
 } from './engine';
 import type { GameState, Modifiers } from './types';
 
@@ -464,21 +466,39 @@ export function simulatePrestigeChain(runs: number, options: SimulationOptions =
 }
 
 /** Buy whatever prestige upgrade is cheapest until the Pearls run out. */
+/**
+ * The reference player's route through the Pearl tree.
+ *
+ * Cheapest-first, as everywhere else in this simulator, but two things changed
+ * with the tree: a node whose prerequisite is unmet cannot be bought at all, and
+ * prices scale with the pile, so the loop has to re-price on every pass rather
+ * than once.
+ *
+ * It also stops at half the pile. That is not thrift — `pearlMultiplier` reads
+ * the *unspent* Pearls, so a simulated player who spends to the last one is
+ * modelling a decision no informed human would take, and every pacing figure
+ * downstream would be measured against it.
+ */
 export function spendPearls(state: GameState): void {
-	for (let attempt = 0; attempt < 200; attempt++) {
+	const floor = state.pearls.div(2);
+
+	for (let attempt = 0; attempt < 400; attempt++) {
+		const scale = pearlCostScale(state.allTimePearls);
 		let bestId: PrestigeUpgradeId | null = null;
 		let bestCost: Decimal | null = null;
 
 		for (const id of PRESTIGE_UPGRADE_IDS) {
 			if (state.prestigeUpgrades[id].gte(PRESTIGE_UPGRADES[id].maxLevel)) continue;
-			const cost = prestigeUpgradeCost(id, state.prestigeUpgrades[id]);
+			if (!prestigeUpgradeUnlocked(state, id)) continue;
+			const cost = prestigeUpgradeCost(id, state.prestigeUpgrades[id], scale);
 			if (!bestCost || cost.lt(bestCost)) {
 				bestCost = cost;
 				bestId = id;
 			}
 		}
 
-		if (!bestId || !bestCost || state.pearls.lt(bestCost)) return;
+		if (!bestId || !bestCost) return;
+		if (state.pearls.minus(bestCost).lt(floor)) return;
 		buyPrestigeUpgrade(state, bestId);
 	}
 }

@@ -625,6 +625,24 @@ export const PRESTIGE_THRESHOLD = 1e15;
 export const PEARL_EXPONENT = 0.3;
 
 /**
+ * Pearls are denominated in hundreds, not units.
+ *
+ * A shift used to pay **one** Pearl the first time, which made the only choice
+ * the game offered — hold the pile for its passive bonus, or spend it in the
+ * shop — all-or-nothing, and the arithmetic made it a trap: holding one Pearl
+ * was worth x2.3863, and spending it on the only affordable upgrade was worth
+ * x2.1500. Ten per cent worse, permanently, with no refund, at every player's
+ * first prestige.
+ *
+ * At ~98 a shift it is a dial instead. Spend fifty, keep fifty.
+ *
+ * The passive bonus is deliberately **not** buffed by this: `pearlMultiplier`
+ * divides by the same constant, so the curve is untouched and this is a change
+ * of units, not of power.
+ */
+export const PEARL_YIELD_SCALE = 70;
+
+/**
  * The passive Pearl bonus is **logarithmic in the pile**: `1 + SCALE * ln(1 + p)`.
  *
  * It used to be `p^0.9 * 0.5 + 1`, applied to *both* `fishPerCast` and
@@ -643,11 +661,38 @@ export const PEARL_EXPONENT = 0.3;
  */
 export const PEARL_MULTIPLIER_SCALE = 2;
 
+/**
+ * The pile is divided by this before the logarithm, so `PEARL_YIELD_SCALE`
+ * changes what a Pearl *is* without changing what the pile is worth. Kept as its
+ * own constant rather than reusing the yield scale directly, because the two
+ * answer different questions and only happen to agree today.
+ */
+export const PEARL_BONUS_PIVOT = 70;
+
+/**
+ * Node prices follow the pile.
+ *
+ * Fixed prices do not work here. `pearlMultiplier` is logarithmic, so spending
+ * *half* the pile costs 21% of the bonus at ten Pearls and 3% at a billion — the
+ * decision is agonising while the tree is small and free once it matters. Worse,
+ * a fixed tree became unaffordable-then-irrelevant inside one prestige: measured
+ * at 99.997% of the pile left unspent.
+ *
+ * Scaling every price by lifetime Pearls makes "spend half" cost the same share
+ * of the bonus at every scale, and keeps the tree a real budget for ever.
+ */
+export const PEARL_COST_PIVOT = 70;
+
 export type PrestigeUpgradeId =
 	| 'pearl_yield'
 	| 'pearl_speed'
 	| 'pearl_luck'
 	| 'pearl_crew'
+	| 'pearl_fuel'
+	| 'pearl_hull'
+	| 'pearl_tank'
+	| 'pearl_seed'
+	| 'pearl_grace'
 	| 'pearl_headstart'
 	| 'pearl_nightwatch';
 
@@ -655,16 +700,26 @@ export interface PrestigeUpgradeConfig {
 	id: PrestigeUpgradeId;
 	name: string;
 	description: string;
+	/** Price of the first level, as a share of `PEARL_COST_PIVOT` Pearls. */
 	baseCost: number;
 	costGrowth: number;
 	effect: number;
 	maxLevel: number;
+	/**
+	 * What has to be bought first, and to what level. The tree fans out from four
+	 * roots: nothing is bought in isolation, and a run's spend is a route rather
+	 * than a shopping list.
+	 */
+	requires?: { id: PrestigeUpgradeId; level: number };
+	/** 1 is a root. Presentation only — `requires` is what is enforced. */
+	tier: 1 | 2 | 3;
 	format: (level: number) => string;
 }
 
 export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig> = {
 	pearl_yield: {
 		id: 'pearl_yield',
+		tier: 1,
 		name: 'Pearl Brokerage',
 		description: 'Every sale, forever, is worth more.',
 		baseCost: 1,
@@ -675,6 +730,7 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig>
 	},
 	pearl_speed: {
 		id: 'pearl_speed',
+		tier: 1,
 		name: 'Tide Reader',
 		description: 'You know when the fish are moving. Casts land quicker.',
 		baseCost: 2,
@@ -685,6 +741,7 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig>
 	},
 	pearl_luck: {
 		id: 'pearl_luck',
+		tier: 1,
 		name: 'Pearl Diver’s Eye',
 		description: 'You see the shapes under the boat before the line goes down.',
 		baseCost: 3,
@@ -695,6 +752,7 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig>
 	},
 	pearl_crew: {
 		id: 'pearl_crew',
+		tier: 1,
 		name: 'Legendary Crew',
 		description: 'Deckhands who have heard of you before you hired them.',
 		baseCost: 4,
@@ -713,6 +771,8 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig>
 	 */
 	pearl_headstart: {
 		id: 'pearl_headstart',
+		tier: 2,
+		requires: { id: 'pearl_yield', level: 3 },
 		name: 'Standing Charter',
 		description: 'Start each run with deeper water already open to you.',
 		baseCost: 6,
@@ -735,6 +795,8 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig>
 	 */
 	pearl_nightwatch: {
 		id: 'pearl_nightwatch',
+		tier: 2,
+		requires: { id: 'pearl_crew', level: 3 },
 		name: 'Night Watch',
 		description: 'Someone keeps an eye on the boats. The crew work later into the night.',
 		baseCost: 5,
@@ -742,6 +804,66 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig>
 		effect: 1,
 		maxLevel: 16,
 		format: (level) => `${8 + level} hours of offline progress`
+	},
+	pearl_fuel: {
+		id: 'pearl_fuel',
+		tier: 2,
+		requires: { id: 'pearl_speed', level: 3 },
+		name: 'Trim Tabs',
+		description: 'The hull sits right, and the tank lasts.',
+		baseCost: 3,
+		costGrowth: 2.7,
+		effect: 0.88,
+		maxLevel: 14,
+		format: (level) => `fuel burned ×${Math.pow(0.88, level).toFixed(3)}`
+	},
+	pearl_hull: {
+		id: 'pearl_hull',
+		tier: 2,
+		requires: { id: 'pearl_crew', level: 4 },
+		name: 'Ironbark Planking',
+		description: 'Open water stops taking its cut of the boat.',
+		baseCost: 4,
+		costGrowth: 2.8,
+		effect: 0.85,
+		maxLevel: 12,
+		format: (level) => `hull wear ×${Math.pow(0.85, level).toFixed(3)}`
+	},
+	pearl_tank: {
+		id: 'pearl_tank',
+		tier: 3,
+		requires: { id: 'pearl_fuel', level: 2 },
+		name: 'Long Bunker',
+		description: 'More of the sea between refuellings.',
+		baseCost: 9,
+		costGrowth: 3.0,
+		effect: 1.45,
+		maxLevel: 10,
+		format: (level) => `tank ×${Math.pow(1.45, level).toFixed(2)}`
+	},
+	pearl_seed: {
+		id: 'pearl_seed',
+		tier: 3,
+		requires: { id: 'pearl_yield', level: 5 },
+		name: 'Seed Money',
+		description: 'You never start a run with empty pockets again.',
+		baseCost: 12,
+		costGrowth: 3.2,
+		effect: 12,
+		maxLevel: 12,
+		format: (level) => `start with ${Math.pow(12, level).toLocaleString('en')} coins`
+	},
+	pearl_grace: {
+		id: 'pearl_grace',
+		tier: 3,
+		requires: { id: 'pearl_luck', level: 4 },
+		name: 'Quiet Oars',
+		description: 'The warden takes longer to notice you at all.',
+		baseCost: 7,
+		costGrowth: 2.5,
+		effect: 15,
+		maxLevel: 8,
+		format: (level) => `${15 * level}s longer before anyone notices`
 	}
 };
 

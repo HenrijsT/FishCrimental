@@ -4,11 +4,12 @@ import type { FishType } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
 import {
 	FUEL_PRICE,
+	needsBoat,
 	POACH_BUSTED_SECONDS,
 	POACH_FINE_STEPS,
 	POACH_FUEL_FLOOR_TANKS,
 	POACH_GRACE_SECONDS,
-	needsBoat
+	PRESTIGE_UPGRADES
 } from './config';
 import {
 	SPECIES_BY_NAME,
@@ -66,10 +67,18 @@ export function bustedSecondsLeft(state: GameState, now = Date.now()): number {
 	return Math.max(0, (state.bustedUntil - now) / 1000);
 }
 
+/** How long this player gets on unlicensed water before the warden notices. */
+export function graceSeconds(state: GameState): number {
+	return (
+		POACH_GRACE_SECONDS +
+		PRESTIGE_UPGRADES.pearl_grace.effect * state.prestigeUpgrades.pearl_grace.toNumber()
+	);
+}
+
 /** Seconds of poaching left before someone notices. */
 export function graceLeft(state: GameState): number {
-	if (!state.poaching) return POACH_GRACE_SECONDS;
-	return Math.max(0, POACH_GRACE_SECONDS - state.poachElapsed);
+	if (!state.poaching) return graceSeconds(state);
+	return Math.max(0, graceSeconds(state) - state.poachElapsed);
 }
 
 /**
@@ -306,7 +315,7 @@ export function runPolice(
 	if (!state.poaching || seconds <= 0) return null;
 
 	state.poachElapsed += seconds;
-	if (state.poachElapsed < POACH_GRACE_SECONDS) return null;
+	if (state.poachElapsed < graceSeconds(state)) return null;
 
 	return bust(state, modifiers, now);
 }
@@ -336,5 +345,5 @@ export function finePercent(state: GameState, source: FishingSources): number {
 /** Grace as a 0–1 fraction spent, for a bar. */
 export function graceProgress(state: GameState): number {
 	if (!state.poaching) return 0;
-	return Math.min(1, Math.max(0, state.poachElapsed / POACH_GRACE_SECONDS));
+	return Math.min(1, Math.max(0, state.poachElapsed / graceSeconds(state)));
 }
