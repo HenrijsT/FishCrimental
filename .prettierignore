@@ -18,7 +18,7 @@ yarn.lock
 # Personal working docs — locally ignored in .git/info/exclude, hand-maintained
 USER-REQUIREMENTS.md
 ideas.txt
-Goals/
+design/
 
 # Harness scratch space — agent worktrees
 .claude/

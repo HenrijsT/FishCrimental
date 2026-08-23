@@ -1076,7 +1076,7 @@ Everything is committed locally on `feat/going-ham`. Nothing was pushed.
 
 # THIRD PASS
 
-Brief: `Goals/THIRD_GOAL.md`. Inputs: `Goals/AUDIT.md` (an independent 13-agent
+Brief: `design/promt_goals/THIRD_GOAL.md`. Inputs: `design/archive/AUDIT.md` (an independent 13-agent
 audit — 29 findings raised, 6 refuted, 23 confirmed), `ideas.txt`,
 `USER-REQUIREMENTS.md`, and this file.
 
@@ -1234,7 +1234,7 @@ record does.
 Per the brief: no directory refactor, and the six refuted findings in the
 audit's §3 were not re-investigated. **I found nothing to disagree with in any
 of the six refutations.** The remaining 17 confirmed defects are carried into
-`Goals/PLAN.md` rather than fixed here.
+`design/PLAN.md` rather than fixed here.
 
 ### Gates
 
@@ -1262,7 +1262,7 @@ on the public branch. The 29 commits that constitute the actual game have never
 been pushed, because R9 says never push. **The public repository contains a
 fish-list prototype and a progress bar.**
 
-**The design backlog is not exposed.** `ideas.txt`, `Goals/` and
+**The design backlog is not exposed.** `ideas.txt`, `design/` and
 `USER-REQUIREMENTS.md` are all in `.git/info/exclude` and are untracked. The
 brief's concern that they "expose the entire design direction" is currently
 false. `DECISIONS.md` _is_ tracked, but is not on `main` — it would become
@@ -1478,7 +1478,7 @@ opening the last source rather than a box ticked on the way past.
 
 Both the level and the offline fitting are coin purchases, so a prestige takes
 them, like every other coin purchase. Carrying either through prestige belongs
-in the Pearl tree, and is noted in `Goals/PLAN.md` rather than smuggled in
+in the Pearl tree, and is noted in `design/PLAN.md` rather than smuggled in
 here.
 
 ### What it did to the pacing
@@ -1650,10 +1650,10 @@ that drops the deprecation warning.
 
 ## Stage 2 — the main deliverable: research and plan
 
-`Goals/RESEARCH.md` (560 lines) and `Goals/PLAN.md` (694 lines). **Documents
+`design/RESEARCH.md` (560 lines) and `design/PLAN.md` (694 lines). **Documents
 only — nothing from this stage was implemented.**
 
-**Note on committing:** `Goals/` is in `.git/info/exclude`, so both files are
+**Note on committing:** `design/` is in `.git/info/exclude`, so both files are
 deliberately untracked, like every other brief in that directory. The brief
 forbids editing the exclude file, and force-adding them would defeat the same
 intention, so they live on disk and this section is the tracked record that
@@ -1753,7 +1753,7 @@ information-destroying migration — a bigger job than the entire boat system wa
 
 The brief said not to re-investigate the six refuted findings and to say so with
 a reproduction if I disagreed. **I found nothing to disagree with.** The
-remaining 17 confirmed defects are carried into `Goals/PLAN.md` Part 2 with a
+remaining 17 confirmed defects are carried into `design/PLAN.md` Part 2 with a
 recommended order, grouped by what blocks other work.
 
 ### Stage 2 addendum — the verification finished, and it changed the documents
@@ -1850,7 +1850,7 @@ order-independent.
 
 The repo **is** public — but `origin/main` is 6 prototype commits with **zero
 files under `src/lib/game/`**. Everything of value has never been pushed.
-`ideas.txt`, `Goals/` and `USER-REQUIREMENTS.md` are untracked, so the design
+`ideas.txt`, `design/` and `USER-REQUIREMENTS.md` are untracked, so the design
 backlog is not exposed; `DECISIONS.md` is tracked and would go public on the
 first push. There is a second contributor in the history with **0 surviving
 lines**. All 651 installed packages were scanned: **no GPL, LGPL or AGPL
@@ -1930,7 +1930,7 @@ Revisit when `latest` is `3.0.0`.
 - **One commit briefly failed lint.** The Stage 1 write-up was committed before
   prettier ran on `DECISIONS.md`; fixed forward in `91fb5c3` rather than by
   amending, because the rules forbid rewriting history.
-- **`Goals/RESEARCH.md` and `Goals/PLAN.md` are not committed.** `Goals/` is in
+- **`design/RESEARCH.md` and `design/PLAN.md` are not committed.** `design/` is in
   `.git/info/exclude` and the brief forbids editing it; force-adding would
   defeat the same intention. They exist on disk and this file is the tracked
   record.
@@ -1950,13 +1950,13 @@ the first thing to drop.
 
 ### What to read first
 
-1. **`Goals/PLAN.md`, Part 4** — the five questions only the owner can answer.
+1. **`design/PLAN.md`, Part 4** — the five questions only the owner can answer.
    The first one, whether the pearl bonus keeps being squared, gates the whole
    second-layer roadmap and is a pacing decision rather than a bug fix.
-2. **`Goals/PLAN.md`, Part 1 §1** — why the probabilistic paradigm shift becomes
+2. **`design/PLAN.md`, Part 1 §1** — why the probabilistic paradigm shift becomes
    a meter. It is the biggest change to the owner's stated intent in this pass,
    and the reasoning is the part most worth disagreeing with.
-3. **`Goals/RESEARCH.md`, the method section** — the 91/31/19/14 tally. It is
+3. **`design/RESEARCH.md`, the method section** — the 91/31/19/14 tally. It is
    the reason to trust the rest of that document, and the reason not to trust
    any single unverified research pass.
 4. **`src/lib/game/lifecycle.test.ts`** — the first test in this repo that
@@ -1967,7 +1967,7 @@ the first thing to drop.
 
 # FOURTH PASS
 
-Brief: `Goals/promt_goals/FOURTH_GOAL.md`. Authority: `Goals/ANSWERS.md` — the
+Brief: `design/promt_goals/FOURTH_GOAL.md`. Authority: `design/archive/ANSWERS.md` — the
 owner's own decisions, which override `PLAN.md` wherever they disagree.
 
 **The rule that governed the whole pass: build only what the owner has
@@ -2296,11 +2296,11 @@ Lighthouse after Stage 2: **100 / 100 / 100 / 100**.
 
 ## Stage 3 — Three documents
 
-Implemented nothing, as required. All three are on disk under `Goals/`, which is
+Implemented nothing, as required. All three are on disk under `design/`, which is
 locally excluded, so they are untracked by design — this section is the tracked
 record that they exist.
 
-### `Goals/PEARL-SIMULATION.md` — answering Q1
+### `design/archive/PEARL-SIMULATION.md` — answering Q1
 
 Both ladders run ten runs deep on the same seed, the un-squared one produced by
 a runtime toggle in a throwaway worktree that was then discarded. **The balance
@@ -2325,7 +2325,7 @@ from unaffordable to overshot by millions inside a single cash-in, because
 `spendPearls` leaves 99.997% of the pile in `state.pearls` where
 `pearlMultiplier` reads it.
 
-### `Goals/VOICE-SAMPLE.md` — answering Q3
+### `design/archive/VOICE-SAMPLE.md` — answering Q3
 
 Three rewrites — Guppy (24 baseChance, the first fish anyone lands), Redtail
 Catfish (mid), Whale Shark (rarest at 1) — current and rewritten side by side,
@@ -2337,7 +2337,7 @@ All 47 are costed (~10,400 characters, copy only, no code path, no test change),
 with one honest paragraph on the risk: **the failure mode is sameness, not
 offence.** Nothing was rewritten.
 
-### `Goals/SHIFTS-SPEC.md` — the structure
+### `design/SHIFTS-SPEC.md` — the structure
 
 The arithmetic was computed twice, independently, and agrees to the digit.
 
@@ -2473,23 +2473,23 @@ shipped, but the drop did not: `distributeCatch` can only produce a `Fish` and
 `FishType` is a six-member enum, so a junk drop needs a parallel table, a hold
 that is not a fish, a Fishdex that does not count it and a sale path that does
 not price it per-type. The brief said to add it only if it stayed small. It did
-not. Recorded as `Goals/IDEAS.md` **N2** with a five-step plan, not forgotten.
+not. Recorded as `design/IDEAS.md` **N2** with a five-step plan, not forgotten.
 
 Nothing else was cut. The map's inaccuracy hook, vendor attachment and the map
 itself — the first three things the brief nominated for cutting — all shipped.
 
 ### What to read first
 
-1. **`Goals/PEARL-SIMULATION.md`** and **`Goals/VOICE-SAMPLE.md`** — two
+1. **`design/archive/PEARL-SIMULATION.md`** and **`design/archive/VOICE-SAMPLE.md`** — two
    decisions waiting on you, both with the work already done. Q1 blocks the
    entire second layer.
-2. **`Goals/SHIFTS-SPEC.md` §9** — the offline trace. If the shift feature is
+2. **`design/SHIFTS-SPEC.md` §9** — the offline trace. If the shift feature is
    built without those seven fixes, the first player to reload at the wrong
    moment is told they sold minus a hundred trillion coins and then cannot play.
 3. **Play the first ten minutes.** That is what changed most: a mud pool, a
    bucket that fills, a trader on a bar, and a bicycle that is the first thing
    you actually want.
-4. **`Goals/ANSWERS.md`** — every answered item now carries a short note saying
+4. **`design/archive/ANSWERS.md`** — every answered item now carries a short note saying
    what was built, under your own words, which were left untouched.
 
 ---
