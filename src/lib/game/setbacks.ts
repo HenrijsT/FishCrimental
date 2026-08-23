@@ -7,6 +7,7 @@ import {
 	SETBACK_MAX_SECONDS,
 	SETBACK_RAMP_SECONDS,
 	UPGRADES,
+	UPGRADE_IDS,
 	type UpgradeId
 } from './config';
 import {
@@ -189,16 +190,25 @@ export function strike(
 		handIncomePerSecond(state, modifiers)
 	);
 
-	const level = state.upgrades[definition.track];
+	// The track named in the definition, unless the player has nothing on it.
+	//
+	// A Setback aimed at a track sitting at level 0 took nothing, refunded
+	// nothing, and was marked seen — so keeping Glimmer Lure unbought until the
+	// River opened deleted The Bait Thief for free. Worse in general: holding
+	// any Setback's track two levels below what you could afford capped that
+	// Setback at the price of two cheap levels.
+	//
+	// So the flavour is a preference, not a promise. If there is nothing there
+	// to take, it takes from wherever there is most.
+	const track = trackFor(state, definition.track);
+	const level = state.upgrades[track];
 	const levels = Decimal.min(D(SETBACK_LEVELS), level);
-	const gross = levels.gt(0)
-		? upgradeBulkCost(definition.track, level.minus(levels), levels)
-		: d0();
+	const gross = levels.gt(0) ? upgradeBulkCost(track, level.minus(levels), levels) : d0();
 
 	const lost = Decimal.min(gross, income.times(seconds));
 	const refunded = Decimal.max(d0(), gross.minus(lost));
 
-	refundUpgrade(state, definition.track, levels, refunded);
+	refundUpgrade(state, track, levels, refunded);
 
 	state.setbacksSeen = [...state.setbacksSeen, definition.id];
 	delete state.setbacksArmedAt[definition.id];
@@ -207,7 +217,7 @@ export function strike(
 		id: definition.id,
 		name: definition.name,
 		blow: definition.blow,
-		track: definition.track,
+		track,
 		seconds,
 		lost,
 		refunded,
@@ -251,6 +261,23 @@ export function evaluateSetbacks(state: GameState, modifiers: Modifiers): Setbac
 	}
 
 	return { armed, hits };
+}
+
+/**
+ * Which track a Setback actually takes from.
+ *
+ * Its own, if there is anything on it. Otherwise the deepest track the player
+ * has — the one where two levels is a real loss — because a Setback that costs
+ * nothing is not a Setback, and it is spent for good the moment it fires.
+ */
+function trackFor(state: GameState, preferred: UpgradeId): UpgradeId {
+	if (state.upgrades[preferred].gt(0)) return preferred;
+
+	let best = preferred;
+	for (const id of UPGRADE_IDS) {
+		if (state.upgrades[id].gt(state.upgrades[best])) best = id;
+	}
+	return best;
 }
 
 /** What a Setback took, in words the panel can use. */

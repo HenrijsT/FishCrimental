@@ -22,10 +22,15 @@
 		{#each topics as topic (topic.id)}
 			{@const isOpen = open === topic.id}
 			<li>
+				<!--
+					`aria-controls` only while the panel it names exists. Pointing at
+					an id that is not in the document is what axe reports as
+					`aria-valid-attr-value`.
+				-->
 				<button
 					class="head"
 					aria-expanded={isOpen}
-					aria-controls="help-{topic.id}"
+					aria-controls={isOpen ? `help-${topic.id}` : undefined}
 					onclick={() => (open = isOpen ? null : topic.id)}
 				>
 					<span class="title">{topic.title}</span>

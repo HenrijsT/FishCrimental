@@ -114,7 +114,7 @@
 			<button
 				class="dismiss"
 				aria-label="Dismiss {fish.name}"
-				onclick={() => game.dismissNewSpecies()}>×</button
+				onclick={() => game.dismissSpecies(fish.name)}>×</button
 			>
 		</div>
 	{/each}

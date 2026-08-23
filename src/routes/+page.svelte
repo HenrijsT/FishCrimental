@@ -15,7 +15,6 @@
 	import HarbourPanel from '$lib/components/HarbourPanel.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
 	import HelpPanel from '$lib/components/HelpPanel.svelte';
-	import UnlockGuide from '$lib/components/UnlockGuide.svelte';
 	import { availableTopics } from '$lib/game/help';
 	import MapPanel from '$lib/components/MapPanel.svelte';
 	import MarketPanel from '$lib/components/MarketPanel.svelte';
@@ -49,11 +48,11 @@
 	 * second look at a note about something they have just unlocked.
 	 */
 	let explained = $state<string[]>([]);
-	let guide = $state<string | null>(null);
 
 	// Announce one new thing at a time, and only what has actually opened up.
+	// The guide queues behind any other modal — `ModalHost` decides the order.
 	$effect(() => {
-		if (!game.state.settings.unlockGuides || guide !== null) return;
+		if (!game.state.settings.unlockGuides || game.unlockGuide !== null) return;
 		const fresh = availableTopics(game.state).find((topic) => !explained.includes(topic.id));
 		if (!fresh) return;
 		// Everything already open at the moment the player first sees this is
@@ -63,7 +62,7 @@
 			return;
 		}
 		explained = [...explained, fresh.id];
-		guide = fresh.id;
+		game.unlockGuide = fresh.id;
 	});
 
 	const tabs = $derived(
@@ -88,6 +87,9 @@
 	});
 
 	function selectTab(id: TabId, target: string | null = null) {
+		// Refuse anything that is not a real tab. The hash is player-editable and
+		// a typo used to leave the panel area blank with no way back.
+		if (!TABS.some((tab) => tab.id === id)) return;
 		active = id;
 		focus = target;
 		if (typeof history !== 'undefined') {
@@ -197,9 +199,7 @@
 	</div>
 </div>
 
-<ModalHost />
-
-<UnlockGuide topic={guide} onclose={() => (guide = null)} onhelp={(tab) => selectTab(tab)} />
+<ModalHost onnavigate={(tab) => selectTab(tab)} />
 
 <div inert={game.activeModal !== null} class="contents">
 	<Toasts onnavigate={(tab, target) => selectTab(tab, target ?? null)} />

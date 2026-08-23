@@ -1,81 +1,51 @@
 import { describe, expect, it } from 'vitest';
-import { SOURCE_ORDER } from '$lib/game/config';
-import {
-	fishes,
-	sourceToAllFishChanceIndex,
-	sourceToFishChanceIndex,
-	sourceToFishTypeChanceIndex,
-	sourcesToFish,
-	sourcesToFishTypes
-} from './index';
+import { fishes, sourcesToFish, sourcesToFishTypes } from './index';
 import { FishingSources } from '$lib/fishing_sources';
 
 const allSources = Object.values(FishingSources);
 
+/**
+ * This file used to test a second probability model that lived beside the
+ * catalogue and that nothing in the game ever consulted — the engine builds its
+ * own tables in `buildCatchTable`, folding in luck and each source's
+ * `typeWeights`. Two contradictory answers to "how likely is this fish here",
+ * with only the unused one under test, is worse than one. Both are gone.
+ *
+ * What is left is the catalogue itself, which is data, and the invariants that
+ * data has to satisfy for the engine to be able to build anything from it.
+ */
 describe('fish catalogue', () => {
-	it('has fish and every fish lists at least one source', () => {
+	it('has fish, and every fish is catchable somewhere', () => {
 		const all = Object.values(fishes);
 		expect(all.length).toBeGreaterThan(40);
 		for (const fish of all) {
 			expect(fish.sources.length).toBeGreaterThan(0);
 			expect(fish.baseChance).toBeGreaterThan(0);
+		}
+	});
+
+	it('describes every fish at a length worth stopping to read', () => {
+		for (const fish of Object.values(fishes)) {
 			expect(fish.description.length).toBeGreaterThan(20);
 		}
 	});
 
-	it('gives every source at least one catchable fish', () => {
+	it('names every fish exactly once', () => {
+		const names = Object.values(fishes).map((fish) => fish.name);
+		expect(new Set(names).size).toBe(names.length);
+	});
+
+	it('gives every source at least one catchable fish, and a type to catch it as', () => {
 		for (const source of allSources) {
 			expect(sourcesToFish[source].length).toBeGreaterThan(0);
 			expect(sourcesToFishTypes[source].length).toBeGreaterThan(0);
 		}
 	});
-});
 
-describe('per-source catch distribution', () => {
-	// Replaces the import-time console.log simulation that used to live in index.ts.
-	it('only ever yields fish that belong to the source', () => {
+	it('lists a source on a fish exactly when that source lists the fish', () => {
 		for (const source of allSources) {
-			const index = sourceToAllFishChanceIndex[source];
-			const allowed = new Set(sourcesToFish[source].map((f) => f.name));
-
-			for (let i = 0; i < 500; i++) {
-				const caught = index.pick((i + 0.5) / 500);
-				expect(allowed.has(caught.name)).toBe(true);
-			}
-		}
-	});
-
-	it('only ever yields fish types that belong to the source', () => {
-		for (const source of allSources) {
-			const index = sourceToFishTypeChanceIndex[source];
-			const allowed = new Set(sourcesToFishTypes[source]);
-
-			for (let i = 0; i < 200; i++) {
-				expect(allowed.has(index.pick((i + 0.5) / 200))).toBe(true);
-			}
-		}
-	});
-
-	it('keeps rarer fish types rarer than common ones in the Pond', () => {
-		const index = sourceToFishTypeChanceIndex[SOURCE_ORDER[0]];
-		const counts = new Map<string, number>();
-		const samples = 20_000;
-
-		for (let i = 0; i < samples; i++) {
-			const type = index.pick((i + 0.5) / samples);
-			counts.set(type, (counts.get(type) ?? 0) + 1);
-		}
-
-		const small = counts.get('Small') ?? 0;
-		expect(small / samples).toBeGreaterThan(0.5);
-	});
-
-	it('builds a per-type index for every type the source offers', () => {
-		for (const source of allSources) {
-			for (const type of sourcesToFishTypes[source]) {
-				const index = sourceToFishChanceIndex[source][type];
-				expect(index).toBeDefined();
-				expect(index.size).toBeGreaterThan(0);
+			for (const fish of sourcesToFish[source]) {
+				expect(fish.sources).toContain(source);
 			}
 		}
 	});

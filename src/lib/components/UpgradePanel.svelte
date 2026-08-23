@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { UPGRADES, UPGRADE_IDS } from '$lib/game/config';
-	import { upgradeBulkCost } from '$lib/game/engine';
+	import { MIN_CAST_SECONDS, UPGRADES, UPGRADE_IDS } from '$lib/game/config';
+	import { upgradeBulkCost, upgradeDoesNothing } from '$lib/game/engine';
 	import { game } from '$lib/game/state.svelte';
 	import BuyAmountPicker from './BuyAmountPicker.svelte';
 	import Num from './Num.svelte';
@@ -27,6 +27,7 @@
 			{@const ceiling = game.ceilings[id]}
 			{@const maxed = level.gte(config.maxLevel)}
 			{@const capped = !maxed && level.gte(ceiling)}
+			{@const inert = upgradeDoesNothing(state, id, level)}
 			{@const stockedAt = game.stockedAt[id]}
 			{@const step = game.upgradeStep(id)}
 			{@const cost = step.gt(0) ? upgradeBulkCost(id, level, step) : null}
@@ -40,11 +41,17 @@
 					<p class="desc muted">{config.description}</p>
 					<p class="effect">
 						<span class="now">{config.format(level.toNumber())}</span>
-						{#if !maxed && step.gt(0)}
+						{#if !maxed && step.gt(0) && !inert}
 							<span class="arrow faint">→</span>
 							<span class="next">{config.format(level.plus(step).toNumber())}</span>
 						{/if}
 					</p>
+					{#if inert}
+						<p class="locked">
+							A cast cannot get shorter than {MIN_CAST_SECONDS}s, and yours already is at your
+							fastest water. Another rod costs real coins and changes nothing.
+						</p>
+					{/if}
 					{#if capped}
 						<p class="locked">
 							The best one anyone around here sells.
@@ -58,11 +65,14 @@
 
 				<button
 					class="buy"
-					disabled={maxed || capped || !affordable || step.lte(0)}
+					aria-label="Buy {config.name}"
+					disabled={maxed || capped || inert || !affordable || step.lte(0)}
 					onclick={() => game.buy(id)}
 				>
 					{#if maxed}
 						Maxed
+					{:else if inert}
+						No faster
 					{:else if capped}
 						Not sold here
 					{:else if step.lte(0) || cost === null}

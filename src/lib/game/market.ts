@@ -108,6 +108,23 @@ export function averagePrice(state: GameState, species: string, quantity: Decima
 	const before = pressureOn(state, species);
 	const exponent = 1 - MARKET_IMPACT;
 
+	// A small sale is priced at its midpoint instead of by the difference.
+	//
+	// `(1 + (p+q)/S)^0.75 - (1 + p/S)^0.75` is a difference of two nearly equal
+	// numbers, and once `q/(S+p)` falls below about 1e-16 every significant
+	// digit cancels and the whole thing rounds to **zero** — a sale that pays
+	// nothing while the price board says the fish is worth 8.8e-4. At ordinary
+	// scale the same instability ran the other way and priced a single fish at
+	// 1.0000640, above the untouched price, which a strictly-decreasing curve
+	// cannot do.
+	//
+	// The price at `p + q/2` agrees with the integral to second order in `q/S`,
+	// and it is subtraction-free, so it is exact where the closed form is noise.
+	const span = quantity.div(depth.plus(before));
+	if (span.lt(1e-6)) {
+		return before.plus(quantity.div(2)).div(depth).plus(1).pow(-MARKET_IMPACT);
+	}
+
 	const proceeds = depth
 		.div(exponent)
 		.times(
@@ -142,10 +159,16 @@ export function applyPressure(state: GameState, species: string, quantity: Decim
  */
 export function settleMarket(state: GameState, now = Date.now()): void {
 	const last = state.marketUpdatedAt;
-	state.marketUpdatedAt = now;
+
+	// Never move the mark backwards.
+	//
+	// Clamping the *elapsed* time to zero blocks the immediate windfall but not
+	// the one after it: writing `now` unconditionally meant a clock that jumped
+	// back fifteen minutes handed that same fifteen minutes out again as the
+	// clock caught up. A free half-life of price recovery, repeatable.
+	state.marketUpdatedAt = Math.max(last, now);
 
 	if (last <= 0) return;
-	// A clock that went backwards is a clock that went backwards, not a windfall.
 	const seconds = Math.max(0, (now - last) / 1000);
 	if (seconds <= 0) return;
 

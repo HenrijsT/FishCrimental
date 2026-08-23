@@ -284,6 +284,25 @@ export const DECKHAND_BASE_EFFICIENCY = 0.42;
 /** A cast can never get faster than this, however much rod you buy. */
 export const MIN_CAST_SECONDS = 0.05;
 
+/**
+ * How much of the Glimmer Lure's effect redistributes *within* the rare types.
+ *
+ * Luck moves weight from the common types toward the rare ones. That works
+ * beautifully in the shallows and does nothing at all in the deep: Offshore is
+ * 97% rare by weight already and the Ocean is 96%, so multiplying the rare share
+ * can only ever reach into the 3% that is left. Measured ceilings were **x1.031
+ * at Offshore and x1.042 at the Ocean** — while the button honestly read "rare
+ * weight x66749.59", and the game's own advice to buy the cheapest thing bought
+ * about seventeen near-null levels.
+ *
+ * So luck now also sorts *among* the rare types, by how deep in
+ * `RARE_FISH_TYPES` they sit: Medium gets `luck`, Large gets `luck^1.25`,
+ * Shark `luck^1.5`, Erotic `luck^1.75`. At luck 1 every exponent is 1 and
+ * nothing whatsoever changes, so this cannot disturb a player who has not
+ * bought a lure.
+ */
+export const LUCK_TIER_SHARE = 0.25;
+
 // ---------------------------------------------------------------------------
 // Selling: the trader, the bicycle, the Assistant
 // ---------------------------------------------------------------------------
@@ -483,10 +502,15 @@ export const POACH_GRACE_SECONDS = 90;
  * while the zero-coin state stays mathematically out of reach. A flat fine
  * would take a new player's entire game and a veteran's rounding error.
  *
- * The first offence is free. You get a warning and your catch back to the
- * water, and that is all.
+ * The first offence is not free.
+ *
+ * It was, and it made the first poach at each of six waters cost literally
+ * nothing but a minute ashore — and a player who sold or listed the catch
+ * before he arrived lost nothing at all, because a warden cannot confiscate a
+ * fish that is already money. The fine is what answers that, so it has to
+ * exist from the first visit.
  */
-export const POACH_FINE_STEPS = [0, 0.15, 0.3, 0.45];
+export const POACH_FINE_STEPS = [0.1, 0.25, 0.4, 0.55];
 
 /** How long being escorted off the water keeps you from casting. */
 export const POACH_BUSTED_SECONDS = 60;

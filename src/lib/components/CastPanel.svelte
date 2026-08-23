@@ -50,18 +50,31 @@
 
 	let captured: { element: HTMLElement; pointerId: number } | null = null;
 
+	/**
+	 * The cast belongs to the finger that started it.
+	 *
+	 * A second contact — a palm, a resting thumb, a tremor — used to overwrite
+	 * `captured` with its own pointer id, and lifting *it* then ended a cast the
+	 * first finger was still holding. The people most likely to produce a stray
+	 * second contact are the people least able to afford losing the cast.
+	 */
 	function hold(event: PointerEvent) {
+		if (captured !== null) return;
+
 		const element = event.currentTarget as HTMLElement;
 		try {
 			element.setPointerCapture(event.pointerId);
 			captured = { element, pointerId: event.pointerId };
 		} catch {
-			captured = null;
+			captured = { element, pointerId: event.pointerId };
 		}
 		game.beginCast();
 	}
 
-	function release() {
+	function release(event?: PointerEvent) {
+		// Any other finger lifting is not the end of this cast.
+		if (event && captured && event.pointerId !== captured.pointerId) return;
+
 		if (captured) {
 			try {
 				captured.element.releasePointerCapture(captured.pointerId);
@@ -124,7 +137,7 @@
 		onpointerleave={release}
 		{onkeydown}
 		{onkeyup}
-		onblur={release}
+		onblur={() => release()}
 	>
 		<span class="verb">{game.casting ? 'Reeling' : 'Hold to fish'}</span>
 		<span class="hint faint">press and hold — or hold space</span>

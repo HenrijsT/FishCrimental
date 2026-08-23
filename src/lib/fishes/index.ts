@@ -3,10 +3,9 @@ import { mediumFishes } from './medium_fishes';
 import { sharkFishes } from './shark_fishes';
 import { FishingSources, sources } from '../fishing_sources';
 import type { Fish } from './fish';
-import { RandomIndex } from '$lib/random_picker';
 import { smallFishes } from './small_fishes';
 import { oddityFishes } from './oddity_fishes';
-import { type FishType, fishTypeBaseChance } from '$lib/fish_types';
+import type { FishType } from '$lib/fish_types';
 
 export const fishes = {
 	...smallFishes,
@@ -39,51 +38,16 @@ export const sourcesToFishTypes = (Object.keys(sources) as Array<keyof typeof so
 	{} as Record<FishingSources, FishType[]>
 );
 
-// Construct a random index for fish types per source
-export const sourceToFishTypeChanceIndex = (
-	Object.keys(sources) as Array<keyof typeof sources>
-).reduce(
-	(final, source) => {
-		final[source] = new RandomIndex(
-			[...fishTypeBaseChance.entries()].filter(([k]) => sourcesToFishTypes[source].indexOf(k) >= 0)
-		);
-		return final;
-	},
-	{} as Record<FishingSources, RandomIndex<FishType>>
-);
-
-// Construct a random index for fish per type per source
-export const sourceToFishChanceIndex: Record<
-	FishingSources,
-	Record<FishType, RandomIndex<Fish>>
-> = {} as Record<FishingSources, Record<FishType, RandomIndex<Fish>>>;
-
-(Object.keys(sources) as Array<keyof typeof sources>).forEach((source) => {
-	// Initialize the nested object for each source
-	sourceToFishChanceIndex[source] = {} as Record<FishType, RandomIndex<Fish>>;
-
-	const availableFishTypes = sourcesToFishTypes[source];
-
-	availableFishTypes.forEach((type) => {
-		const fishesForTypeAndSource = sourcesToFish[source].filter((fish) => fish.category === type);
-
-		if (fishesForTypeAndSource.length > 0) {
-			sourceToFishChanceIndex[source][type] = new RandomIndex(
-				fishesForTypeAndSource.map((fish) => [fish, fish.baseChance])
-			);
-		}
-	});
-});
-
-// Flat per-source index over every fish that source can yield
-export const sourceToAllFishChanceIndex = (
-	Object.keys(sources) as Array<keyof typeof sources>
-).reduce(
-	(final, source) => {
-		final[source] = new RandomIndex(
-			sourcesToFish[source].map((fish) => [fish, fish.baseChance] as [Fish, number])
-		);
-		return final;
-	},
-	{} as Record<FishingSources, RandomIndex<Fish>>
-);
+/*
+ * Deleted here: a second, parallel probability model.
+ *
+ * `sourceToFishTypeChanceIndex`, `sourceToFishChanceIndex` and
+ * `sourceToAllFishChanceIndex` built weighted indices from `fishTypeBaseChance`
+ * and `fish.baseChance` — a complete answer to "how likely is this fish here"
+ * that nothing in the game ever asked. The engine has its own answer,
+ * `buildCatchTable`, which folds in luck and the source's own `typeWeights`,
+ * and that is the one the game plays by.
+ *
+ * Two contradictory models with only the unused one under test is worse than
+ * one, and it made this file code rather than data. What is left is data.
+ */

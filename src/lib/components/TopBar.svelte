@@ -36,7 +36,7 @@
 		justify-content: space-between;
 		gap: var(--gap);
 		padding-bottom: 0.5rem;
-		border-bottom: 1px solid var(--edge);
+		border-bottom: 1px solid var(--rule);
 	}
 
 	.tagline {

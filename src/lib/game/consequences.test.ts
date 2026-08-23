@@ -11,7 +11,8 @@ import {
 	SETBACK_LEVELS,
 	SETBACK_MAX_SECONDS,
 	SETBACK_RAMP_SECONDS,
-	SOURCE_ORDER
+	SOURCE_ORDER,
+	UPGRADE_IDS
 } from './config';
 import {
 	accumulate,
@@ -20,6 +21,9 @@ import {
 	handIncomePerSecond,
 	holdCount,
 	refundUpgrade,
+	consignmentCount,
+	listForSale,
+	sellHold,
 	sourceBlocker,
 	upgradeBulkCost
 } from './engine';
@@ -36,13 +40,22 @@ import {
 	stopPoaching
 } from './police';
 import { SETBACKS, SETBACKS_BY_ID, escalation, evaluateSetbacks, strike } from './setbacks';
+import { claimLicence, startExam } from './exams';
+import { ledgerWorth } from './market';
 import { fromRaw, serialize } from './save';
 import type { GameState } from './types';
 
-/** Open water the player has no paper for. */
+/**
+ * A player who can see water they have no right to be on.
+ *
+ * Note what is *not* done here: the source is left locked. `canUnlock` refuses
+ * any source whose licence is missing and `licencesFor` grants the licence for
+ * anything unlocked, so "unlocked but unlicensed" is a state the game cannot
+ * reach — which is exactly why the first version of `canPoach` could never fire.
+ */
 function unlicensed(): GameState {
 	const state = createInitialState();
-	for (const source of SOURCE_ORDER) state.unlocked[source] = true;
+	state.mapLevel = D(3);
 	state.coins = D(1_000_000);
 	return state;
 }
@@ -50,41 +63,56 @@ function unlicensed(): GameState {
 const POACHED = FishingSources.Stream;
 
 describe('poaching is a deliberate act', () => {
-	it('is only ever offered on water that is open and unlicensed', () => {
+	it('is offered on water you have no right to be on, and only there', () => {
 		const state = unlicensed();
 		expect(canPoach(state, POACHED)).toBe(true);
+		// Not water you own outright.
 		expect(canPoach(state, SOURCE_ORDER[0])).toBe(false);
+	});
 
-		const locked = createInitialState();
-		expect(canPoach(locked, POACHED)).toBe(false);
+	it('is not offered on water that is not even on the chart yet', () => {
+		const state = createInitialState();
+		expect(canPoach(state, FishingSources.Ocean)).toBe(false);
+	});
+
+	it('is not offered in open water without a hull under you', () => {
+		const state = unlicensed();
+		state.mapLevel = D(9);
+		expect(canPoach(state, FishingSources.Offshore)).toBe(false);
+		state.boat.owned = true;
+		expect(canPoach(state, FishingSources.Offshore)).toBe(true);
 	});
 
 	it('unblocks the water it is aimed at, and only that water', () => {
 		const state = unlicensed();
-		expect(sourceBlocker(state, POACHED)).toBe('licence');
+		expect(sourceBlocker(state, POACHED)).toBe('locked');
 
 		poachSource(state, POACHED);
 		expect(sourceBlocker(state, POACHED)).toBeNull();
-		expect(sourceBlocker(state, FishingSources.River)).toBe('licence');
+		expect(sourceBlocker(state, FishingSources.River)).toBe('locked');
 	});
 
-	it('actually pays — the crew work it', () => {
+	/**
+	 * Poaching is something the player does with their own hands and their own
+	 * rig. A deckhand is hired *at* a source and there is no hiring one at water
+	 * you do not own, so the crew never poach.
+	 */
+	it('actually pays — the rig works it', () => {
 		const state = unlicensed();
 		state.hasAssistant = true;
-		state.deckhands[POACHED] = D(10);
+		state.autoFisher = D(20);
 
-		const before = accumulate(state, computeModifiers(state), 30).value;
+		const before = accumulate(state, computeModifiers(state), 60).value;
 		poachSource(state, POACHED);
-		const after = accumulate(state, computeModifiers(state), 30).value;
+		const after = accumulate(state, computeModifiers(state), 60).value;
 
-		expect(before.toNumber()).toBe(0);
-		expect(after.gt(0)).toBe(true);
+		expect(after.gt(before)).toBe(true);
 	});
 
-	it('is free if you leave before anyone notices', () => {
+	it('keeps the catch if you leave before anyone notices', () => {
 		const state = unlicensed();
 		state.hasAssistant = true;
-		state.deckhands[POACHED] = D(10);
+		state.autoFisher = D(20);
 		poachSource(state, POACHED);
 
 		accumulate(state, computeModifiers(state), 30);
@@ -96,13 +124,42 @@ describe('poaching is a deliberate act', () => {
 		expect(state.poaching).toBeNull();
 		expect(holdCount(state).eq(kept)).toBe(true);
 	});
+
+	/**
+	 * The clock belongs to the water, not to the visit.
+	 *
+	 * Resetting it on `stopPoaching` made the grace period farmable without
+	 * limit: fifty consecutive cycles of poach, eighty-nine seconds, pack up
+	 * cost nothing at all. Someone who saw you this morning has not forgotten by
+	 * the afternoon.
+	 */
+	it('does not forget the clock when you pack up and come back', () => {
+		const state = unlicensed();
+		poachSource(state, POACHED);
+		runPolice(state, computeModifiers(state), POACH_GRACE_SECONDS - 1);
+
+		stopPoaching(state);
+		poachSource(state, POACHED);
+
+		expect(graceLeft(state)).toBeLessThanOrEqual(1);
+		expect(runPolice(state, computeModifiers(state), 2)).not.toBeNull();
+	});
+
+	it('but does start fresh at different water', () => {
+		const state = unlicensed();
+		poachSource(state, POACHED);
+		runPolice(state, computeModifiers(state), POACH_GRACE_SECONDS - 1);
+
+		poachSource(state, FishingSources.River);
+		expect(graceLeft(state)).toBe(POACH_GRACE_SECONDS);
+	});
 });
 
 describe('the warden', () => {
 	function poaching(): GameState {
 		const state = unlicensed();
 		state.hasAssistant = true;
-		state.deckhands[POACHED] = D(20);
+		state.autoFisher = D(24);
 		poachSource(state, POACHED);
 		return state;
 	}
@@ -123,43 +180,83 @@ describe('the warden', () => {
 		expect(graceLeft(state)).toBe(POACH_GRACE_SECONDS - 30);
 	});
 
+	/**
+	 * Species by species, not by value share.
+	 *
+	 * With one scalar the warden seized "nine hundred coins' worth" out of a
+	 * mixed bucket proportionally, which meant ninety legal guppies went back in
+	 * the water so that one stolen pike could stay.
+	 */
 	it('takes the poached catch and leaves the legal fish alone', () => {
 		const state = poaching();
-		// Fish already in the bucket, landed honestly.
+		// A hundred fish already in the bucket, landed honestly.
 		state.hold[FishType.Small] = D(100);
 		state.holdValue = D(10_000);
+		state.holdSpecies.fish.Guppy = D(100);
+		state.holdSpecies.worth.Guppy = D(10_000);
 
-		accumulate(state, computeModifiers(state), 60);
-		const poachedWorth = state.poachedValue;
+		accumulate(state, computeModifiers(state), 120);
+		const poachedWorth = ledgerWorth(state.poached);
 		expect(poachedWorth.gt(0)).toBe(true);
 
-		const total = state.holdValue;
 		bust(state, computeModifiers(state));
 
-		expect(state.holdValue.toNumber()).toBeCloseTo(total.minus(poachedWorth).toNumber(), 3);
-		expect(state.holdValue.toNumber()).toBeCloseTo(10_000, 3);
+		// Every legal Guppy is still there.
+		expect(state.holdSpecies.fish.Guppy.toNumber()).toBe(100);
+		expect(state.holdValue.gte(10_000)).toBe(true);
+		expect(Object.keys(state.poached.fish)).toHaveLength(0);
 	});
 
-	it('cannot confiscate more than is still in the bucket', () => {
+	/**
+	 * He cannot confiscate money. That is what the fine is for, and it is why
+	 * the first offence stopped being free.
+	 */
+	it('cannot confiscate a catch that has already been sold', () => {
 		const state = poaching();
 		accumulate(state, computeModifiers(state), 60);
-		// Sold it all before he got there.
-		state.holdValue = d0();
-		for (const type of Object.values(FishType)) state.hold[type] = d0();
+		sellHold(state, computeModifiers(state));
 
 		const caught = bust(state, computeModifiers(state))!;
 		expect(caught.confiscated.toNumber()).toBe(0);
-		expect(state.holdValue.toNumber()).toBe(0);
+		expect(caught.fine.gt(0)).toBe(true);
 	});
 
-	it('lets the first one go with a warning', () => {
+	/**
+	 * Listing used to launder a poach outright: the stolen fish moved to the
+	 * consignment, the debt stayed, and it was then settled out of whatever
+	 * legal fish landed next.
+	 */
+	it('follows the poached catch onto the quay', () => {
+		const state = poaching();
+		state.hasAssistant = false;
+		state.bucketLevel = D(6);
+		accumulate(state, computeModifiers(state), 120);
+		expect(holdCount(state).gt(0)).toBe(true);
+
+		listForSale(state);
+		expect(consignmentCount(state).gt(0)).toBe(true);
+
+		const caught = bust(state, computeModifiers(state))!;
+		expect(caught.confiscated.gt(0)).toBe(true);
+		expect(consignmentCount(state).toNumber()).toBeCloseTo(0, 6);
+	});
+
+	/**
+	 * The first offence is not free.
+	 *
+	 * It was, and that made the first poach at each of six waters cost nothing
+	 * but a minute ashore — and a player who sold the catch before he arrived
+	 * lost nothing at all, because a warden cannot confiscate money.
+	 */
+	it('fines even the first offence, lightly', () => {
 		const state = poaching();
 		const coins = state.coins;
 		expect(fineFraction(state, POACHED)).toBe(POACH_FINE_STEPS[0]);
+		expect(POACH_FINE_STEPS[0]).toBeGreaterThan(0);
 
 		const caught = bust(state, computeModifiers(state))!;
-		expect(caught.fine.toNumber()).toBe(0);
-		expect(state.coins.eq(coins)).toBe(true);
+		expect(caught.fine.toNumber()).toBeCloseTo(coins.times(POACH_FINE_STEPS[0]).toNumber(), 6);
+		expect(state.coins.lt(coins)).toBe(true);
 	});
 
 	it('fines a percentage, so coins approach zero and never reach it', () => {
@@ -249,13 +346,49 @@ describe('a poach across a reload', () => {
 		expect(back.poachElapsed).toBe(42);
 	});
 
-	it('is dropped if the licence has since been taken', () => {
+	it('is dropped once the water is legitimately the player’s', () => {
 		const state = unlicensed();
 		poachSource(state, POACHED);
 		state.licences.inland = true;
+		state.unlocked[POACHED] = true;
 
 		settlePoachOnLoad(state);
 		expect(state.poaching).toBeNull();
+	});
+
+	/**
+	 * Taking the licence mid-poach used to leave the flag set, so the warden
+	 * went on counting and eventually fined a player for water they now held a
+	 * card for. `settlePoachOnLoad` caught it on a reload, which is why "poach,
+	 * take the licence, reload" looked fine and "keep playing" did not.
+	 */
+	it('ends the moment the exam that legalises it is passed', () => {
+		const state = unlicensed();
+		// Water the player owns but has no paper for. Not reachable in normal
+		// play — `licencesFor` grants the card with the water — but it is what a
+		// damaged `licences` object looks like, and it is the shape the warden
+		// used to keep fining after the card was in hand.
+		state.unlocked[FishingSources.MudPool] = true;
+		state.unlocked[FishingSources.Pond] = true;
+		state.unlocked[POACHED] = true;
+		poachSource(state, POACHED);
+
+		expect(startExam(state, 'inland', () => 0)).toBe(true);
+		state.exam!.progress = state.exam!.target;
+		expect(claimLicence(state)).toBe('inland');
+
+		expect(state.poaching).toBeNull();
+		expect(runPolice(state, computeModifiers(state), 1_000)).toBeNull();
+	});
+
+	it('but keeps going on water the player still has not bought', () => {
+		const state = unlicensed();
+		state.licences.inland = true;
+		poachSource(state, POACHED);
+
+		// Paper is not ownership. The Stream is still not theirs.
+		settlePoachOnLoad(state);
+		expect(state.poaching).toBe(POACHED);
 	});
 });
 
@@ -353,11 +486,31 @@ describe('Setbacks ambush on events, never on a roll', () => {
 	});
 
 	it('never takes a track below zero', () => {
+		const state = createInitialState();
+		state.setbacksArmedAt.bait_thief = 0;
+		for (const id of UPGRADE_IDS) state.upgrades[id] = d0();
+
+		const hit = strike(state, computeModifiers(state), SETBACKS_BY_ID.get('bait_thief')!);
+
+		for (const id of UPGRADE_IDS) expect(state.upgrades[id].gte(0)).toBe(true);
+		expect(hit.levels).toBe(0);
+	});
+
+	/**
+	 * A Setback aimed at a track sitting at level 0 took nothing, refunded
+	 * nothing, and was still marked seen — so keeping Glimmer Lure unbought
+	 * until the River opened deleted The Bait Thief for free.
+	 */
+	it('takes from wherever there is most when its own track is empty', () => {
 		const state = armed();
 		state.upgrades.lure = d0();
+		state.upgrades.rod = D(9);
+
 		const hit = strike(state, computeModifiers(state), SETBACKS_BY_ID.get('bait_thief')!);
-		expect(state.upgrades.lure.gte(0)).toBe(true);
-		expect(hit.levels).toBe(0);
+
+		expect(hit.levels).toBe(SETBACK_LEVELS);
+		expect(hit.track).not.toBe('lure');
+		expect(state.upgrades.rod.toNumber()).toBe(9 - SETBACK_LEVELS);
 	});
 });
 

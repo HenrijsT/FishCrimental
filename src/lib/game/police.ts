@@ -1,17 +1,24 @@
 import Decimal from 'break_eternity.js';
 import { d0 } from '$lib/decimal';
-import { FISH_TYPES } from '$lib/fish_types';
+import type { FishType } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
 import {
 	FUEL_PRICE,
 	POACH_BUSTED_SECONDS,
 	POACH_FINE_STEPS,
 	POACH_FUEL_FLOOR_TANKS,
-	POACH_GRACE_SECONDS
+	POACH_GRACE_SECONDS,
+	needsBoat
 } from './config';
-import { missingLicence, shoreSource } from './engine';
-import { moveLedger } from './market';
-import type { GameState, Modifiers } from './types';
+import {
+	SPECIES_BY_NAME,
+	chartedSources,
+	missingLicence,
+	shoreSource,
+	sourceBlocker
+} from './engine';
+import { emptyLedger } from './market';
+import type { GameState, Modifiers, SpeciesLedger } from './types';
 
 /**
  * Poaching, and what it costs (R48).
@@ -65,9 +72,39 @@ export function graceLeft(state: GameState): number {
 	return Math.max(0, POACH_GRACE_SECONDS - state.poachElapsed);
 }
 
-/** Can this water be poached? Only water that is open but unlicensed. */
+/**
+ * Can this water be poached?
+ *
+ * **Water you have no right to be on** — either you have not bought it or you
+ * have no paper for it. Not, as this first shipped, "unlocked but unlicensed":
+ * `canUnlock` refuses any source whose licence is missing, and `licencesFor`
+ * grants the licence for any source that is unlocked, so `unlocked` implies
+ * `licensed` and that condition was **never true in legitimate play.** The
+ * whole subsystem — the grace, the fines, the confiscation, the button — could
+ * not fire once.
+ *
+ * What it still requires is that the player could physically be there: the
+ * water has to be on the chart, and open water needs a hull.
+ */
 export function canPoach(state: GameState, source: FishingSources): boolean {
-	return state.unlocked[source] && missingLicence(state, source) !== null;
+	if (state.poaching === source) return true;
+	if (!trespass(state, source)) return false;
+	if (!chartedSources(state).includes(source)) return false;
+	if (needsBoat(source) && !state.boat.owned) return false;
+	return true;
+}
+
+/**
+ * Is being on this water trespass at all?
+ *
+ * Separate from `canPoach` because `canPoach` answers "may the player start
+ * poaching here", and short-circuits for the poach already in progress. This
+ * answers "is the poach in progress still a poach", which is the question
+ * `stopPoaching` and `settlePoachOnLoad` are actually asking — and reusing
+ * `canPoach` for it silently answered *yes, always*.
+ */
+export function trespass(state: GameState, source: FishingSources): boolean {
+	return !state.unlocked[source] || missingLicence(state, source) !== null;
 }
 
 /**
@@ -78,9 +115,12 @@ export function poachSource(state: GameState, source: FishingSources): boolean {
 	if (!canPoach(state, source)) return false;
 	if (busted(state)) return false;
 
-	// Switching between poached waters starts a fresh clock but keeps whatever
-	// was landed, which is still stolen fish.
-	if (state.poaching !== source) state.poachElapsed = 0;
+	// Switching to a *different* water starts a fresh clock. Returning to one
+	// you were already working does not — see `stopPoaching`.
+	if (state.poaching !== null && state.poaching !== source) {
+		state.poachElapsed = 0;
+		state.poached = emptyLedger();
+	}
 	state.poaching = source;
 	state.activeSource = source;
 	return true;
@@ -89,15 +129,19 @@ export function poachSource(state: GameState, source: FishingSources): boolean {
 /**
  * Stop, of your own accord, before anyone turns up.
  *
- * The clock resets and the catch is yours. That is the reward for judging it:
- * ninety seconds of water you have not paid for, taken and left.
+ * The catch is yours, and that is the reward for judging it. **The clock does
+ * not reset**: it belongs to the water, not to the visit. Resetting it made the
+ * grace period farmable without limit — poach for eighty-nine seconds, pack up,
+ * start again, forever, and fifty consecutive cycles cost nothing at all.
+ * Someone who saw you yesterday has not forgotten by this afternoon.
+ *
+ * `poachElapsed` is cleared by a bust, by moving to different water, and by a
+ * prestige. Not by walking away.
  */
 export function stopPoaching(state: GameState): void {
 	if (!state.poaching) return;
 	state.poaching = null;
-	state.poachElapsed = 0;
-	state.poachedValue = d0();
-	if (missingLicence(state, state.activeSource)) state.activeSource = shoreSource(state);
+	if (sourceBlocker(state, state.activeSource)) state.activeSource = shoreSource(state);
 }
 
 /** The share of the purse a bust at `source` would take. */
@@ -140,7 +184,7 @@ export function bust(state: GameState, modifiers: Modifiers, now = Date.now()): 
 
 	state.poaching = null;
 	state.poachElapsed = 0;
-	state.poachedValue = d0();
+	state.poached = emptyLedger();
 	state.bustedUntil = now + POACH_BUSTED_SECONDS * 1000;
 
 	const movedTo = shoreSource(state);
@@ -150,29 +194,80 @@ export function bust(state: GameState, modifiers: Modifiers, now = Date.now()): 
 }
 
 /**
- * Take the poached catch out of the hold.
+ * Take the poached catch — the poached catch, and nothing else.
  *
- * Bounded by construction: it can only ever remove what was landed on this
- * poach, and never more than is actually still in the hold — the player may
- * have sold some of it already, and a warden cannot confiscate a fish that has
- * been eaten.
+ * Species by species, out of the bucket **and** off the quay. Both, because
+ * listing used to launder a poach outright: the stolen fish moved to the
+ * consignment, `poached` was never touched, and the standing debt was then
+ * settled out of whatever legal fish happened to land next. A player was seen
+ * losing ninety of a hundred legal guppies so that one stolen pike could sit
+ * safely on the quay.
+ *
+ * Bounded by construction in the honest sense: it can take at most what was
+ * landed on this poach, and at most what is still there to take. A fish already
+ * sold is a fish he cannot confiscate — the fine is what answers that.
  */
 function confiscate(state: GameState): Decimal {
-	const owed = Decimal.min(state.poachedValue, state.holdValue);
-	if (owed.lte(0)) return d0();
+	let taken = d0();
 
-	const share = owed.div(state.holdValue);
+	for (const species of Object.keys(state.poached.fish)) {
+		const owed = state.poached.fish[species];
+		if (owed.lte(0)) continue;
 
-	for (const type of FISH_TYPES) {
-		state.hold[type] = Decimal.max(d0(), state.hold[type].minus(state.hold[type].times(share)));
+		taken = taken.plus(seize(state, state.holdSpecies, state.hold, species, owed));
 	}
-	state.holdValue = Decimal.max(d0(), state.holdValue.minus(owed));
 
-	// The species side-ledger goes with them, into nothing.
-	const bin = { fish: {}, worth: {} };
-	moveLedger(state.holdSpecies, bin, share);
+	// Second pass over the quay for whatever the bucket could not cover.
+	for (const species of Object.keys(state.poached.fish)) {
+		const owed = state.poached.fish[species];
+		if (owed.lte(0)) continue;
+		taken = taken.plus(
+			seize(state, state.consignmentSpecies, state.consignment, species, owed, true)
+		);
+	}
 
-	return owed;
+	state.poached = emptyLedger();
+	return taken;
+}
+
+/**
+ * Remove up to `wanted` fish of one species from a container, and return what
+ * they were worth.
+ *
+ * The aggregate `hold`/`consignment` buckets carry no species, so they are
+ * reduced by the same *count* that left the ledger — which is the only honest
+ * mapping available and keeps `holdCount` in step with the ledger.
+ */
+function seize(
+	state: GameState,
+	ledger: SpeciesLedger,
+	buckets: Record<FishType, Decimal>,
+	species: string,
+	wanted: Decimal,
+	quay = false
+): Decimal {
+	const held = ledger.fish[species] ?? d0();
+	if (held.lte(0)) return d0();
+
+	const taking = Decimal.min(held, wanted);
+	const worth = (ledger.worth[species] ?? d0()).times(taking.div(held));
+
+	ledger.fish[species] = held.minus(taking);
+	ledger.worth[species] = (ledger.worth[species] ?? d0()).minus(worth);
+	state.poached.fish[species] = wanted.minus(taking);
+
+	const fish = SPECIES_BY_NAME.get(species);
+	if (fish) {
+		buckets[fish.category] = Decimal.max(d0(), buckets[fish.category].minus(taking));
+	}
+
+	if (quay) {
+		state.consignmentValue = Decimal.max(d0(), state.consignmentValue.minus(worth));
+	} else {
+		state.holdValue = Decimal.max(d0(), state.holdValue.minus(worth));
+	}
+
+	return worth;
 }
 
 /**
@@ -205,10 +300,10 @@ export function runPolice(
  */
 export function settlePoachOnLoad(state: GameState): void {
 	if (!state.poaching) return;
-	if (!canPoach(state, state.poaching)) {
+	if (!trespass(state, state.poaching)) {
 		state.poaching = null;
 		state.poachElapsed = 0;
-		state.poachedValue = d0();
+		state.poached = emptyLedger();
 	}
 }
 

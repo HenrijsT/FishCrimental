@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ACHIEVEMENTS } from '$lib/game/achievements';
 	import { game } from '$lib/game/state.svelte';
+	import { scrollBehaviour } from '$lib/motion';
 	import { formatDuration } from '$lib/format';
 	import { ALL_SPECIES } from '$lib/game/engine';
 	import Num from './Num.svelte';
@@ -18,7 +19,7 @@
 
 	$effect(() => {
 		if (!focus) return;
-		rows[focus]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		rows[focus]?.scrollIntoView({ block: 'center', behavior: scrollBehaviour() });
 	});
 	const visible = $derived(ACHIEVEMENTS.filter((a) => !a.secret || earned.has(a.id)));
 	const hiddenCount = $derived(ACHIEVEMENTS.length - visible.length);
@@ -37,9 +38,19 @@
 				class:focused={focus === achievement.id}
 				bind:this={rows[achievement.id]}
 			>
+				<!--
+					Earned or not is said in words as well as in a glyph, a colour
+					and an opacity. It was said in none of those three to a screen
+					reader — the pip is `aria-hidden`, and there was no text
+					difference at all, so a blind player could not tell which
+					records they held.
+				-->
 				<span class="mark" aria-hidden="true">{earned.has(achievement.id) ? '●' : '○'}</span>
 				<div>
-					<p class="name">{achievement.name}</p>
+					<p class="name">
+						{achievement.name}
+						<span class="state">{earned.has(achievement.id) ? 'held' : 'not yet'}</span>
+					</p>
 					<p class="desc muted">{achievement.description}</p>
 				</div>
 			</li>
@@ -115,7 +126,13 @@
 		padding: 0.4rem 0.55rem;
 		border-radius: var(--radius-sm);
 		background: rgba(4, 16, 27, 0.5);
-		opacity: 0.55;
+		/*
+		 * 0.8, not 0.55. At 0.55 the description — which is the text telling the
+		 * player what an unearned record needs — composited to 3.38:1, under the
+		 * 4.5:1 body-text threshold. The state word beside the name now carries
+		 * the earned/unearned distinction, so the dimming does not have to.
+		 */
+		opacity: 0.8;
 	}
 
 	li.got {
@@ -137,6 +154,17 @@
 	.name {
 		font-size: 0.85rem;
 		font-weight: 600;
+	}
+
+	.state {
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--ink-faint);
+	}
+
+	li.got .state {
+		color: var(--brass);
 	}
 
 	.desc {

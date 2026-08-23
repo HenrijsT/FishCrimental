@@ -60,10 +60,22 @@ describe('formatNumber', () => {
 		}
 	});
 
-	it('stays monotonic across the suffix boundaries', () => {
-		const samples = [999, 1000, 999_999, 1_000_000, 1e14, 1e15, 1e16];
+	it('changes as it crosses a suffix boundary', () => {
+		// 999,999 is deliberately absent: at two decimal places it rounds to
+		// 1.00M, which is the same string as 1,000,000 and is the honest answer.
+		// It used to render "1000.00K" — a thousand thousand, written the long
+		// way — which is the defect the carry below exists to prevent.
+		const samples = [999, 1000, 999_000, 1_000_000, 1e14, 1e15, 1e16];
 		const seen = new Set(samples.map((s) => formatNumber(s)));
 		expect(seen.size).toBe(samples.length);
+	});
+
+	it('carries the mantissa into the next suffix rather than overflowing it', () => {
+		expect(formatNumber(999_999)).toBe('1.00M');
+		expect(formatNumber(999_999_999)).toBe('1.00B');
+		// And in scientific notation, where the same rounding overflows the
+		// mantissa past ten instead of past a thousand.
+		expect(formatNumber(9.9999e20, { notation: 'scientific' })).toBe('1.00e21');
 	});
 
 	it('honours precision', () => {

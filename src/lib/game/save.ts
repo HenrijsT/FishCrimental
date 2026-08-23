@@ -18,6 +18,7 @@ import {
 	TOWN_TRIP_SECONDS,
 	TRADER_PERIOD_SECONDS,
 	SAVE_KEY,
+	POACH_BUSTED_SECONDS,
 	POND_MAX,
 	POND_MAX_LEVEL,
 	SAVE_VERSION,
@@ -68,6 +69,19 @@ function clampDeadline(value: unknown): number {
 	const parsed = num(value, 0);
 	if (parsed <= 0) return 0;
 	return Math.min(parsed, Date.now() + TOWN_TRIP_SECONDS * 1000);
+}
+
+/**
+ * The police lockout has its own clamp.
+ *
+ * It used to share `clampDeadline`, which caps at `TOWN_TRIP_SECONDS` — forty
+ * seconds against a sixty-second ban. Reloading straight after a bust erased
+ * twenty seconds of it, repeatably and with no save editing at all.
+ */
+function clampBustDeadline(value: unknown): number {
+	const parsed = num(value, 0);
+	if (parsed <= 0) return 0;
+	return Math.min(parsed, Date.now() + POACH_BUSTED_SECONDS * 1000);
 }
 
 function clampTraderDeadline(value: unknown): number {
@@ -220,6 +234,17 @@ function floorDex(raw: unknown): Raw {
 	return out;
 }
 
+/**
+ * A save this build cannot make sense of — as distinct from one it can read and
+ * refuses to overwrite. Both end at the same banner; only this one is a guess.
+ */
+export class CorruptSaveError extends Error {
+	constructor(message = 'the save has no readable version') {
+		super(message);
+		this.name = 'CorruptSaveError';
+	}
+}
+
 /** A save written by a newer build than this one. */
 export class FutureSaveError extends Error {
 	constructor(public readonly version: number) {
@@ -230,6 +255,25 @@ export class FutureSaveError extends Error {
 
 export function isFutureSave(data: Raw): boolean {
 	return num(data.version, 0) > SAVE_VERSION;
+}
+
+/**
+ * A save whose version cannot be read is not a version-zero save.
+ *
+ * `num(value, 0)` falls back to zero for a string, a null or a missing field,
+ * and `migrate` then replayed every step from the beginning — rebuilding
+ * licences from `unlocked`, resetting the boat's fuel and fit-out, wiping
+ * `carry`, collapsing the species ledgers into the legacy bucket and marking
+ * every Setback seen. Coins survived, so nothing looked wrong; the player
+ * simply found their paper and their boat gone.
+ *
+ * `serialize` always writes a number, so this needs a hand-edited or
+ * third-party save — which is exactly the case where guessing is worst.
+ */
+export function hasUnreadableVersion(data: Raw): boolean {
+	if (!('version' in data)) return false;
+	const raw = data.version;
+	return typeof raw !== 'number' || !Number.isFinite(raw);
 }
 
 export function migrate(data: Raw): Raw {
@@ -526,9 +570,9 @@ export function fromRaw(data: Raw): GameState {
 				? (migrated.poaching as FishingSources)
 				: null,
 		poachElapsed: Math.max(0, num(migrated.poachElapsed, 0)),
-		poachedValue: positive(migrated.poachedValue),
+		poached: readLedger(migrated.poached),
 		poachOffences: readOffences(migrated.poachOffences),
-		bustedUntil: clampDeadline(migrated.bustedUntil),
+		bustedUntil: clampBustDeadline(migrated.bustedUntil),
 
 		setbacksSeen: readSetbacks(migrated.setbacksSeen),
 		setbacksArmedAt: readArmedAt(migrated.setbacksArmedAt),
@@ -600,6 +644,7 @@ export function deserialize(raw: string): GameState | null {
 		return null;
 	}
 	if (!isRecord(parsed)) return null;
+	if (hasUnreadableVersion(parsed)) throw new CorruptSaveError();
 	if (isFutureSave(parsed)) throw new FutureSaveError(num(parsed.version, 0));
 	return fromRaw(parsed);
 }
@@ -642,7 +687,19 @@ export function loadFromStorage(): LoadOutcome {
 	const store = storage();
 	if (!store) return { kind: 'empty' };
 
-	const raw = store.getItem(SAVE_KEY);
+	// The read is inside the try as well.
+	//
+	// `storage()` guards the property *access*, not the read — a browser that
+	// exposes a working `localStorage` object whose `getItem` throws (blocked
+	// storage, hardened privacy modes) took `init()` down with it, `loaded`
+	// stayed false, `start()` never ran, and the player got a blank page. Every
+	// other storage entry point here is defensive; this one was not.
+	let raw: string | null;
+	try {
+		raw = store.getItem(SAVE_KEY);
+	} catch {
+		return { kind: 'empty' };
+	}
 	if (!raw) return { kind: 'empty' };
 
 	try {
@@ -671,6 +728,17 @@ export function readRawSave(): string | null {
 }
 
 /** Copy a raw save to the backup key. Returns false if storage refused it. */
+/** Read back whatever `backupRawSave` last set aside, if anything. */
+export function readBackupSave(): string | null {
+	const store = storage();
+	if (!store) return null;
+	try {
+		return store.getItem(SAVE_BACKUP_KEY);
+	} catch {
+		return null;
+	}
+}
+
 export function backupRawSave(raw: string): boolean {
 	const store = storage();
 	if (!store) return false;
@@ -727,22 +795,52 @@ export function exportRawSave(raw: string): string {
 }
 
 /** Returns null for anything this build cannot safely read, including future saves. */
-export function importSave(blob: string): GameState | null {
+/** Why an import did not happen, so the player can be told the truth. */
+export type ImportFailure = 'malformed' | 'future';
+
+export interface ImportOutcome {
+	state: GameState | null;
+	failure?: ImportFailure;
+	/** The save's own version, when it has a readable one. */
+	version?: number;
+}
+
+/**
+ * Read an exported save.
+ *
+ * A blob written by a **newer** build is reported as exactly that, and not as
+ * "not a FishCrimental save". It is the same defect as the one the load path
+ * already guards against, in the one place a player is most likely to be
+ * holding their only backup: told it is not a save at all, the obvious next
+ * move is to delete it and start again.
+ */
+export function readImport(blob: string): ImportOutcome {
 	const trimmed = blob.trim();
-	if (!trimmed.startsWith(EXPORT_PREFIX)) return null;
+	if (!trimmed.startsWith(EXPORT_PREFIX)) return { state: null, failure: 'malformed' };
 
 	const separator = trimmed.indexOf('.');
-	if (separator < 0) return null;
+	if (separator < 0) return { state: null, failure: 'malformed' };
 
 	const version = Number.parseInt(trimmed.slice(EXPORT_PREFIX.length, separator), 10);
-	if (!Number.isFinite(version) || version < 0) return null;
+	if (!Number.isFinite(version) || version < 0) return { state: null, failure: 'malformed' };
+	if (version > SAVE_VERSION) return { state: null, failure: 'future', version };
 
 	const decoded = fromBase64(trimmed.slice(separator + 1));
-	if (decoded === null) return null;
+	if (decoded === null) return { state: null, failure: 'malformed' };
 
 	try {
-		return deserialize(decoded);
-	} catch {
-		return null;
+		return { state: deserialize(decoded), version };
+	} catch (error) {
+		// The header said a version this build knows, and the body still turned
+		// out to be from the future. Say so rather than blaming the file.
+		if (error instanceof FutureSaveError) {
+			return { state: null, failure: 'future', version: error.version };
+		}
+		return { state: null, failure: 'malformed', version };
 	}
+}
+
+/** The old shape, kept for callers that only care whether it worked. */
+export function importSave(blob: string): GameState | null {
+	return readImport(blob).state;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { D } from '$lib/decimal';
+import { FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
 import { SCENES } from './scenes';
 import { SOURCE_ORDER } from './config';
@@ -94,11 +95,17 @@ describe('onboarding', () => {
 		expect(availableTabs(state).map((tab) => tab.id)).toContain('crew');
 	});
 
-	it('opens the Fishdex after a couple of species', () => {
+	/**
+	 * One species, not two.
+	 *
+	 * The first catch raises a toast that says "tap to see it", and at a
+	 * threshold of two that toast navigated to a tab that did not exist yet.
+	 * The first thing the game invites a new player to do cannot be a dead end.
+	 */
+	it('opens the Fishdex on the very first species', () => {
 		const state = createInitialState();
-		state.dex[ALL_SPECIES[0].name] = D(1);
 		expect(availableTabs(state).map((tab) => tab.id)).not.toContain('dex');
-		state.dex[ALL_SPECIES[1].name] = D(1);
+		state.dex[ALL_SPECIES[0].name] = D(1);
 		expect(availableTabs(state).map((tab) => tab.id)).toContain('dex');
 	});
 
@@ -109,9 +116,27 @@ describe('onboarding', () => {
 		state.totalCasts = D(500);
 		state.prestigeCount = D(1);
 		state.achievements = ['first_cast'];
+		// The Harbour arrives when there is something to do in it, which for a
+		// player who owns everything means the boat.
+		state.boat.owned = true;
 		for (const fish of ALL_SPECIES) state.dex[fish.name] = D(1);
 
 		expect(availableTabs(state)).toHaveLength(TABS.length);
+	});
+
+	/**
+	 * The Harbour used to open on a cast count — two minutes in, seven minutes
+	 * before the player could sit a single exam, showing a list of licences with
+	 * "Not yet" against every one and a boat priced in the billions.
+	 */
+	it('does not open the Harbour before there is anything to do in it', () => {
+		const state = createInitialState();
+		state.totalCasts = D(500);
+		expect(availableTabs(state).map((tab) => tab.id)).not.toContain('harbour');
+
+		// The Pond bought, so the Stream — and its licence — is next.
+		state.unlocked[SOURCE_ORDER[1]] = true;
+		expect(availableTabs(state).map((tab) => tab.id)).toContain('harbour');
 	});
 
 	it('gives a brand new player one instruction and no more', () => {
@@ -124,10 +149,16 @@ describe('onboarding', () => {
 	it('moves the instruction on as the player progresses', () => {
 		const state = createInitialState();
 		state.totalCasts = D(3);
-		expect(nextStep(state)!.text).toMatch(/sell/i);
+		state.hold[FishType.Small] = D(4);
+		state.holdValue = D(20);
+		// How you sell is the first question a new player has, and the answer
+		// is "list it" — the Sell button does not sell without an Assistant.
+		expect(nextStep(state)!.text).toMatch(/list/i);
 
 		state.lifetimeCoins = D(500);
 		state.coins = D(500);
+		state.hold[FishType.Small] = D(0);
+		state.holdValue = D(0);
 		expect(nextStep(state)!.text).toMatch(/afford/i);
 	});
 

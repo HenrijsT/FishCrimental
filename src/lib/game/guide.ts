@@ -5,19 +5,26 @@ import {
 	LICENCES,
 	LICENCE_IDS,
 	SOURCE_CONFIG,
+	BUCKET_MAX_LEVEL,
 	SOURCE_ORDER,
 	UPGRADES,
 	UPGRADE_IDS,
 	needsBoat
 } from './config';
 import {
+	bucketCost,
+	consignmentCount,
+	consignmentRoom,
 	deckhandCost,
 	discoveredCount,
+	holdCount,
+	holdRoom,
 	missingLicence,
 	nextLockedSource,
+	traderInStock,
 	upgradeCost
 } from './engine';
-import { EXAMS } from './exams';
+import { EXAMS, canSit } from './exams';
 import type { GameState } from './types';
 
 /**
@@ -81,11 +88,16 @@ export const TABS: TabDefinition[] = [
 		id: 'harbour',
 		label: 'Harbour',
 		blurb: 'Licences you sit an exam for, and the boat you need past the Sea.',
-		// Licences have no price any more (R42), so there is no price to be
-		// halfway to. The gate is having fished enough to be thinking about
-		// moving on at all.
+		// When there is something to do here, and not before.
+		//
+		// A cast count opened it two minutes in, seven minutes before the player
+		// could sit anything — a tab full of licences with "Not yet" against
+		// every one of them, and a boat priced in the billions. Licences have no
+		// price any more (R42), so there is not even a price to be saving toward.
 		available: (state) =>
-			state.totalCasts.gte(40) || LICENCE_IDS.some((id) => state.licences[id]) || state.boat.owned
+			state.exam !== null ||
+			LICENCE_IDS.some((id) => state.licences[id] || canSit(state, id)) ||
+			state.boat.owned
 	},
 	{
 		id: 'crew',
@@ -108,7 +120,10 @@ export const TABS: TabDefinition[] = [
 		id: 'dex',
 		label: 'Fishdex',
 		blurb: 'Every species you land is written up here, and pays a permanent bonus.',
-		available: (state) => discoveredCount(state) >= 2
+		// One, not two. The first catch raises a toast that says "tap to see it",
+		// and at a threshold of two that toast navigated to a tab that was not
+		// there yet.
+		available: (state) => discoveredCount(state) >= 1
 	},
 	{
 		id: 'pearls',
@@ -184,13 +199,54 @@ export function nextTabIndex(key: string, index: number, count: number): number 
  * The single next action, in one sentence. Deliberately never a list: the
  * point is to remove the question "what now?", not to replace it with six.
  */
+/** Is a bigger bucket both available and affordable right now? */
+function bucketWorthBuying(state: GameState): boolean {
+	if (state.bucketLevel.gte(BUCKET_MAX_LEVEL)) return false;
+	if (!traderInStock(state, 'bucket')) return false;
+	return state.coins.gte(bucketCost(state.bucketLevel));
+}
+
 export function nextStep(state: GameState): NextStep | null {
 	if (state.totalCasts.lt(1)) {
 		return { text: 'Hold the rod to cast a line. Let go to stop.' };
 	}
 
+	// How you sell is the first question a new player has, and the answer
+	// changed: there is a Sell button, and without an Assistant it *lists* the
+	// catch rather than selling it. Saying "sell them" and leaving them to find
+	// out that nothing happened for forty-five seconds is not an answer.
 	if (state.lifetimeCoins.lt(1)) {
-		return { text: 'You have fish in the hold. Sell them for MarketCoins.' };
+		if (holdCount(state).lte(0)) {
+			return { text: 'Keep casting. Something will come up.' };
+		}
+		if (consignmentCount(state).gt(0)) {
+			return {
+				text: 'Your catch is on the quay. The travelling merchant settles it when he arrives.',
+				tab: 'shore'
+			};
+		}
+		return {
+			text: 'There are fish in the bucket. List them, and the merchant pays for them when he comes past.',
+			tab: 'shore'
+		};
+	}
+
+	// A full bucket stops the crew as well as the player, and it is the single
+	// most common way an opening stalls.
+	const room = holdRoom(state);
+	if (room !== null && room.lte(0)) {
+		const crewed = SOURCE_ORDER.some((source) => state.deckhands[source].gt(0));
+		return consignmentRoom(state)?.gt(0)
+			? {
+					text: crewed
+						? 'The bucket is full and the crew have stopped with it. List the catch.'
+						: 'The bucket is full and nothing else will fit. List the catch.',
+					tab: 'shore'
+				}
+			: {
+					text: 'The bucket and the quay are both full. Nothing else fits until the merchant comes.',
+					tab: 'shore'
+				};
 	}
 
 	const cheapest = UPGRADE_IDS.map((id) => ({
@@ -257,7 +313,22 @@ export function nextStep(state: GameState): NextStep | null {
 		};
 	}
 
+	// The long middle of the opening act, where the answer is "keep going". Name
+	// something they can actually do with the coins they have rather than
+	// repeating the same line for eight minutes.
 	if (next) {
+		if (state.coins.gte(cheapest.cost)) {
+			return {
+				text: `You can afford the ${UPGRADES[cheapest.id].name}. Everything you buy makes the ${next} closer.`,
+				tab: 'gear'
+			};
+		}
+		if (!state.hasAssistant && bucketWorthBuying(state)) {
+			return {
+				text: `A bigger bucket first — a full one stops the crew too, and the ${next} is a while off yet.`,
+				tab: 'shore'
+			};
+		}
 		return {
 			text: `Keep selling. The ${next} opens once you have enough put by.`,
 			tab: 'water'

@@ -543,33 +543,62 @@ describe('the trader', () => {
 		expect(state.consignmentValue.eq(1000)).toBe(true);
 	});
 
-	it('resolves floor(gap / period) visits after a long absence', () => {
+	/**
+	 * He does not call while you are away (R51).
+	 *
+	 * The catch-up loop is not inside `#settleOffline`, so passive-only *looked*
+	 * safe — but it resolved `floor(gap / 45s)` arrivals on the first tick back,
+	 * each one settling a consignment. Eight hours away paid out 641 visits'
+	 * worth of coins, credited `lifetimeCoins` (which mints Pearls), and rotated
+	 * the stock 641 times — gating the bicycle and the Assistant behind offers
+	 * that had spun past. None of it appeared in the offline report, because
+	 * none of it happened in the settle.
+	 */
+	it('sleeps through a long absence rather than settling it on the first tick', () => {
 		const state = ready();
 		const hours = 8;
 		const now = 1_000_000 + hours * 3600 * 1000;
 
 		const result = runTrader(state, computeModifiers(state), now);
-		// The appointment was already due, so it is that one plus every period
-		// that elapsed after it.
-		expect(result.visits).toBe(1 + Math.floor((hours * 3600) / TRADER_PERIOD_SECONDS));
+
+		expect(result.visits).toBe(0);
+		expect(result.earned.toNumber()).toBe(0);
+		expect(state.consignmentValue.toNumber()).toBe(1000);
+		expect(state.traderVisits).toBe(0);
+	});
+
+	it('is due again shortly after a long absence, not immediately and not never', () => {
+		const state = ready();
+		const now = 1_000_000 + 8 * 3600 * 1000;
+
+		runTrader(state, computeModifiers(state), now);
+
+		expect(state.nextTraderAt).toBeGreaterThan(now);
+		expect(state.nextTraderAt - now).toBeLessThanOrEqual(TRADER_PERIOD_SECONDS * 1000);
+	});
+
+	it('still catches up across a throttled background tab, which is not an absence', () => {
+		const state = ready();
+		// Ninety seconds: two periods, and well inside the resume threshold.
+		const now = 1_000_000 + 90_000;
+
+		const result = runTrader(state, computeModifiers(state), now);
+		expect(result.visits).toBeGreaterThan(0);
 	});
 
 	it('resolves the same number of visits in one step as in many', () => {
 		const period = TRADER_PERIOD_SECONDS * 1000;
 		const start = 1_000_000;
-		const span = 40 * period;
+		// Inside the resume threshold, where the catch-up loop still runs.
+		const span = 2 * period;
 
 		const oneStep = ready();
 		const oneStepVisits = runTrader(oneStep, computeModifiers(oneStep), start + span).visits;
 
 		const chunked = ready();
 		let chunkedVisits = 0;
-		for (let i = 1; i <= 24; i++) {
-			chunkedVisits += runTrader(
-				chunked,
-				computeModifiers(chunked),
-				start + (span * i) / 24
-			).visits;
+		for (let i = 1; i <= 8; i++) {
+			chunkedVisits += runTrader(chunked, computeModifiers(chunked), start + (span * i) / 8).visits;
 		}
 
 		expect(chunkedVisits).toBe(oneStepVisits);

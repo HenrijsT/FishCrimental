@@ -81,7 +81,12 @@
 			{/if}
 		</div>
 
-		<button class="buy" disabled={maxed || !affordable} onclick={() => game.buyRig()}>
+		<button
+			class="buy"
+			aria-label="Buy a level of the rig"
+			disabled={maxed || !affordable}
+			onclick={() => game.buyRig()}
+		>
 			{#if maxed}
 				Maxed
 			{:else}
@@ -104,7 +109,12 @@
 		</div>
 
 		{#if !g.autoFisherOffline}
-			<button class="buy" disabled={!canBuyOffline} onclick={() => game.buyRigOffline()}>
+			<button
+				class="buy"
+				aria-label="Buy the night shift"
+				disabled={!canBuyOffline}
+				onclick={() => game.buyRigOffline()}
+			>
 				{#if !owned}
 					Needs a rig
 				{:else}
@@ -152,7 +162,7 @@
 		gap: var(--gap);
 		flex-wrap: wrap;
 		padding: 0.6rem 0;
-		border-top: 1px solid var(--edge);
+		border-top: 1px solid var(--rule);
 	}
 
 	.text {

@@ -122,7 +122,7 @@
 	.quay {
 		margin-top: 0.9rem;
 		padding-top: 0.7rem;
-		border-top: 1px solid var(--edge);
+		border-top: 1px solid var(--rule);
 	}
 
 	.quay h3 {
