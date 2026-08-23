@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { mount, unmount, flushSync } from 'svelte';
+import { mount, unmount, flushSync, type Component } from 'svelte';
 import { D } from '$lib/decimal';
 import { SOURCE_ORDER } from '$lib/game/config';
+import { FishType } from '$lib/fish_types';
 import { canPoach } from '$lib/game/police';
 import { game } from '$lib/game/state.svelte';
+import HoldPanel from './HoldPanel.svelte';
 import SourcePicker from './SourcePicker.svelte';
 
 /**
@@ -28,10 +30,10 @@ import SourcePicker from './SourcePicker.svelte';
 let host: Record<string, unknown> | null = null;
 let target: HTMLElement | null = null;
 
-function render() {
+function render(component: Component = SourcePicker) {
 	target = document.createElement('div');
 	document.body.appendChild(target);
-	host = mount(SourcePicker, { target });
+	host = mount(component, { target });
 	flushSync();
 	return target;
 }
@@ -83,5 +85,30 @@ describe('every render guard in the picker is satisfiable', () => {
 		expect(el.querySelectorAll('li').length).toBeGreaterThan(1);
 		expect(el.querySelector('button.source')).not.toBeNull();
 		expect(el.querySelector('button.source.locked')).not.toBeNull();
+	});
+});
+
+describe('the List button is only live when a whole fish can move', () => {
+	// `listForSale` floors what it moves, and bucket capacity is `30 x 3.4^level`
+	// — fractional from level 2 up. At `gt(0)` the quay parked on 346 of 346.8,
+	// the button stayed enabled, and every click was a no-op with nothing on
+	// screen to say why.
+	it('says the quay is full when the room left is under one fish', () => {
+		game.state.bucketLevel = D(2);
+		game.state.consignment[FishType.Small] = D(346);
+		game.state.hold[FishType.Small] = D(10);
+		game.state.holdValue = D(20);
+
+		expect(game.listedRoom!.gt(0)).toBe(true);
+		expect(game.listedRoom!.gte(1)).toBe(false);
+
+		const el = render(HoldPanel);
+		const list = [...el.querySelectorAll('button')].find((button) =>
+			/Quay full|List for the merchant/.test(button.textContent ?? '')
+		);
+
+		expect(list).toBeDefined();
+		expect(list!.textContent).toContain('Quay full');
+		expect((list as HTMLButtonElement).disabled).toBe(true);
 	});
 });

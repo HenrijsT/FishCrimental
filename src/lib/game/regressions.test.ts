@@ -14,6 +14,8 @@ import {
 	TOWN_RATE,
 	UPGRADES
 } from './config';
+import { Game } from './state.svelte';
+import { shiftName } from './shifts';
 import {
 	accumulate,
 	autoCastsPerSecond,
@@ -40,7 +42,7 @@ import {
 } from './engine';
 import { addToLedger, ledgerWorth } from './market';
 import { nextStep } from './guide';
-import { poachSource, runPolice, stopPoaching } from './police';
+import { canPoach, poachSource, runPolice, stopPoaching } from './police';
 import { fromRaw, serialize } from './save';
 import type { GameState } from './types';
 
@@ -677,5 +679,109 @@ describe('review: worthless fish moved a price nobody is ever paid', () => {
 
 		expect(state.marketPressure['Moon Jelly']).toBeUndefined();
 		expect(state.marketPressure['Guppy']?.toNumber()).toBe(1_000);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Review pass: the poach flag outliving the poach
+// ---------------------------------------------------------------------------
+
+describe('review: the warden kept the clock running on water you no longer poached', () => {
+	/** A game with the chart wide enough that there is locked water to poach. */
+	function charted(): Game {
+		const game = new Game();
+		game.state.mapLevel = D(4);
+		return game;
+	}
+
+	// `SourcePicker` draws "Opens for N" and "Fish it anyway" on the same row,
+	// and the unlock button stays live while the poach runs — so this is one
+	// click. Nothing cleared `state.poaching`, and `runPolice` never re-asks
+	// `trespass`, so the grace clock ran out on water the player now owned.
+	it('lets go of the poach when the water is bought', () => {
+		const game = charted();
+		const target = SOURCE_ORDER.find((source) => canPoach(game.state, source))!;
+
+		expect(poachSource(game.state, target)).toBe(true);
+		game.state.coins = D('1e12');
+		expect(game.unlock(target)).toBe(true);
+
+		expect(game.state.poaching).toBeNull();
+		expect(runPolice(game.state, game.modifiers, POACH_GRACE_SECONDS + 1)).toBeNull();
+	});
+
+	// Moving to legal water is packing up. The flag is not tied to
+	// `activeSource`, so the clock used to run on the water the player left and
+	// the fine landed while they were fishing somewhere they were entitled to be.
+	it('lets go of the poach when the player moves to legal water', () => {
+		const game = charted();
+		const target = SOURCE_ORDER.find((source) => canPoach(game.state, source))!;
+		const legal = SOURCE_ORDER.find((source) => game.state.unlocked[source] && source !== target)!;
+
+		expect(poachSource(game.state, target)).toBe(true);
+		game.setSource(legal);
+
+		expect(game.state.poaching).toBeNull();
+		expect(runPolice(game.state, game.modifiers, POACH_GRACE_SECONDS + 1)).toBeNull();
+	});
+
+	// Standing back on the water you are poaching is not leaving it.
+	it('keeps the poach when the source picked is the poached one', () => {
+		const game = charted();
+		const target = SOURCE_ORDER.find((source) => canPoach(game.state, source))!;
+
+		expect(poachSource(game.state, target)).toBe(true);
+		game.setSource(target);
+
+		expect(game.state.poaching).toBe(target);
+	});
+});
+
+describe('review: a poach clock with no owner', () => {
+	// A save naming a source this build does not know resolved both owner fields
+	// to null and kept the seconds, and `poachSource` only rewinds the clock when
+	// `poachClockAt` is set — so the next poach at any water inherited them.
+	it('drops the elapsed seconds when neither owner field survives the read', () => {
+		const state = fromRaw({
+			version: SAVE_VERSION,
+			poaching: 'Brackish Marsh',
+			poachClockAt: 'Brackish Marsh',
+			poachElapsed: POACH_GRACE_SECONDS - 1
+		} as never);
+
+		expect(state.poachClockAt).toBeNull();
+		expect(state.poachElapsed).toBe(0);
+	});
+});
+
+describe('review: the save wrote the exam it says it never writes', () => {
+	// `serialize` spread the whole state, so every ten-second autosave and every
+	// export blob carried the sounding in progress, `secret` included.
+	it('keeps the sounder answer out of storage', () => {
+		const state = createInitialState();
+		state.exam = {
+			licence: 'inland',
+			kind: 'sounder',
+			progress: 0,
+			target: 3,
+			attempts: 0,
+			low: 1,
+			high: 100,
+			secret: 42
+		};
+
+		const blob = serialize(state);
+		expect(blob).not.toContain('secret');
+		expect(blob).not.toContain('"exam"');
+	});
+});
+
+describe('review: a prestige count past the double limit named the shift NaN', () => {
+	// `save.ts` reads `prestigeCount` with no upper bound, so an imported blob
+	// reaches `Infinity - tier.length`, which never runs out of tiers and leaves
+	// `NaN` on the unbounded last row.
+	it('still names a shift for an unreadably large count', () => {
+		expect(shiftName(D('1e400'))).not.toContain('NaN');
+		expect(shiftName(D(5))).toBe('Storm 6');
 	});
 });

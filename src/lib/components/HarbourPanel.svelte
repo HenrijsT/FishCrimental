@@ -24,18 +24,28 @@
 
 	let sounderGuess = $state(50);
 	let sounderSaid = $state<string | null>(null);
+	/** `exam.attempts` at the moment the player's own call was answered. */
+	let sounderSaidAt = $state(-1);
 
-	// The sounder's last answer belongs to the attempt that produced it. Walking
-	// away and sitting again — which is free, and which the panel encourages —
-	// used to open the fresh attempt still showing "Last call: deeper" against a
-	// depth that had been re-rolled.
+	// The sounder's last answer belongs to the sounding that produced it.
+	//
+	// Two things end that sounding, and keying off `kind` alone only caught one.
+	// Walking away and sitting again — free, and encouraged by the panel — used
+	// to open the fresh attempt still reading "last call: deeper". So does
+	// `advanceExamIdle`: every `EXAM_IDLE_SECONDS` the warden scores a step and
+	// re-rolls `secret` in place, and the stale word then pointed at a depth
+	// nobody had called. In a binary search that word is the only feedback there
+	// is, so pointing it the wrong way is worse than saying nothing. Any change
+	// in `attempts` this component did not make invalidates it.
 	$effect(() => {
-		if (game.exam?.kind !== 'sounder') sounderSaid = null;
+		const exam = game.exam;
+		if (exam?.kind !== 'sounder' || exam.attempts !== sounderSaidAt) sounderSaid = null;
 	});
 
 	function callSounder() {
 		const said = game.sounderCall(sounderGuess);
 		sounderSaid = said === 'found' ? 'found it' : said;
+		sounderSaidAt = game.exam?.attempts ?? -1;
 	}
 	const room = $derived(fuelRoom(g, game.modifiers));
 	const tankFraction = $derived(

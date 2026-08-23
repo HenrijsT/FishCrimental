@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { nextStep, type TabId } from '$lib/game/guide';
+	import { availableTabs, nextStep, type TabId } from '$lib/game/guide';
 	import { game } from '$lib/game/state.svelte';
 
 	interface Props {
@@ -9,14 +9,29 @@
 	let { onnavigate }: Props = $props();
 
 	const step = $derived(nextStep(game.state));
+
+	/**
+	 * Only offer the jump where there is somewhere to land.
+	 *
+	 * A hint can name a tab the player has not unlocked yet: the opening
+	 * "list them" line points at Shore, and Shore does not appear until the
+	 * third cast — so on casts one and two "Take me there" set the tab and the
+	 * effect in `+page.svelte` snapped it straight back to Water. That is the
+	 * one moment the hint exists for.
+	 */
+	const jumpTo = $derived(
+		step?.tab !== undefined && availableTabs(game.state).some((tab) => tab.id === step.tab)
+			? step.tab
+			: null
+	);
 </script>
 
 {#if step}
 	<div class="step">
 		<span class="mark" aria-hidden="true">▸</span>
 		<p>{step.text}</p>
-		{#if step.tab}
-			<button onclick={() => onnavigate(step.tab!)}>Take me there</button>
+		{#if jumpTo}
+			<button onclick={() => onnavigate(jumpTo)}>Take me there</button>
 		{/if}
 	</div>
 {/if}

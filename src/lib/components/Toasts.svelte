@@ -104,7 +104,11 @@
 			<button
 				class="body"
 				onclick={() => {
-					game.dismissNewSpecies();
+					// This toast, not all of them. One cast can land several new
+					// species (`castOnce` keeps up to four), and clearing the whole
+					// queue meant reading the first one silently threw away the
+					// rest — the player never learns what the other fish were.
+					game.dismissSpecies(fish.name);
 					onnavigate('dex', fish.name);
 				}}
 			>

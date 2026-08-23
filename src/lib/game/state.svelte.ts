@@ -101,6 +101,7 @@ import {
 	runPolice,
 	settlePoachOnLoad,
 	stopPoaching,
+	trespass,
 	type Bust
 } from './police';
 import {
@@ -851,6 +852,19 @@ export class Game {
 	setSource(source: FishingSources): void {
 		if (sourceBlocker(this.state, source, this.modifiers)) return;
 		this.endCast();
+
+		// Walking to other water is packing up.
+		//
+		// The poach flag is not tied to `activeSource`, so moving off it left
+		// the clock running on water the player had left: fish the Pond legally
+		// for ninety seconds and the warden arrives for the Lake, fines a share
+		// of the purse and locks you out. Only "Pack up and go", a bust and
+		// `#keepFishable` ever cleared it. Standing back on the poached source
+		// is not leaving it, so that case is excluded.
+		if (this.state.poaching !== null && this.state.poaching !== source) {
+			stopPoaching(this.state);
+		}
+
 		this.state.activeSource = source;
 	}
 
@@ -907,8 +921,23 @@ export class Game {
 
 	unlock(source: FishingSources): boolean {
 		const done = unlockSource(this.state, source);
-		if (done) this.#checkAchievements();
-		return done;
+		if (!done) return false;
+
+		// Buying the water ends the poach on it.
+		//
+		// `SourcePicker` draws "Opens for N" and "Fish it anyway" on the same
+		// row, and the unlock button stays live while the poach runs — so this
+		// is one click. Nothing else cleared the flag: `runPolice` only reads
+		// `state.poaching` and never re-asks `trespass`, so the clock kept
+		// running on water the player now owned and the warden turned up at the
+		// grace mark to confiscate a legal catch and fine a legal fisherman.
+		// `claimLicence` carries the same guard for the same reason.
+		if (this.state.poaching !== null && !trespass(this.state, this.state.poaching)) {
+			stopPoaching(this.state);
+		}
+
+		this.#checkAchievements();
+		return true;
 	}
 
 	/** Levels a buy button would purchase right now, given the selected amount. */

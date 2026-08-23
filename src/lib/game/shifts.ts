@@ -70,7 +70,14 @@ export const TIERS: TierDefinition[] = [
  * keep counting rather than stopping at the end of the table.
  */
 function locate(prestigeCount: Decimal | number): { tier: TierDefinition; index: number } {
-	const count = D(prestigeCount).toNumber();
+	// `toNumber()` on a `prestigeCount` past the double limit is `Infinity`, and
+	// `Infinity - tier.length` stays `Infinity` right up to the unbounded last
+	// row, where the subtraction that never happens leaves `NaN` and the shift
+	// is named "Megalodon NaN". `save.ts` reads `prestigeCount` with no upper
+	// bound, so an imported or hand-edited blob reaches it. Clamp to something
+	// the arithmetic can carry.
+	const raw = D(prestigeCount).toNumber();
+	const count = Number.isFinite(raw) ? raw : Number.MAX_SAFE_INTEGER;
 	let remaining = Math.max(0, Math.floor(count));
 
 	for (const tier of TIERS) {
@@ -94,6 +101,6 @@ export function shiftName(prestigeCount: Decimal | number): string {
 /** The tier of the shift most recently ridden out, or null before the first. */
 export function lastTier(prestigeCount: Decimal | number): TierDefinition | null {
 	const count = D(prestigeCount).toNumber();
-	if (count < 1) return null;
+	if (!(count >= 1)) return null;
 	return tierFor(count - 1);
 }

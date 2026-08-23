@@ -56,9 +56,15 @@
 							{:else if open && blocker === 'boat'}
 								<span class="stats warn">Needs a boat</span>
 							{:else if open && blocker === 'licence'}
-								<span class="stats warn">
-									Needs the {LICENCES[licence!].name} — or a nerve
-								</span>
+								<!--
+									No "or a nerve" here. The poach button beside this row is
+									gated on `!open`, so it structurally cannot appear next to
+									water this branch describes — the copy advertised a control
+									that is not there. The branch itself stays: `sourceBlocker`
+									can still return `licence`, and a blocked row with no
+									explanation is worse than a rare one.
+								-->
+								<span class="stats warn">Needs the {LICENCES[licence!].name}</span>
 							{:else if open}
 								<span class="stats faint">
 									{game.modifiers.castSeconds[source].toFixed(2)}s a cast ·

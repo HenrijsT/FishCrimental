@@ -305,7 +305,14 @@ export function migrate(data: Raw): Raw {
 // ---------------------------------------------------------------------------
 
 export function serialize(state: GameState): string {
-	return JSON.stringify({ ...state, version: SAVE_VERSION });
+	// `exam` is dropped on the way out as well as on the way in.
+	//
+	// The read side has always returned `null` for it and both comments say it
+	// is never written — but it rode along in the spread, so every ten-second
+	// autosave and every export blob carried the sounding in progress,
+	// `secret` included. An answer key in `localStorage` is not what "free and
+	// retryable" was supposed to mean.
+	return JSON.stringify({ ...state, exam: undefined, version: SAVE_VERSION });
 }
 
 // ---------------------------------------------------------------------------
@@ -544,6 +551,9 @@ export function fromRaw(data: Raw): GameState {
 
 	const settingsRaw = isRecord(migrated.settings) ? migrated.settings : {};
 
+	/** Which water the poach clock belongs to, if any water this build knows. */
+	const poachOwner = readSource(migrated.poachClockAt) ?? readSource(migrated.poaching);
+
 	const activeSource =
 		typeof migrated.activeSource === 'string' &&
 		(SOURCE_ORDER as string[]).includes(migrated.activeSource) &&
@@ -587,12 +597,22 @@ export function fromRaw(data: Raw): GameState {
 		// been taken or the source is not open in this run — a stale flag would
 		// mean a bust for water the player is entitled to fish.
 		poaching: readSource(migrated.poaching),
-		poachElapsed: Math.max(0, num(migrated.poachElapsed, 0)),
-		// A save written before this field existed has a clock and no owner for
-		// it. Reading it back as the water being poached is the only honest
+		// A clock with no owner is not a clock.
+		//
+		// `poachElapsed` used to be read on its own, so a save naming a source
+		// this build does not know — a renamed `FishingSources` value, or a
+		// hand-edited blob — resolved both owner fields to `null` and kept the
+		// eighty-nine seconds. `poachSource` only rewinds the clock when
+		// `poachClockAt` is set, so the next poach at *any* water inherited them
+		// and busted within a tick: a fine, a permanent offence and a lockout on
+		// water the warden had never seen the player near, which is precisely
+		// what `poachClockAt` was added to prevent.
+		poachElapsed: poachOwner === null ? 0 : Math.max(0, num(migrated.poachElapsed, 0)),
+		// A save written before `poachClockAt` existed has a clock and no owner
+		// for it. Reading it back as the water being poached is the only honest
 		// answer available, and it is the answer that keeps the grace period
 		// un-farmable across that one reload.
-		poachClockAt: readSource(migrated.poachClockAt) ?? readSource(migrated.poaching),
+		poachClockAt: poachOwner,
 		poached: readLedger(migrated.poached),
 		poachOffences: readOffences(migrated.poachOffences),
 		bustedUntil: clampBustDeadline(migrated.bustedUntil),

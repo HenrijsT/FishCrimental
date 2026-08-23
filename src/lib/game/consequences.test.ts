@@ -413,6 +413,10 @@ describe('Setbacks ambush on events, never on a roll', () => {
 	it('arms on a milestone and fires on the next one, with nothing in between', () => {
 		const state = createInitialState();
 		state.deckhands[SOURCE_ORDER[0]] = D(1);
+		// Something on the board to lose. A Setback with nothing to take is not
+		// spent — see "waits until there is something to take" below — and a
+		// brand-new state has every track at zero.
+		state.upgrades.lure = D(4);
 
 		const first = evaluateSetbacks(state, computeModifiers(state));
 		expect(first.armed.map((s) => s.id)).toContain('bait_thief');
@@ -431,12 +435,37 @@ describe('Setbacks ambush on events, never on a roll', () => {
 	it('happens once, and never again', () => {
 		const state = createInitialState();
 		state.deckhands[SOURCE_ORDER[0]] = D(1);
+		state.upgrades.lure = D(4);
 		evaluateSetbacks(state, computeModifiers(state));
 		state.unlocked[FishingSources.River] = true;
 		evaluateSetbacks(state, computeModifiers(state));
 
 		expect(state.setbacksSeen).toContain('bait_thief');
 		expect(evaluateSetbacks(state, computeModifiers(state)).hits).toHaveLength(0);
+	});
+
+	// `trackFor` falls back to the deepest track the player has, but seeds itself
+	// with the preferred one and only replaces it on a strict `gt` — so a board
+	// where *every* track is at zero handed back a level-0 track, `strike` took
+	// nothing and refunded nothing, and the id still went into `setbacksSeen`,
+	// which is carried across every future prestige. With the Standing Charter
+	// the River is open from tick one, so buying a deckhand before any gear spent
+	// The Bait Thief in two ticks, for free, for the rest of the save.
+	it('waits until there is something to take', () => {
+		const state = createInitialState();
+		state.deckhands[SOURCE_ORDER[0]] = D(1);
+		state.unlocked[FishingSources.River] = true;
+
+		evaluateSetbacks(state, computeModifiers(state));
+		state.playTime = 5_000;
+		expect(evaluateSetbacks(state, computeModifiers(state)).hits).toHaveLength(0);
+		expect(state.setbacksSeen).toHaveLength(0);
+
+		state.upgrades.lure = D(4);
+		const hits = evaluateSetbacks(state, computeModifiers(state)).hits;
+		expect(hits).toHaveLength(1);
+		expect(hits[0].levels).toBeGreaterThan(0);
+		expect(state.setbacksSeen).toEqual(['bait_thief']);
 	});
 
 	it('escalates with playTime spent armed, and saturates', () => {

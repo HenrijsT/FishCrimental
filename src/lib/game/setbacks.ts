@@ -257,7 +257,23 @@ export function evaluateSetbacks(state: GameState, modifiers: Modifiers): Setbac
 			continue;
 		}
 
-		if (definition.fires(state)) hits.push(strike(state, modifiers, definition));
+		if (!definition.fires(state)) continue;
+
+		// A Setback that can take nothing is not spent — it waits.
+		//
+		// `trackFor` falls back to the deepest track the player has, but seeds
+		// itself with the preferred one and only replaces it on a strict `gt`,
+		// so a board where *every* track is still at zero hands back a level-0
+		// track. `strike` then took nothing, refunded nothing, and still wrote
+		// the id into `setbacksSeen`, which `CarryOver` carries for the rest of
+		// the save. With the Standing Charter the River is open from tick one,
+		// so buying a deckhand before any gear armed and fired The Bait Thief
+		// in two ticks for free, permanently — the exact hole `trackFor` exists
+		// to close, one case wider. It re-checks every tick and lands the
+		// moment there is something to lose.
+		if (state.upgrades[trackFor(state, definition.track)].lte(0)) continue;
+
+		hits.push(strike(state, modifiers, definition));
 	}
 
 	return { armed, hits };

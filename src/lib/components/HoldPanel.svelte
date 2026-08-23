@@ -10,8 +10,16 @@
 	// What it fetches today, not what it was worth when it was landed.
 	const worth = $derived(game.holdWorth);
 
-	/** Fish would move; there is somewhere for them to go. */
-	const canList = $derived(held.gt(0) && (game.listedRoom === null || game.listedRoom.gt(0)));
+	/**
+	 * Fish would move; there is room for a whole one.
+	 *
+	 * `gte(1)`, not `gt(0)`: `listForSale` floors what it moves, and bucket
+	 * capacity is `30 x 3.4^level`, so from level 2 up the quay parks on a
+	 * fraction — 346 of 346.8 — forever. At `gt(0)` the button stayed live and
+	 * every click was a no-op, and the "Quay full" branch below never fired
+	 * either, so nothing on screen said why.
+	 */
+	const canList = $derived(held.gt(0) && (game.listedRoom === null || game.listedRoom.gte(1)));
 	/** The bicycle takes the bucket *and* the quay in one trip. */
 	const rideWorth = $derived(worth.plus(game.listedWorth));
 	const canRide = $derived(state.hasBicycle && rideWorth.gt(0) && !game.inTown);
@@ -33,7 +41,7 @@
 				</button>
 			{:else}
 				<button class="secondary" onclick={() => game.sell()} disabled={!canList}>
-					{#if game.listedRoom !== null && game.listedRoom.lte(0)}
+					{#if game.listedRoom !== null && game.listedRoom.lt(1)}
 						Quay full
 					{:else}
 						List for the merchant
