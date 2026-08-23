@@ -13,7 +13,7 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - [x] Stage 4 feat/market — MERGED
 - [x] Stage 5 feat/ponds — MERGED
 - [x] Stage 6 feat/minigames — MERGED
-- [ ] Stage 7 feat/consequences
+- [x] Stage 7 feat/consequences — MERGED
 - [ ] Stage 8 feat/voice
 - [ ] Stage 9 fix/finish
 
@@ -35,31 +35,30 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - Measure with: LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
 
 ## Next steps
-1. Stage 7: feat/consequences.
-   FINES: fixed grace period NOT a roll, identical on/offline; confiscate the
-   poached catch; coin fine is a PERCENTAGE (asymptotic, never reaches zero);
-   hard coin floor above a full tank of fuel while boat.owned; DROP the
-   ideas.txt "cannot buy anything until you pay" clause; offline = ONE eviction
-   then fishing continues; a crewless player currently gets no OfflineReport at
-   all -- an eviction must never be invisible.
-   SETBACKS: called "Setbacks" in all player-facing copy; AMBUSH ON EVENTS not
-   timers; at least three; escalate with playTime; damage in SECONDS OF INCOME
-   with the difference refunded; refundUpgrade touches coins and NOTHING else
-   (test lifetimeCoins byte-identical); car crash = one-time Setback at a
-   threshold (car lost, upgrades downgraded, some coins lost, never again);
-   evaluate in tick() ONLY, never in settleOffline/resume; do NOT wire into
-   simulateRun; achievements gain a Setback family (append-only); grandfather
-   existing saves.
-   Read design/ANSWER-RESEARCH.md sections 1 and 3 first.
+1. Stage 8: feat/voice.
+   a) Name the shift tiers Storms / Bosses / Megalodon in code, save and copy
+      (R61). Shifts are NOT built -- plan: derive the tier from prestigeCount
+      and record the deviation, same as the market gate.
+   b) Help surface (R55): browsable, covers ONLY what is unlocked (distinct from
+      guide.ts which describes the NEXT step). Setbacks documented there once
+      lived through (R62). Plus an opt-out unlock popup toggled in Settings.
+      PREREQUISITE: keyboard nav in Tabs.svelte -- nextTabIndex() already exists
+      in guide.ts, check whether Tabs.svelte actually wires it.
+   c) Rewrite all 47 Fishdex descriptions in voice. Samples in
+      design/archive/VOICE-SAMPLE.md. Failure mode is SAMENESS, not offence --
+      a different concrete detail per fish. If it cannot be sustained across 47,
+      stop and say so rather than shipping forty identical entries.
+2. Stage 9: fix/finish -- budget real time. Adversarial multi-agent bug hunt
+   (every finding verified by a second agent AND reproduced by a test), clear
+   PLAN.md Part 2 audit debt (17 defects; modal host + contrast already done),
+   balance end to end and record the ladder, play the first ten minutes as a new
+   player, pnpm audit:ui, refresh design/STATUS.md + design/IDEAS.md.
 
 ## Notes / decisions
 - SAVE_VERSION is 6 with MIGRATIONS[5]. DO NOT BUMP AGAIN this pass.
 - Market + ponds gate on prestigeCount > 0 (shifts unbuilt; deviation recorded).
 - Licences: no coin price; canSit requires the next locked water needs it.
-- Ladder after Stage 6 (seed 7): first prestige 3h13m20s;
+- Ladder after Stage 7 (seed 7): first prestige 3h12m38s;
   chain 3h13m / 13m27 / 3m01 / 2m19 / 1m46 / 1m41.
   LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
-- Tests 519 passing, 5 skipped.
-- Stage 8 still needs shift TIER NAMES (Storms/Bosses/Megalodon) + Help surface
-  + Tabs keyboard nav (nextTabIndex already exists in guide.ts) + 47 Fishdex
-  descriptions rewritten.
+- Tests 548 passing, 5 skipped. All four gates green at every merge so far.
