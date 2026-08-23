@@ -17,7 +17,8 @@ import {
 	emptyLedger,
 	ledgerValue,
 	marketOpen,
-	moveLedger
+	moveLedger,
+	speciesMultiplier
 } from './market';
 import {
 	BOAT_BASE_FUEL_CAPACITY,
@@ -55,6 +56,15 @@ import {
 	MIN_CAST_SECONDS,
 	PEARL_EXPONENT,
 	PEARL_MULTIPLIER_SCALE,
+	POND_BASE_COST,
+	POND_BASE_RATE,
+	POND_COST_GROWTH,
+	POND_LEVEL_BASE_COST,
+	POND_LEVEL_COST_GROWTH,
+	POND_MAX,
+	POND_MAX_LEVEL,
+	POND_RATE_GROWTH,
+	POND_VALUE_MULTIPLIER,
 	PRESTIGE_THRESHOLD,
 	PRESTIGE_UPGRADES,
 	MAP_BASE_COST,
@@ -75,7 +85,7 @@ import {
 	type PrestigeUpgradeId,
 	type UpgradeId
 } from './config';
-import type { GameState, Modifiers } from './types';
+import type { GameState, Modifiers, PondState } from './types';
 
 // ---------------------------------------------------------------------------
 // Catch tables
@@ -705,6 +715,9 @@ export function totalIncomePerSecond(state: GameState, modifiers: Modifiers): De
 	for (const source of SOURCE_ORDER) {
 		total = total.plus(sourceIncomePerSecond(state, modifiers, source));
 	}
+	for (const pond of state.ponds) {
+		total = total.plus(pondIncomePerSecond(state, pond).times(modifiers.sellMultiplier));
+	}
 	return total;
 }
 
@@ -1153,7 +1166,160 @@ export function accumulate(
 		}
 	}
 
+	// The ponds work last. They are producers like the crew, but they never
+	// sail, never fall back, and never touch fuel — so they sit outside the
+	// routing above rather than inside it.
+	const ponds = runPonds(state, seconds, efficiency, roomFor);
+	fishTotal = fishTotal.plus(ponds.fish);
+	valueTotal = valueTotal.plus(ponds.value);
+
 	return { fish: fishTotal, value: valueTotal, fellBack, bucketBound };
+}
+
+// ---------------------------------------------------------------------------
+// Breeding ponds
+// ---------------------------------------------------------------------------
+
+/** Every species by name, for looking one up from a pond's stocking. */
+export const SPECIES_BY_NAME: Map<string, Fish> = new Map(
+	Object.values(fishes).map((fish) => [fish.name, fish])
+);
+
+/**
+ * Ponds open at the first paradigm shift, on the same gate as the market.
+ *
+ * They are the second half of the market's idea — a machine for concentrating
+ * production onto one species — and ungated in run 1 a pond would be free
+ * concentrated income with nothing anywhere to oppose it, which is the exact
+ * configuration the market exists to prevent.
+ */
+export function pondsOpen(state: GameState): boolean {
+	return marketOpen(state);
+}
+
+/** Coins for the next pond. */
+export function pondCost(owned: number): Decimal {
+	return D(POND_BASE_COST).times(D(POND_COST_GROWTH).pow(owned));
+}
+
+/** Coins for a pond's next level. */
+export function pondLevelCost(level: Decimal | number): Decimal {
+	return D(POND_LEVEL_BASE_COST).times(D(POND_LEVEL_COST_GROWTH).pow(level));
+}
+
+/** Fish per second a pond breeds, before offline efficiency. */
+export function pondRate(pond: PondState): Decimal {
+	if (!pond.species) return d0();
+	return D(POND_BASE_RATE).times(D(POND_RATE_GROWTH).pow(pond.level));
+}
+
+/** What one fish of a pond's species is worth, farmed. */
+export function pondFishValue(species: string): Decimal {
+	const fish = SPECIES_BY_NAME.get(species);
+	if (!fish) return d0();
+	return D(fishTypeBaseValue[fish.category]).times(POND_VALUE_MULTIPLIER);
+}
+
+/** Coins per second a pond brings in, before the market and the sale rate. */
+export function pondIncomePerSecond(state: GameState, pond: PondState): Decimal {
+	if (!pond.species) return d0();
+	return pondRate(pond)
+		.times(pondFishValue(pond.species))
+		.times(speciesMultiplier(state, pond.species));
+}
+
+export function digPond(state: GameState): boolean {
+	if (!pondsOpen(state)) return false;
+	if (state.ponds.length >= POND_MAX) return false;
+
+	const cost = pondCost(state.ponds.length);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	state.ponds.push({ species: null, level: d0() });
+	return true;
+}
+
+/**
+ * Stock a pond, or empty it.
+ *
+ * Free, and changeable at any time. A locked choice would be a trap: the market
+ * moves, and a pond you cannot restock is a pond that becomes worthless through
+ * no fault of the player. Restocking is the counterplay to a price you have
+ * crushed yourself, not a penalty for guessing wrong.
+ */
+export function stockPond(state: GameState, index: number, species: string | null): boolean {
+	const pond = state.ponds[index];
+	if (!pond) return false;
+	if (species !== null) {
+		if (!SPECIES_BY_NAME.has(species)) return false;
+		// Only fish you have actually landed. You cannot breed a rumour.
+		if (!state.dex[species] || state.dex[species].lte(0)) return false;
+	}
+
+	pond.species = species;
+	return true;
+}
+
+export function upgradePond(state: GameState, index: number): boolean {
+	const pond = state.ponds[index];
+	if (!pond) return false;
+	if (pond.level.gte(POND_MAX_LEVEL)) return false;
+
+	const cost = pondLevelCost(pond.level);
+	if (state.coins.lt(cost)) return false;
+
+	state.coins = state.coins.minus(cost);
+	pond.level = pond.level.plus(1);
+	return true;
+}
+
+/**
+ * Work every pond for `seconds`.
+ *
+ * Each pond banks its own remainders under `pond:<index>` — a shared key would
+ * let one pond spend another's fraction of a fish. The index is a safe id
+ * because ponds are only ever added, never removed.
+ *
+ * Called from inside `accumulate`, which is already O(producers), so there is no
+ * per-pond tick and no new timer.
+ */
+function runPonds(
+	state: GameState,
+	seconds: number,
+	efficiency: number,
+	roomFor: (want: Decimal) => Decimal | null
+): { fish: Decimal; value: Decimal } {
+	let fishTotal = d0();
+	let valueTotal = d0();
+
+	for (let index = 0; index < state.ponds.length; index++) {
+		const pond = state.ponds[index];
+		if (!pond.species) continue;
+
+		const fish = SPECIES_BY_NAME.get(pond.species);
+		if (!fish) continue;
+
+		const wanted = pondRate(pond).times(seconds).times(efficiency);
+		if (wanted.lte(0)) continue;
+
+		// Clamp before `takeWhole`, never trim after it — the bank is only
+		// honest if what is not caught is not banked either.
+		const room = roomFor(wanted);
+		const allowed = room === null ? wanted : Decimal.min(wanted, room);
+		if (allowed.lte(0)) continue;
+
+		const bred = takeWhole(state, `pond:${index}`, allowed);
+		if (bred.lte(0)) continue;
+
+		const worth = bred.times(pondFishValue(pond.species));
+		recordCatch(state, fish, bred, worth);
+
+		fishTotal = fishTotal.plus(bred);
+		valueTotal = valueTotal.plus(worth);
+	}
+
+	return { fish: fishTotal, value: valueTotal };
 }
 
 // ---------------------------------------------------------------------------
@@ -1884,6 +2050,8 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		// mechanic. See `market.ts`.
 		marketPressure: {},
 		marketUpdatedAt: now,
+		// Dug with coins on land you just sold, like the boat and the crew.
+		ponds: [],
 
 		dex: keep?.dex ?? {},
 		carry: {},

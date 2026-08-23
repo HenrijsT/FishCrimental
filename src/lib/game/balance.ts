@@ -13,6 +13,8 @@ import {
 	PRESTIGE_UPGRADE_IDS,
 	needsBoat,
 	SOURCE_ORDER,
+	POND_MAX,
+	POND_MAX_LEVEL,
 	UPGRADE_IDS,
 	type LicenceId,
 	type PrestigeUpgradeId,
@@ -33,7 +35,14 @@ import {
 	buyBicycle,
 	buyBoatUpgrade,
 	inTown,
+	digPond,
 	listForSale,
+	pondCost,
+	pondFishValue,
+	pondLevelCost,
+	pondsOpen,
+	stockPond,
+	upgradePond,
 	rideToTown,
 	runTrader,
 	buyDeckhand,
@@ -265,6 +274,28 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 	};
 }
 
+/**
+ * The most valuable fish the player has landed, which is what anyone would
+ * stock a pond with.
+ *
+ * Not the most *numerous* — that is whatever is commonest, which is by
+ * construction the cheapest thing they catch, and a reference player who fills
+ * six ponds with minnows is not a reference for anything.
+ */
+function bestKnownSpecies(state: GameState): string | null {
+	let best: string | null = null;
+	let bestValue = d0();
+	for (const name of Object.keys(state.dex)) {
+		if (state.dex[name].lte(0)) continue;
+		const value = pondFishValue(name);
+		if (value.gt(bestValue)) {
+			bestValue = value;
+			best = name;
+		}
+	}
+	return best;
+}
+
 function cheapestPurchase(state: GameState): Purchase | null {
 	let best: Purchase | null = null;
 
@@ -318,6 +349,32 @@ function cheapestPurchase(state: GameState): Purchase | null {
 		consider(autoFisherCost(state.autoFisher), () => {
 			buyAutoFisher(state);
 		});
+	}
+
+	// Ponds. The reference player digs one when it is the cheapest thing on the
+	// board, stocks it with whatever they know best, and levels it like anything
+	// else. Stocking every pond with the same fish is deliberately what a greedy
+	// player does — it is the behaviour the market exists to charge for, so the
+	// pacing figures should feel it rather than be measured against a player who
+	// happens to diversify.
+	if (pondsOpen(state)) {
+		if (state.ponds.length < POND_MAX) {
+			consider(pondCost(state.ponds.length), () => {
+				digPond(state);
+			});
+		}
+
+		for (let index = 0; index < state.ponds.length; index++) {
+			const pond = state.ponds[index];
+			if (!pond.species) {
+				const best = bestKnownSpecies(state);
+				if (best) stockPond(state, index, best);
+			}
+			if (pond.level.gte(POND_MAX_LEVEL)) continue;
+			consider(pondLevelCost(pond.level), () => {
+				upgradePond(state, index);
+			});
+		}
 	}
 
 	if (!state.autoFisherOffline && state.autoFisher.gt(0)) {

@@ -422,6 +422,43 @@ export const AUTO_FISHER: AutoFisherConfig = {
 export const AUTO_FISHER_OFFLINE_COST = 5e11;
 
 // ---------------------------------------------------------------------------
+// Breeding ponds
+// ---------------------------------------------------------------------------
+
+/**
+ * How many ponds a player can dig.
+ *
+ * Six is enough for a real rotation against the market and few enough that each
+ * one is a decision rather than a slot to fill.
+ */
+export const POND_MAX = 6;
+
+/** Coins for the first pond; each one after costs `POND_COST_GROWTH` times more. */
+export const POND_BASE_COST = 5e6;
+export const POND_COST_GROWTH = 22;
+
+/** Fish a level-0 pond breeds per second. */
+export const POND_BASE_RATE = 0.06;
+/** Each level multiplies the rate by this. */
+export const POND_RATE_GROWTH = 1.4;
+export const POND_MAX_LEVEL = 45;
+
+/** Coins for a pond's first level, growing geometrically. */
+export const POND_LEVEL_BASE_COST = 2.5e6;
+export const POND_LEVEL_COST_GROWTH = 1.92;
+
+/**
+ * What a farmed fish fetches, as a value multiplier on its type.
+ *
+ * A pond is not water on the map, so it has no `valueMultiplier` of its own to
+ * borrow — and borrowing the deepest open source's would make ponds silently
+ * scale with progression in a way nothing else does. 200 sits between the
+ * Lagoon (308) and the Sea (84): farmed fish fetch well, but less than a
+ * genuine deep-water catch.
+ */
+export const POND_VALUE_MULTIPLIER = 200;
+
+// ---------------------------------------------------------------------------
 // The fish market
 // ---------------------------------------------------------------------------
 

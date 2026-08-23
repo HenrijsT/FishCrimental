@@ -42,6 +42,20 @@ export interface SpeciesLedger {
 	worth: Record<string, Decimal>;
 }
 
+/**
+ * A breeding pond (R68).
+ *
+ * One species, chosen by the player from what they have already caught, bred
+ * passively. `species` is `null` for a pond that has been dug but not stocked.
+ *
+ * The pond's position in `ponds` is its id — ponds are only ever added, never
+ * removed, so the index is stable and is what keys its remainder bank.
+ */
+export interface PondState {
+	species: string | null;
+	level: Decimal;
+}
+
 export interface GameState {
 	version: number;
 
@@ -87,6 +101,9 @@ export interface GameState {
 	marketPressure: Record<string, Decimal>;
 	/** One timestamp for the whole book — the decay factor is species-independent. */
 	marketUpdatedAt: number;
+
+	/** Breeding ponds, in the order they were dug. The index is the pond's id. */
+	ponds: PondState[];
 
 	// Progress
 	/** Lifetime catches per species name — the Fishdex. */

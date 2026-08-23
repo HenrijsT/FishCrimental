@@ -64,7 +64,12 @@ import {
 	eroticCaught,
 	consignmentCount,
 	consignmentRoom,
+	digPond,
 	holdCount,
+	pondCost,
+	pondsOpen,
+	stockPond,
+	upgradePond,
 	holdMarketValue,
 	consignmentMarketValue,
 	jellyCaught,
@@ -591,6 +596,24 @@ export class Game {
 		return result.earned;
 	}
 
+	// -----------------------------------------------------------------------
+	// Ponds
+	// -----------------------------------------------------------------------
+
+	digPond(): boolean {
+		const dug = digPond(this.state);
+		if (dug) this.#checkAchievements();
+		return dug;
+	}
+
+	stockPond(index: number, species: string | null): boolean {
+		return stockPond(this.state, index, species);
+	}
+
+	upgradePond(index: number): boolean {
+		return upgradePond(this.state, index);
+	}
+
 	purchaseBicycle(): boolean {
 		const bought = buyBicycle(this.state);
 		if (bought) this.#checkAchievements();
@@ -740,6 +763,14 @@ export class Game {
 	holdWorth = $derived(holdMarketValue(this.state).times(this.modifiers.sellMultiplier));
 
 	marketOpen = $derived(marketOpen(this.state));
+	pondsOpen = $derived(pondsOpen(this.state));
+	nextPondPrice = $derived(pondCost(this.state.ponds.length));
+	/** Every species the player has actually landed, for stocking a pond. */
+	stockable = $derived(
+		Object.keys(this.state.dex)
+			.filter((name) => this.state.dex[name].gt(0))
+			.sort()
+	);
 	marketDepth = $derived(marketDepth(this.state));
 	marketBook = $derived(pricedSpecies(this.state));
 	/** What the travelling merchant pays per coin of catch. Never the town price. */
