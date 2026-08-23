@@ -18,6 +18,8 @@ import {
 	TOWN_TRIP_SECONDS,
 	TRADER_PERIOD_SECONDS,
 	SAVE_KEY,
+	POND_MAX,
+	POND_MAX_LEVEL,
 	SAVE_VERSION,
 	SOURCE_ORDER,
 	UPGRADES,
@@ -29,7 +31,7 @@ import {
 } from './config';
 import { createInitialState } from './engine';
 import { LEGACY_SPECIES } from './market';
-import type { BoatState, GameState, SpeciesLedger } from './types';
+import type { BoatState, GameState, PondState, SpeciesLedger } from './types';
 
 const EXPORT_PREFIX = 'FISHC';
 
@@ -328,6 +330,25 @@ function readLedger(raw: unknown): SpeciesLedger {
 	};
 }
 
+/**
+ * Breeding ponds.
+ *
+ * Capped at `POND_MAX` on the way in, and an unknown species is read as an
+ * unstocked pond rather than dropped — the pond was paid for, and losing it
+ * because a fish was renamed would be worse than losing what it was breeding.
+ */
+function readPonds(raw: unknown): PondState[] {
+	if (!Array.isArray(raw)) return [];
+	return raw.slice(0, POND_MAX).map((entry) => {
+		const source = isRecord(entry) ? entry : {};
+		const species =
+			typeof source.species === 'string' && KNOWN_SPECIES.has(source.species)
+				? source.species
+				: null;
+		return { species, level: level(source.level, POND_MAX_LEVEL) };
+	});
+}
+
 function readUpgrades(raw: unknown): Record<UpgradeId, Decimal> {
 	const source = isRecord(raw) ? raw : {};
 	return UPGRADE_IDS.reduce(
@@ -454,6 +475,8 @@ export function fromRaw(data: Raw): GameState {
 		// A book loaded with no timestamp has not decayed yet, not decayed
 		// forever. `settleMarket` runs immediately after the load.
 		marketUpdatedAt: num(migrated.marketUpdatedAt, Date.now()),
+
+		ponds: readPonds(migrated.ponds),
 
 		dex: readDex(migrated.dex),
 		carry: readCarry(migrated.carry),

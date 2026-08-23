@@ -2932,7 +2932,7 @@ Built to `design/ANSWER-RESEARCH.md` §2. `MARKET_IMPACT = 0.25`,
 R59 gates the market on the first paradigm shift. **Paradigm shifts as
 `SHIFTS-SPEC.md` describes them do not exist yet** — that spec is an unbuilt
 layer, and no stage of this brief builds it. In this codebase the run-ending
-reset *is* the paradigm shift, and it is called a prestige. So the gate is
+reset _is_ the paradigm shift, and it is called a prestige. So the gate is
 `prestigeCount > 0`.
 
 This satisfies R59 exactly as written under the naming the code actually has:
@@ -2942,7 +2942,7 @@ three tiers land they are prestiges, and this gate carries over unchanged.
 
 ### The side-ledger, and why it is a `SpeciesLedger` rather than four records
 
-The market prices a *species*, and species identity does not survive the catch
+The market prices a _species_, and species identity does not survive the catch
 anywhere: `hold` is six `FishType` buckets and `holdValue` is one scalar.
 **Both stay exactly as they are.** Beside them runs `holdSpecies`, and — because
 Stage 2 gave listed fish their own life — `consignmentSpecies` too.
@@ -2986,14 +2986,14 @@ than through `recordCatch`, and every one of them keeps its old meaning.
 
 The first tuning — base 40,000, ×4.35 a level, 60 levels — was measured against a
 real chain and **the market was completely inert**: the greedy player bought 35
-levels, depth reached 2.87e23, and *every one of the 47 prices sat at exactly
-1.000*. A track that is always affordable is not a mitigation, it is an off
+levels, depth reached 2.87e23, and _every one of the 47 prices sat at exactly
+1.000_. A track that is always affordable is not a mitigation, it is an off
 switch.
 
 **Cold Storage is now bounded relief: base 250,000, ×5.5 a level, 12 levels.**
 Twelve levels is 1.15e6× depth — about six orders of magnitude of production
 growth — and after that prices fall and stay falling, which is the design:
-*settling and still slowly falling, never blocked.* At maxed storage a
+_settling and still slowly falling, never blocked._ At maxed storage a
 diversified player's prices sit at **0.80–1.00**, which is visible on the board
 and worth acting on. The whole track costs 6.8e13, a real sink at the point it is
 bought and trivial later, which is exactly when the market is meant to start
@@ -3005,13 +3005,13 @@ biting.
 real production rates, through the shipped code:
 
 | Fish/s | Model | **Built** |
-| --- | --- | --- |
-| 1 | 1.250 | **1.262** |
-| 39 | 1.130 | **1.163** |
-| 1e3 | 0.865 | **0.930** |
-| 1e4 | 0.755 | **0.786** |
-| 4.1e5 | 0.726 | **0.732** |
-| 1e12 | 0.701 | **0.702** |
+| ------ | ----- | --------- |
+| 1      | 1.250 | **1.262** |
+| 39     | 1.130 | **1.163** |
+| 1e3    | 0.865 | **0.930** |
+| 1e4    | 0.755 | **0.786** |
+| 4.1e5  | 0.726 | **0.732** |
+| 1e12   | 0.701 | **0.702** |
 
 Mono is +26% early, crosses over between 39 and 1,000 fish/s — the model's 75–90
 minute window — and settles at 0.702. Recovery from a saturated price of 0.167:
@@ -3042,22 +3042,148 @@ on the board rather than hope.
 
 ### The ladder, re-measured (seed 7)
 
-| Run | Stage 3 | **Stage 4** |
-| --- | --- | --- |
-| 1 | 3h18m09s | **3h18m09s** |
-| 2 | 36m30s | **11m19s** |
-| 3 | 8m26s | **2m44s** |
-| 4 | 4m33s | **1m56s** |
-| 5 | 2m02s | **1m47s** |
-| 6 | 1m56s | **1m41s** |
+| Run | Stage 3  | **Stage 4**  |
+| --- | -------- | ------------ |
+| 1   | 3h18m09s | **3h18m09s** |
+| 2   | 36m30s   | **11m19s**   |
+| 3   | 8m26s    | **2m44s**    |
+| 4   | 4m33s    | **1m56s**    |
+| 5   | 2m02s    | **1m47s**    |
+| 6   | 1m56s    | **1m41s**    |
 
 Run 1 is untouched to the second, as the gate requires.
 
-Runs 2 onward got *faster*, and the reason is worth recording because it is the
+Runs 2 onward got _faster_, and the reason is worth recording because it is the
 opposite of what a "penalty" mechanic sounds like: **knowledge is not small.**
 `K = 1 + 0.28·ln(1 + n/100)` looks gentle, but `n` is a lifetime catch count that
 reaches 1e9 and beyond, and `ln` of that is 16 — so knowledge is a 5x-plus
 permanent bonus by run two, carried across prestiges, opposed by a price penalty
-that resets every run and has to be re-earned. That asymmetry *is* the mechanic,
+that resets every run and has to be re-earned. That asymmetry _is_ the mechanic,
 stated plainly in the research, and this is what it looks like in minutes. The
 chain still converges rather than collapsing.
+
+## Stage 5 — Fish breeding ponds (`feat/ponds`)
+
+R68, I2. The owner asked for ponds and left the shape open. **This section is the
+design, written before the code**, so the reasoning survives even if the
+implementation changes.
+
+### What a pond is
+
+A tank you dig on your own land, stocked with **one species you have already
+caught**, which then breeds it. It is a producer like a deckhand, with one
+difference that is the whole point: **a deckhand draws from a source's catch
+table and lands whatever comes up; a pond lands exactly what you told it to.**
+
+Ponds are how a player stops being a passenger to the catch tables and starts
+choosing what they are in.
+
+### Why ponds and the market are the same idea
+
+The market punishes concentration. A pond _is_ concentration — it is a machine
+for pointing every fish you produce at one species.
+
+So a pond-heavy player craters the price of precisely the fish they committed
+to, and the brief's stated risk is not a risk to be mitigated but **the
+mechanic**. The counterplay is legible and already built: stock different ponds
+with different species, buy Cold Storage, or leave a pond fallow while its price
+recovers. A player who does none of that still has a working pond; rotating is
+optimisation, not maintenance.
+
+There is a second-order effect that fell out rather than being designed, and it
+is a good one: **pond fish count for the Fishdex**, so a pond deepens knowledge
+of its species while it depresses the price. Knowledge is carried across
+prestiges and the price penalty is not — so a long-committed mono-pond player
+ends up genuinely expert in their fish, permanently, having paid for it in price
+for the whole run. That is the market's asymmetry, applied to a machine the
+player built on purpose.
+
+### Decisions, and the reasoning
+
+**Unlock: the first paradigm shift, the same gate as the market.**
+Ponds are the second half of the market's idea, and shipping them behind the same
+gate means run 1 is untouched by both — every run-1 assertion in the repo stands.
+Ungated, a pond in run 1 would be free concentrated income with nothing anywhere
+to oppose it, which is the exact configuration the market exists to prevent.
+Thematically it also reads: you sold one operation and built something of your
+own with the proceeds.
+
+**Cost: coins, geometric per pond, six ponds maximum.** Six is enough for a real
+rotation and few enough that each one is a decision. Each pond levels
+independently.
+
+**What it breeds: any species already in the Fishdex, chosen by the player,
+changeable at any time and for nothing.** A locked choice would be a trap — the
+market moves, and a pond you cannot restock is a pond that becomes worthless
+through no fault of the player. Free restocking makes rotation the counterplay
+rather than a punishment for guessing wrong.
+
+**Value: a flat `POND_VALUE_MULTIPLIER`, not a source's.** A pond is not water on
+the map, so it has no `valueMultiplier` to borrow, and borrowing the deepest open
+source's would make ponds silently scale with progression in a way nothing else
+does. Farmed fish fetch well but less than a genuine deep-water catch.
+
+**Ponds do not survive a prestige.** They are dug with coins on land you sold,
+like the boat, the bucket, the licences and the crew. Nothing coin-bought
+survives, and a pond is not the place to make the first exception.
+
+**Where they live: the Crew tab, under the deckhands.** A pond is passive
+production, which is what a player opens that tab looking for. An eleventh
+top-level tab for one panel would cost more in navigation than it bought in
+discoverability.
+
+### The two constraints that were handed down
+
+**Each pond banks its own remainders under `pond:<index>`.** Fractional fish are
+banked per producer by `takeWhole`, and a shared key would let one pond spend
+another's fraction. The index is a safe id because ponds are only ever added,
+never removed — six slots, filled in order, and a pond you are finished with is
+restocked rather than demolished.
+
+**Nothing is inserted before `SOURCE_ORDER[0]`.** Ponds are not a source at all.
+They are not on the map, they need no licence and no boat, they have no catch
+table, and they never appear in `SOURCE_ORDER`. The first source stays exactly
+where it is.
+
+`accumulate` is already O(producers), so ponds are a second loop inside the
+existing one — no per-pond tick, no new timer.
+
+### What it turned into
+
+The numbers, and one thing the design did not anticipate.
+
+**The reference player had to be taught to stock a pond properly.** First attempt
+stocked whichever species the player had landed *most* of — which is by
+construction the commonest, and therefore the cheapest, thing they catch. Six
+ponds full of minnows, and ponds measured as a **net loss**: run 2 went 679s to
+753s, because the coins spent on ponds bought less than the upgrades they
+displaced.
+
+Stocking the most *valuable* known species instead — which is what any human
+would do — turns it round completely:
+
+| Run | Before ponds | Ponds, stocked badly | **Ponds, stocked well** |
+| --- | --- | --- | --- |
+| 1 | 3h18m09s | 3h18m09s | **3h18m09s** |
+| 2 | 11m19s | 12m33s | **9m28s** |
+| 3 | 2m44s | 2m56s | **2m08s** |
+| 4 | 1m56s | 2m01s | **1m56s** |
+| 5 | 1m47s | 1m49s | **1m46s** |
+| 6 | 1m41s | 1m41s | **1m41s** |
+
+Lifetime coins at run 2 go 9.8e20 → **6.9e22**. Ponds are a real option that
+rewards a real decision, and the decision is *which fish*, which is the one the
+market charges for.
+
+Run 1 is untouched to the second, as the shared gate requires.
+
+**The market feels them.** Prices at the end of a pond-heavy run sit at
+**0.65–1.00** against 0.80–1.00 without ponds. `ponds.test.ts` proves the sharp
+end directly: six ponds on one species drop that species' price below 0.95 in an
+hour and keep dropping it over a simulated day — while every hour still pays,
+because impact is a price, not a wall. Spreading the same production across two
+species measurably hurts less.
+
+24 tests. The two handed-down constraints have one each: `pond:<index>` banks
+are independent (an unstocked pond has no bank at all, and two ponds at different
+rates diverge rather than tracking), and ponds never enter `SOURCE_ORDER`.

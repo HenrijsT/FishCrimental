@@ -88,7 +88,8 @@ export const TABS: TabDefinition[] = [
 	{
 		id: 'crew',
 		label: 'Crew',
-		blurb: 'Deckhands fish for you, including while the game is closed.',
+		blurb:
+			'Deckhands fish for you, and ponds breed one chosen fish. Both work while the game is closed.',
 		available: (state) =>
 			state.coins.gte(deckhandCost(SOURCE_ORDER[0], 0).times(0.6)) ||
 			SOURCE_ORDER.some((source) => state.deckhands[source].gt(0))
