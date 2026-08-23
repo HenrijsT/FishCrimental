@@ -2749,3 +2749,88 @@ knowingly shipped to only one of the two front ends.
 `src/base.css` stays. It is the layout reset that `+layout.svelte` imports, and
 keeping the layout free of any opinion about how the game looks is worth doing on
 its own merits, not only because there were once two themes.
+
+## Stage 2 — How fish are sold (`feat/selling`)
+
+R65. **There is a Sell button, always.** With an Assistant it sells everything at
+once, at full price, without leaving the water. Without one it *lists* the catch:
+the fish move onto the quay for the travelling merchant, out of the bucket
+immediately, and the coins arrive when he does.
+
+The merchant no longer seizes the hold on arrival. He settles what was set aside
+for him and nothing else. **The player now decides what leaves the bucket and
+when; he is the delay rather than the decision.**
+
+### The consignment is capped, and that is load-bearing
+
+`consignmentRoom` is `bucketCapacity` — the merchant's cart is the same size as
+your bucket, and the two grow together.
+
+Without a cap, listing defeats the bucket outright: you would list every fish as
+it landed, the bucket would never fill, and the trader, the bicycle *and* the
+Assistant would all lose the problem they exist to solve. The whole opening act
+is built on the bucket filling. With a cap, listing genuinely doubles what you
+can hold at once — a reward for engaging with the merchant rather than a way
+around him.
+
+### Riding into town takes the quay with you
+
+`rideToTown` settles the hold **and** the consignment, both at `TOWN_RATE`. So
+listing is never a trap: if the merchant has not been yet you can still take it
+in yourself for the full price.
+
+**What listing actually costs you is a race.** Listing starts his 45-second
+clock; beat it and you get 100%, lose it and he takes his 55%. That is a real
+decision, made by the player, and it is legible in a way the old silent seizure
+never was.
+
+### Priced at settlement
+
+`settleConsignment` values the catch with the `sellMultiplier` in force *when he
+pays*, not when the fish were listed. This matters little today and is the whole
+mechanic once the market lands in Stage 4 — a consignment is exposure to the
+price, not a locked-in receipt. The panel says so in as many words, because
+players will otherwise assume they locked a price.
+
+### Offline, he does not come
+
+Nothing settles while the game is shut (R51), so listed fish sit and wait. The
+quay panel says this outright rather than looking broken.
+
+### The quay does not survive a prestige
+
+It is emptied exactly as the bucket is. Listed fish belong to the operation you
+just sold, and carrying `consignmentValue` across would hand the new run a
+windfall the player did nothing for, settled by the first merchant to arrive.
+Tested.
+
+### Persistence, and the pass's one save bump
+
+`SAVE_VERSION` **5 → 6**, with `MIGRATIONS[5]`. This is the **one bump for the
+whole pass**; later stages share it. It exists because an older build would
+silently drop `consignment`, taking fish the player had already listed with it.
+A version 5 save loads with an empty quay.
+
+### Travel: 75s → 40s
+
+R66. `TOWN_TRIP_SECONDS = 40`. Seventy-five seconds was most of two merchant
+periods spent looking at a disabled cast button, and the ride is the *reward* —
+it is the full price. Forty is still long enough that the merchant is a real
+alternative.
+
+### `simulateRun`, re-taught and re-measured
+
+The simulated player now lists when they have no bicycle, **and while the town
+trip is running** — a full bucket stops the crew, and a listed fish at 55% beats
+a fish never caught.
+
+| | Before | After |
+| --- | --- | --- |
+| First prestige | 3h23m59s | **3h18m09s** |
+| Boat | 1h29m11s | 1h23m11s |
+| Ocean open | 2h05m00s | 1h59m27s |
+| Idle crossover | 0h27m02s | 0h27m02s |
+
+Six minutes off the first run, from the shorter trip and from the crew no longer
+standing idle during it. The prestige chain is unchanged in shape — still
+3h18m / 20m / 2m48s / 1m35s / 48s / 46s. Stage 3 is what addresses that.

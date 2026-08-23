@@ -7,7 +7,7 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 ## Status
 - [x] Baseline: 406 tests green, branch feat/going-ham clean.
 - [x] Stage 0 fix/offline — MERGED (3370461)
-- [ ] Stage 1 chore/one-frontend
+- [x] Stage 1 chore/one-frontend — MERGED
 - [ ] Stage 2 feat/selling
 - [ ] Stage 3 fix/pearls
 - [ ] Stage 4 feat/market

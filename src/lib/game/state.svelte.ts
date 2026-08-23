@@ -12,6 +12,7 @@ import {
 	SAVE_KEY,
 	SOURCE_CONFIG,
 	TICK_MS,
+	TRADER_RATE,
 	BOAT_UPGRADE_IDS,
 	UPGRADE_IDS,
 	type BoatUpgradeId,
@@ -40,6 +41,7 @@ import {
 	traderStock,
 	rideToTown,
 	saleRate,
+	sell,
 	townSecondsLeft,
 	buyBoat,
 	buyBoatUpgrade,
@@ -60,6 +62,8 @@ import {
 	createInitialState,
 	discoveredCount,
 	eroticCaught,
+	consignmentCount,
+	consignmentRoom,
 	holdCount,
 	jellyCaught,
 	performCast,
@@ -551,14 +555,18 @@ export class Game {
 	// -----------------------------------------------------------------------
 
 	/**
-	 * Sell on demand.
+	 * Sell on demand. There is always a Sell button (R65).
 	 *
-	 * Only possible once you can get to town yourself. Before the bicycle there
-	 * is no on-demand sale at all — the trader comes when he comes, and that is
-	 * the whole reason the bucket and the bicycle matter.
+	 * With an Assistant it is a sale and the coins are immediate. Without one it
+	 * is a *listing*: the fish go onto the quay for the travelling merchant,
+	 * leaving the bucket at once, and the coins arrive with him. Either way the
+	 * player decides what leaves the bucket and when, which is what the trader
+	 * silently taking the whole hold used to decide for them.
 	 */
-	sell(): Decimal {
-		return this.ride();
+	sell(): { sold: Decimal; listed: Decimal } {
+		const result = sell(this.state, this.modifiers);
+		if (result.sold.gt(0)) this.#checkAchievements();
+		return result;
 	}
 
 	/** Full price, at the cost of staying off the water while you are gone. */
@@ -704,6 +712,12 @@ export class Game {
 
 	/** Null once an Assistant is minding the catch — nothing limits the hold. */
 	holdRoom = $derived(holdRoom(this.state));
+	/** Fish on the quay waiting for the merchant, and what they are worth. */
+	listedSize = $derived(consignmentCount(this.state));
+	listedRoom = $derived(consignmentRoom(this.state));
+	listedWorth = $derived(this.state.consignmentValue.times(this.modifiers.sellMultiplier));
+	/** What the travelling merchant pays per coin of catch. Never the town price. */
+	merchantRate = TRADER_RATE;
 	bucketSize = $derived(bucketCapacity(this.state.bucketLevel));
 	bucketPrice = $derived(bucketCost(this.state.bucketLevel));
 

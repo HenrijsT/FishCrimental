@@ -10,6 +10,7 @@ import {
 	autoCastsPerSecond,
 	buyDeckhand,
 	buyUpgrade,
+	listForSale,
 	computeModifiers,
 	createInitialState,
 	deckhandBulkCost,
@@ -224,10 +225,12 @@ describe('round two: version 1 saves carried fractional fish', () => {
  * the UI said otherwise. Offline already branched correctly; the tick did not.
  */
 describe('the trader stops buying once there is an Assistant (R63)', () => {
+	/** Ten fish listed on the quay, the merchant almost due. */
 	function stocked(): GameState {
 		const state = createInitialState();
 		state.hold[FishType.Small] = D(10);
 		state.holdValue = D(1_000);
+		listForSale(state);
 		state.nextTraderAt = 1_000;
 		return state;
 	}
@@ -240,8 +243,8 @@ describe('the trader stops buying once there is an Assistant (R63)', () => {
 
 		expect(result.visits).toBe(0);
 		expect(result.earned.toNumber()).toBe(0);
-		expect(state.holdValue.toNumber()).toBe(1_000);
-		expect(state.hold[FishType.Small].toNumber()).toBe(10);
+		expect(state.consignmentValue.toNumber()).toBe(1_000);
+		expect(state.consignment[FishType.Small].toNumber()).toBe(10);
 		expect(state.coins.toNumber()).toBe(0);
 	});
 
@@ -251,7 +254,7 @@ describe('the trader stops buying once there is an Assistant (R63)', () => {
 		const result = runTrader(state, computeModifiers(state), 10_000);
 
 		expect(result.visits).toBeGreaterThan(0);
-		expect(state.holdValue.toNumber()).toBe(0);
+		expect(state.consignmentValue.toNumber()).toBe(0);
 	});
 
 	it('does not bank a pile of arrivals to spring on someone who lets him go', () => {

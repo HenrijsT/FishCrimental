@@ -39,6 +39,18 @@ export interface GameState {
 	/** Coin value of everything currently in the hold. */
 	holdValue: Decimal;
 
+	/**
+	 * Fish set aside on the quay for the travelling merchant (R65).
+	 *
+	 * Listing takes them out of the bucket immediately, which is the point —
+	 * you get the room back now and the coins when he arrives. They are *not*
+	 * part of `hold`, so `holdCount` and the bucket never see them, and they are
+	 * priced when he pays rather than when they were listed.
+	 */
+	consignment: Record<FishType, Decimal>;
+	/** Coin value of the consignment, at full price. */
+	consignmentValue: Decimal;
+
 	// Progress
 	/** Lifetime catches per species name — the Fishdex. */
 	dex: Record<string, Decimal>;

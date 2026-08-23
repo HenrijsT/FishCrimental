@@ -1,11 +1,19 @@
 <script lang="ts">
 	import { game } from '$lib/game/state.svelte';
-	import { canSell } from '$lib/game/engine';
 	import { FISH_TYPES, FishType, fishTypeBaseValue } from '$lib/fish_types';
 	import Num from './Num.svelte';
 
 	const state = $derived(game.state);
 	const visible = $derived(FISH_TYPES.filter((type) => state.hold[type].gt(0)));
+
+	const held = $derived(game.holdSize);
+	const worth = $derived(state.holdValue.times(game.modifiers.sellMultiplier));
+
+	/** Fish would move; there is somewhere for them to go. */
+	const canList = $derived(held.gt(0) && (game.listedRoom === null || game.listedRoom.gt(0)));
+	/** The bicycle takes the bucket *and* the quay in one trip. */
+	const rideWorth = $derived(worth.plus(game.listedWorth));
+	const canRide = $derived(state.hasBicycle && rideWorth.gt(0) && !game.inTown);
 </script>
 
 <section class="panel">
@@ -13,29 +21,39 @@
 		<h2>
 			The bucket
 			{#if game.holdRoom !== null}
-				<span class="cap"><Num value={game.holdSize} /> / <Num value={game.bucketSize} /></span>
+				<span class="cap"><Num value={held} /> / <Num value={game.bucketSize} /></span>
 			{/if}
 		</h2>
-		{#if canSell(state)}
-			<button onclick={() => game.ride()} disabled={state.holdValue.lte(0) || game.inTown}>
-				{#if game.inTown}
-					In town · {Math.ceil(game.townLeft)}s
-				{:else}
-					{state.hasAssistant ? 'Sell' : 'Ride to town'} ·
-					<Num value={state.holdValue.times(game.modifiers.sellMultiplier)} tone="coin" />
+
+		<div class="actions">
+			{#if state.hasAssistant}
+				<button onclick={() => game.sell()} disabled={held.lte(0)}>
+					Sell · <Num value={worth} tone="coin" />
+				</button>
+			{:else}
+				<button class="secondary" onclick={() => game.sell()} disabled={!canList}>
+					{#if game.listedRoom !== null && game.listedRoom.lte(0)}
+						Quay full
+					{:else}
+						List for the merchant
+					{/if}
+				</button>
+				{#if state.hasBicycle}
+					<button onclick={() => game.ride()} disabled={!canRide}>
+						{#if game.inTown}
+							In town · {Math.ceil(game.townLeft)}s
+						{:else}
+							Ride to town · <Num value={rideWorth} tone="coin" />
+						{/if}
+					</button>
 				{/if}
-			</button>
-		{:else}
-			<span class="waiting">Trader in {Math.ceil(game.traderLeft)}s</span>
-		{/if}
+			{/if}
+		</div>
 	</div>
 
 	<p class="faint note">
 		Fish are sorted by size. The bigger the fish the more it fetches, and where you caught it
 		matters more than what it is.
-		{#if !canSell(state)}
-			With no way into town, you sell to whoever comes past — and he pays what he likes.
-		{/if}
 	</p>
 
 	{#if game.holdRoom !== null && game.holdRoom.lte(0)}
@@ -61,13 +79,60 @@
 			{/each}
 		</ul>
 	{/if}
+
+	{#if !state.hasAssistant}
+		<div class="quay">
+			<h3>
+				On the quay
+				{#if game.listedRoom !== null}
+					<span class="cap"><Num value={game.listedSize} /> / <Num value={game.bucketSize} /></span>
+				{/if}
+			</h3>
+
+			{#if game.listedSize.lte(0)}
+				<p class="faint small">
+					Listing takes fish out of the bucket now and pays when the merchant arrives. He takes
+					whatever is waiting for him, at his own price.
+				</p>
+			{:else}
+				<p class="small">
+					<Num value={game.listedSize} /> fish, worth
+					<Num value={game.listedWorth.times(game.merchantRate)} tone="coin" /> to the merchant.
+					<span class="faint">
+						He is due in {Math.ceil(game.traderLeft)}s, and pays for them at the price on the day —
+						not the price when you listed them.
+					</span>
+				</p>
+				<p class="faint small">
+					Nobody comes while the game is shut. Listed fish sit and wait for you.
+				</p>
+			{/if}
+		</div>
+	{/if}
 </section>
 
 <style>
-	.waiting {
+	.actions {
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+
+	.quay {
+		margin-top: 0.9rem;
+		padding-top: 0.7rem;
+		border-top: 1px solid var(--edge);
+	}
+
+	.quay h3 {
+		font-size: 0.9rem;
+		margin: 0 0 0.3rem;
+	}
+
+	.small {
 		font-size: 0.78rem;
-		color: var(--ink-dim);
-		font-variant-numeric: tabular-nums;
+		margin: 0.2rem 0;
+		max-width: 60ch;
 	}
 
 	.cap {

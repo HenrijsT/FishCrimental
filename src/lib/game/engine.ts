@@ -1146,6 +1146,114 @@ export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RAT
 	return earned;
 }
 
+/**
+ * How many fish are set aside on the quay for the merchant.
+ *
+ * Deliberately not part of `holdCount`: listed fish have left the bucket, and
+ * counting them again would give the room back with one hand and take it away
+ * with the other.
+ */
+export function consignmentCount(state: GameState): Decimal {
+	let total = d0();
+	for (const type of FISH_TYPES) total = total.plus(state.consignment[type]);
+	return total;
+}
+
+/**
+ * Room left on the quay, or `null` when nothing limits it.
+ *
+ * The merchant's cart is the same size as your bucket, and the two grow
+ * together. Without a limit, listing would defeat the bucket outright — you
+ * would list every fish as it landed, the bucket would never fill, and the
+ * trader, the bicycle and the Assistant would all lose the thing they exist to
+ * solve. With one, listing genuinely doubles what you can hold at once, which
+ * is a reward for engaging with the merchant rather than a way around him.
+ *
+ * An Assistant sells on the spot, so there is never a consignment to limit.
+ */
+export function consignmentRoom(state: GameState): Decimal | null {
+	if (state.hasAssistant) return null;
+	return Decimal.max(d0(), bucketCapacity(state.bucketLevel).minus(consignmentCount(state)));
+}
+
+/**
+ * Move fish out of the bucket and onto the quay for the merchant (R65).
+ *
+ * Value moves with them, in proportion, so the two ledgers can never drift.
+ * Returns how many fish were actually listed — the cart may be fuller than the
+ * caller thinks.
+ */
+export function listForSale(state: GameState, count?: Decimal): Decimal {
+	const held = holdCount(state);
+	if (held.lte(0)) return d0();
+
+	const room = consignmentRoom(state);
+	let wanted = count === undefined ? held : Decimal.min(count, held);
+	if (room !== null) wanted = Decimal.min(wanted, room);
+	if (wanted.lte(0)) return d0();
+
+	const fraction = wanted.div(held);
+	let listed = d0();
+
+	for (const type of FISH_TYPES) {
+		const moving = state.hold[type].times(fraction);
+		if (moving.lte(0)) continue;
+		state.hold[type] = Decimal.max(d0(), state.hold[type].minus(moving));
+		state.consignment[type] = state.consignment[type].plus(moving);
+		listed = listed.plus(moving);
+	}
+
+	const movingValue = state.holdValue.times(fraction);
+	state.holdValue = Decimal.max(d0(), state.holdValue.minus(movingValue));
+	state.consignmentValue = state.consignmentValue.plus(movingValue);
+
+	return listed;
+}
+
+/**
+ * Pay out the consignment.
+ *
+ * **Priced here, not at listing.** A consignment is settled at whatever the
+ * catch is worth when the money changes hands, which is what makes the
+ * merchant's arrival a wait with a consequence rather than a locked-in receipt.
+ */
+export function settleConsignment(
+	state: GameState,
+	modifiers: Modifiers,
+	rate = TOWN_RATE
+): Decimal {
+	if (state.consignmentValue.lte(0)) {
+		for (const type of FISH_TYPES) state.consignment[type] = d0();
+		return d0();
+	}
+
+	const earned = state.consignmentValue.times(modifiers.sellMultiplier).times(rate);
+
+	state.coins = state.coins.plus(earned);
+	state.lifetimeCoins = state.lifetimeCoins.plus(earned);
+	state.allTimeCoins = state.allTimeCoins.plus(earned);
+	state.consignmentValue = d0();
+	for (const type of FISH_TYPES) state.consignment[type] = d0();
+
+	return earned;
+}
+
+/**
+ * The Sell button. There is always one (R65).
+ *
+ * With an Assistant it is a sale: everything goes at once, at full price,
+ * without leaving the water. Without one it is a *listing* — the fish go onto
+ * the quay for the travelling merchant, out of the bucket immediately, and the
+ * coins arrive when he does. What the player decides is now *what* to list and
+ * *when*; the merchant is the delay rather than the decision.
+ */
+export function sell(state: GameState, modifiers: Modifiers): { sold: Decimal; listed: Decimal } {
+	if (state.hasAssistant) {
+		return { sold: sellHold(state, modifiers, saleRate(state)), listed: d0() };
+	}
+	return { sold: d0(), listed: listForSale(state) };
+}
+
 export function bucketCapacity(level: Decimal | number): Decimal {
 	return D(BUCKET_BASE_CAPACITY).times(D(BUCKET_GROWTH).pow(level));
 }
@@ -1367,7 +1475,10 @@ export function runTrader(
 
 	const period = TRADER_PERIOD_SECONDS * 1000;
 	while (state.nextTraderAt <= now) {
-		earned = earned.plus(sellHold(state, modifiers, TRADER_RATE));
+		// He settles what was *listed* for him, and nothing else (R65). Taking
+		// the whole hold on arrival was the game making the decision; now the
+		// player makes it, and he is only the wait.
+		earned = earned.plus(settleConsignment(state, modifiers, TRADER_RATE));
 		state.traderVisits += 1;
 		state.nextTraderAt += period;
 		visits += 1;
@@ -1413,7 +1524,13 @@ export function rideToTown(
 	if (!canSell(state)) return null;
 	if (inTown(state, now)) return null;
 
-	const earned = sellHold(state, modifiers, TOWN_RATE);
+	// You load the cart with everything you have — the bucket and whatever is
+	// already sitting on the quay. Listing is therefore never a trap: if the
+	// merchant has not been yet, you can still take it in yourself for the full
+	// price. What listing costs you is the race against his next arrival.
+	const earned = sellHold(state, modifiers, TOWN_RATE).plus(
+		settleConsignment(state, modifiers, TOWN_RATE)
+	);
 
 	// The Assistant does the trip for you, so there is nothing to wait for.
 	const until = state.hasAssistant ? 0 : now + TOWN_TRIP_SECONDS * 1000;
@@ -1691,6 +1808,8 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 
 		hold: emptyHold(),
 		holdValue: d0(),
+		consignment: emptyHold(),
+		consignmentValue: d0(),
 
 		dex: keep?.dex ?? {},
 		carry: {},

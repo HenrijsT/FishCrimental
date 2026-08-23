@@ -127,7 +127,16 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 		traderVisits: 0,
 		mapLevel: '0',
 		version: 5
-	})
+	}),
+
+	// 5 → 6: the fifth pass. The one bump the whole pass shares.
+	//
+	// The travelling merchant stopped seizing the hold and started settling a
+	// consignment (R65), so there is a second fish ledger to persist. Everything
+	// else the pass adds reads its own default, but the version is stamped here
+	// so an older build refuses the save outright rather than silently dropping
+	// fish the player has already listed.
+	5: (data) => ({ ...data, consignment: {}, consignmentValue: '0', version: 6 })
 };
 
 function grandfatherLicences(unlocked: unknown): Raw {
@@ -362,6 +371,9 @@ export function fromRaw(data: Raw): GameState {
 
 		hold: readHold(migrated.hold),
 		holdValue: positive(migrated.holdValue),
+
+		consignment: readHold(migrated.consignment),
+		consignmentValue: positive(migrated.consignmentValue),
 
 		dex: readDex(migrated.dex),
 		carry: readCarry(migrated.carry),
