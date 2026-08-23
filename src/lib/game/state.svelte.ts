@@ -1,6 +1,6 @@
 import Decimal from 'break_eternity.js';
 import { D, d0 } from '$lib/decimal';
-import { FISH_TYPES, fishTypeBaseValue } from '$lib/fish_types';
+import { FISH_TYPES, fishTypeBaseValue, type FishType } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
 import type { Fish } from '$lib/fishes/fish';
 import {
@@ -448,10 +448,7 @@ export class Game {
 			return null;
 		}
 
-		// Put the hold back the way the player left it; only the offline catch
-		// was sold.
-		for (const [type, amount] of holdBefore) state.hold[type] = amount;
-		state.holdValue = valueBefore;
+		this.#mergeHoldBack(state, holdBefore, valueBefore);
 
 		return {
 			seconds,
@@ -467,6 +464,50 @@ export class Game {
 			traderVisits,
 			traderEarned
 		};
+	}
+
+	/**
+	 * Put the player's own hold back on top of the night's catch, not over it.
+	 *
+	 * The snapshot is restored by *adding*, because at this point `state.hold`
+	 * holds everything the crew landed while the game was shut. Assigning was
+	 * only ever correct because `sellHold` emptied the hold on every chunk, so
+	 * there was never anything of the night's to overwrite. The moment offline
+	 * selling goes (R51) that assignment silently deletes the entire night.
+	 *
+	 * The bucket is applied on the way in. What was already in it is the
+	 * player's and is never dropped to make room; the night is what gets
+	 * trimmed, and its value is trimmed by the same fraction so coins and fish
+	 * cannot drift apart.
+	 */
+	#mergeHoldBack(
+		state: GameState,
+		holdBefore: readonly (readonly [FishType, Decimal])[],
+		valueBefore: Decimal
+	): void {
+		const nightValue = state.holdValue;
+		let nightFish = d0();
+		for (const type of FISH_TYPES) nightFish = nightFish.plus(state.hold[type]);
+
+		let ownFish = d0();
+		for (const [, amount] of holdBefore) ownFish = ownFish.plus(amount);
+
+		// `null` is an Assistant: there is no bucket to fill.
+		let room: Decimal | null = state.hasAssistant
+			? null
+			: Decimal.max(d0(), bucketCapacity(state.bucketLevel).minus(ownFish));
+
+		let kept = d0();
+		for (const [type, amount] of holdBefore) {
+			const landed = state.hold[type];
+			const take = room === null ? landed : Decimal.min(landed, room);
+			if (room !== null) room = room.minus(take);
+			kept = kept.plus(take);
+			state.hold[type] = amount.plus(take);
+		}
+
+		const keptFraction = nightFish.gt(0) ? kept.div(nightFish) : d0();
+		state.holdValue = valueBefore.plus(nightValue.times(keptFraction));
 	}
 
 	dismissOfflineReport(): void {

@@ -17,5 +17,6 @@ USER-REQUIREMENTS.md
 ideas.txt
 design/
 
-# Harness scratch space — agent worktrees
+# Harness scratch space — agent worktrees and the autostop progress log
 .claude/
+AUTOSTOP-PROGRESS.md
