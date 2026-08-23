@@ -12,7 +12,7 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - [x] Stage 3 fix/pearls — MERGED
 - [x] Stage 4 feat/market — MERGED
 - [x] Stage 5 feat/ponds — MERGED
-- [ ] Stage 6 feat/minigames
+- [x] Stage 6 feat/minigames — MERGED
 - [ ] Stage 7 feat/consequences
 - [ ] Stage 8 feat/voice
 - [ ] Stage 9 fix/finish
@@ -35,18 +35,31 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - Measure with: LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
 
 ## Next steps
-1. Stage 6: feat/minigames -- every licence gated behind a minigame, NO coin
-   price (R42, IDEAS N1). Quota run first ("land N of species X in a time
-   limit"), reusing casting/luck/catch tables. Retryable, unlosable, short;
-   better play finishes faster. Accessibility: no hold-a-button-only input.
-   Removing the price removes a coin sink -- cheapestPurchase must stop treating
-   licences as purchases, and every downstream pacing figure must be re-measured.
+1. Stage 7: feat/consequences.
+   FINES: fixed grace period NOT a roll, identical on/offline; confiscate the
+   poached catch; coin fine is a PERCENTAGE (asymptotic, never reaches zero);
+   hard coin floor above a full tank of fuel while boat.owned; DROP the
+   ideas.txt "cannot buy anything until you pay" clause; offline = ONE eviction
+   then fishing continues; a crewless player currently gets no OfflineReport at
+   all -- an eviction must never be invisible.
+   SETBACKS: called "Setbacks" in all player-facing copy; AMBUSH ON EVENTS not
+   timers; at least three; escalate with playTime; damage in SECONDS OF INCOME
+   with the difference refunded; refundUpgrade touches coins and NOTHING else
+   (test lifetimeCoins byte-identical); car crash = one-time Setback at a
+   threshold (car lost, upgrades downgraded, some coins lost, never again);
+   evaluate in tick() ONLY, never in settleOffline/resume; do NOT wire into
+   simulateRun; achievements gain a Setback family (append-only); grandfather
+   existing saves.
+   Read design/ANSWER-RESEARCH.md sections 1 and 3 first.
 
 ## Notes / decisions
 - SAVE_VERSION is 6 with MIGRATIONS[5]. DO NOT BUMP AGAIN this pass.
-- Market + ponds both gate on prestigeCount > 0 (shifts unbuilt; deviation recorded).
-- Ladder after Stage 5 (seed 7): 3h18m09s / 9m28 / 2m08 / 1m56 / 1m46 / 1m41.
-  Run 1 untouched throughout. LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
-- Tests 497 passing, 5 skipped (probes are LADDER-gated).
-- Stage 8 will need shift TIER NAMES (Storms/Bosses/Megalodon). Shifts are not
-  built; plan to name tiers as a function of prestigeCount and record it.
+- Market + ponds gate on prestigeCount > 0 (shifts unbuilt; deviation recorded).
+- Licences: no coin price; canSit requires the next locked water needs it.
+- Ladder after Stage 6 (seed 7): first prestige 3h13m20s;
+  chain 3h13m / 13m27 / 3m01 / 2m19 / 1m46 / 1m41.
+  LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
+- Tests 519 passing, 5 skipped.
+- Stage 8 still needs shift TIER NAMES (Storms/Bosses/Megalodon) + Help surface
+  + Tabs keyboard nav (nextTabIndex already exists in guide.ts) + 47 Fishdex
+  descriptions rewritten.
