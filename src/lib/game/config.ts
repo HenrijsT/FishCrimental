@@ -402,15 +402,42 @@ export const AUTO_FISHER_OFFLINE_COST = 5e11;
 /** Lifetime coins needed before the Ocean will trade you a Pearl. */
 export const PRESTIGE_THRESHOLD = 1e15;
 
-/** `pearls = floor((lifetime / PRESTIGE_THRESHOLD) ^ PEARL_EXPONENT)`. */
-export const PEARL_EXPONENT = 0.42;
+/**
+ * `pearls = floor((lifetime / PRESTIGE_THRESHOLD) ^ PEARL_EXPONENT)`.
+ *
+ * Lifetime coins grow roughly twenty orders of magnitude per run, so this
+ * exponent decides how fast the Pearl pile itself runs away. At 0.42 it grew
+ * about 1e8 per run; at 0.30 it grows about 1e6, which is still enormous and is
+ * meant to be — the pile is not what the bonus is priced off any more.
+ */
+export const PEARL_EXPONENT = 0.3;
 
-/** Each pearl adds to a global catch-and-sell multiplier. */
-export const PEARL_MULTIPLIER_SCALE = 0.5;
-export const PEARL_MULTIPLIER_EXPONENT = 0.9;
+/**
+ * The passive Pearl bonus is **logarithmic in the pile**: `1 + SCALE * ln(1 + p)`.
+ *
+ * It used to be `p^0.9 * 0.5 + 1`, applied to *both* `fishPerCast` and
+ * `sellMultiplier` — so income carried it squared. Measured across a six-run
+ * chain that reached `1.07e26` by run six, or `1.1e52` on income. The runs
+ * collapsed to 46 seconds and stayed there.
+ *
+ * A power law cannot work here. Whatever the exponent, the pile grows
+ * super-exponentially with run number and any power of it does too. A
+ * logarithm is the only shape that survives the input: the same six runs now
+ * read 2.4, 4.2, 10.7, 21.7, 52.0, 99.3, 135.7 — a bonus that keeps growing,
+ * visibly, forever, without ever eating the game.
+ *
+ * `SCALE = 2` rather than 0.5 because the log is so much flatter: it has to
+ * carry the *early* prestiges, which is where the reward has to be felt.
+ */
+export const PEARL_MULTIPLIER_SCALE = 2;
 
 export type PrestigeUpgradeId =
-	'pearl_yield' | 'pearl_speed' | 'pearl_luck' | 'pearl_crew' | 'pearl_headstart';
+	| 'pearl_yield'
+	| 'pearl_speed'
+	| 'pearl_luck'
+	| 'pearl_crew'
+	| 'pearl_headstart'
+	| 'pearl_nightwatch';
 
 export interface PrestigeUpgradeConfig {
 	id: PrestigeUpgradeId;
@@ -464,15 +491,45 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeConfig>
 		maxLevel: 20,
 		format: (level) => `deckhand output ×${Math.pow(1.55, level).toFixed(2)}`
 	},
+	/**
+	 * Capped at four of the nine sources, not seven.
+	 *
+	 * At seven levels a run opened with everything but the Ocean, which — with
+	 * the Pearl bonus on top — was enough lifetime coins to prestige on the
+	 * first tick. There was no run left to play. Four leaves the back half of
+	 * the ladder standing whatever you have banked, so a run is always a run.
+	 */
 	pearl_headstart: {
 		id: 'pearl_headstart',
 		name: 'Standing Charter',
 		description: 'Start each run with deeper water already open to you.',
 		baseCost: 6,
-		costGrowth: 5.4,
+		costGrowth: 6.5,
 		effect: 1,
-		maxLevel: 7,
+		maxLevel: 4,
 		format: (level) => `start with ${level} extra source${level === 1 ? '' : 's'} unlocked`
+	},
+
+	/**
+	 * The Pearl sink (R54).
+	 *
+	 * Everything else on this board is capped, and by the fourth prestige the
+	 * pile is 1e11 against a board that costs 2e10 to max — 99.997% of it had
+	 * nowhere to go. This is somewhere for it to go, and it buys the one thing
+	 * a player who is away cannot otherwise buy: more of the night.
+	 *
+	 * Eight hours to twenty-four, an hour at a time, at 3.4x a level. Capped at
+	 * a full day because past that the number stops meaning anything to a human.
+	 */
+	pearl_nightwatch: {
+		id: 'pearl_nightwatch',
+		name: 'Night Watch',
+		description: 'Someone keeps an eye on the boats. The crew work later into the night.',
+		baseCost: 5,
+		costGrowth: 3.4,
+		effect: 1,
+		maxLevel: 16,
+		format: (level) => `${8 + level} hours of offline progress`
 	}
 };
 
@@ -485,7 +542,12 @@ export const PRESTIGE_UPGRADE_IDS = Object.keys(PRESTIGE_UPGRADES) as PrestigeUp
 /** How often the simulation advances. The progress bar animates independently. */
 export const TICK_MS = 200;
 
-/** Offline earnings are capped at eight hours. */
+/**
+ * Offline earnings are capped at eight hours, before the Night Watch.
+ *
+ * Use `offlineSeconds(state)` rather than this constant anywhere a player's
+ * actual window is meant: `pearl_nightwatch` buys hours on top of it (R54).
+ */
 export const MAX_OFFLINE_SECONDS = 8 * 60 * 60;
 
 /** Offline deckhands are a little less productive than watched ones. */

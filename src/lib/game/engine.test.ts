@@ -384,7 +384,7 @@ describe('prestige', () => {
 		expect(performPrestige(jellied)!.jellyFree).toBe(false);
 	});
 
-	it('makes everything permanently better afterwards', () => {
+	it('makes selling permanently better afterwards', () => {
 		const before = fresh();
 		const after = fresh();
 		after.pearls = D(400);
@@ -392,7 +392,23 @@ describe('prestige', () => {
 		expect(computeModifiers(after).sellMultiplier.gt(computeModifiers(before).sellMultiplier)).toBe(
 			true
 		);
-		expect(computeModifiers(after).fishPerCast.gt(computeModifiers(before).fishPerCast)).toBe(true);
+	});
+
+	/**
+	 * The bonus lands **once**, on `sellMultiplier`, and not on `fishPerCast`.
+	 *
+	 * Income is fish times value, so applying it to both carried it squared —
+	 * the measured cause of a prestige chain that collapsed to 46-second runs.
+	 * `fishPerCast` is also not only income: it fills the bucket and drives
+	 * Fishdex discovery, and a Pearl bonus there made both trivial after the
+	 * first run.
+	 */
+	it('does not also apply to fishPerCast, which would square it', () => {
+		const before = fresh();
+		const after = fresh();
+		after.pearls = D('1e12');
+
+		expect(computeModifiers(after).fishPerCast.eq(computeModifiers(before).fishPerCast)).toBe(true);
 	});
 
 	it('opens extra water with the Standing Charter', () => {

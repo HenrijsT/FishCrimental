@@ -1,10 +1,5 @@
 <script lang="ts">
-	import {
-		PEARL_MULTIPLIER_SCALE,
-		PRESTIGE_THRESHOLD,
-		PRESTIGE_UPGRADES,
-		PRESTIGE_UPGRADE_IDS
-	} from '$lib/game/config';
+	import { PRESTIGE_THRESHOLD, PRESTIGE_UPGRADES, PRESTIGE_UPGRADE_IDS } from '$lib/game/config';
 	import { pearlMultiplier, pearlsFor, prestigeUpgradeCost } from '$lib/game/engine';
 	import { game } from '$lib/game/state.svelte';
 	import Num from './Num.svelte';
@@ -12,11 +7,11 @@
 	// Named `g` rather than `state` — see the note in Fishdex.svelte.
 	const g = $derived(game.state);
 	const pending = $derived(pearlsFor(g.lifetimeCoins));
-	// The bonus multiplies `fishPerCast` and `sellMultiplier` alike, so income
-	// moves by its square. The panel used to print the single application and
-	// understate the real effect by that factor.
+	// One application, on `sellMultiplier`. It used to land on `fishPerCast`
+	// too, so income carried it squared and the prestige chain collapsed.
 	const pearlBonus = $derived(pearlMultiplier(g.pearls));
-	const pearlIncome = $derived(pearlBonus.times(pearlBonus));
+	/** What one more Pearl would be worth, for the panel's "next" line. */
+	const nextBonus = $derived(pearlMultiplier(g.pearls.plus(1)));
 
 	const progress = $derived(Math.min(1, g.lifetimeCoins.div(PRESTIGE_THRESHOLD).toNumber() || 0));
 
@@ -52,20 +47,14 @@
 		</div>
 		<div>
 			<dt>Pearl bonus</dt>
-			<dd><Num value={pearlBonus} />× twice</dd>
-		</div>
-		<div>
-			<dt>Income effect</dt>
-			<dd><Num value={pearlIncome} />×</dd>
+			<dd><Num value={pearlBonus} />×</dd>
 		</div>
 	</dl>
 
 	<p class="faint small">
-		The Pearl bonus lands on both halves of the sum — every cast lands
-		<Num value={pearlBonus} />× the fish, and every fish sells for
-		<Num value={pearlBonus} />× as much — so what you actually earn moves by the square, <Num
-			value={pearlIncome}
-		/>×.
+		Every fish sells for <Num value={pearlBonus} />× as much, just for having the Pearls in the
+		drawer. The bonus grows with the logarithm of the pile, so it never stops climbing and never
+		runs away with the game — the pile has to get ten times bigger to move it by a fixed step.
 	</p>
 
 	<div class="progress">
@@ -101,8 +90,8 @@
 
 	<h3 class="tree-heading">Spend Pearls</h3>
 	<p class="faint small">
-		Each Pearl also adds {PEARL_MULTIPLIER_SCALE} to a permanent catch-and-sell multiplier on its own,
-		whether you spend it or not.
+		Held Pearls are worth <Num value={pearlBonus} />× on every sale on their own, spent or not — one
+		more would make it <Num value={nextBonus} />×. Spending them is where the real gains are.
 	</p>
 
 	<ul class="tree">

@@ -46,7 +46,6 @@ import {
 	AUTO_FISHER_START,
 	MIN_CAST_SECONDS,
 	PEARL_EXPONENT,
-	PEARL_MULTIPLIER_EXPONENT,
 	PEARL_MULTIPLIER_SCALE,
 	PRESTIGE_THRESHOLD,
 	PRESTIGE_UPGRADES,
@@ -55,6 +54,7 @@ import {
 	MAP_BASE_SIGHT,
 	MAP_COST_GROWTH,
 	MAP_MAX_LEVEL,
+	MAX_OFFLINE_SECONDS,
 	SHOPKEEPER_REACH,
 	PRESTIGE_UPGRADE_IDS,
 	SAVE_VERSION,
@@ -337,9 +337,24 @@ export function affordableDeckhands(
 // Modifiers
 // ---------------------------------------------------------------------------
 
+/**
+ * The passive bonus a banked pile of Pearls is worth: `1 + SCALE * ln(1 + p)`.
+ *
+ * Logarithmic, deliberately. See `PEARL_MULTIPLIER_SCALE` for what a power law
+ * did to the prestige chain.
+ */
 export function pearlMultiplier(pearls: Decimal): Decimal {
 	if (pearls.lte(0)) return d1();
-	return pearls.pow(PEARL_MULTIPLIER_EXPONENT).times(PEARL_MULTIPLIER_SCALE).plus(1);
+	return pearls.plus(1).ln().times(PEARL_MULTIPLIER_SCALE).plus(1);
+}
+
+/**
+ * How long the crew keep working after the game is shut, for this player.
+ *
+ * Eight hours, plus an hour per Night Watch level (R54).
+ */
+export function offlineSeconds(state: GameState): number {
+	return MAX_OFFLINE_SECONDS + state.prestigeUpgrades.pearl_nightwatch.toNumber() * 3600;
 }
 
 export function computeModifiers(state: GameState): Modifiers {
@@ -358,7 +373,15 @@ export function computeModifiers(state: GameState): Modifiers {
 
 	const pearlBonus = pearlMultiplier(state.pearls);
 
-	const fishPerCast = D(UPGRADES.net.effect).pow(state.upgrades.net).times(pearlBonus);
+	// The Pearl bonus applies **once**, on `sellMultiplier`. It used to apply
+	// here as well, and income is fish times value, so it was carried squared.
+	//
+	// `sellMultiplier` is the survivor rather than this one because
+	// `fishPerCast` is not only income: it fills the bucket, it feeds
+	// `totalFish`, and it drives Fishdex discovery. A pearl bonus here made the
+	// bucket meaningless and the Fishdex trivial on every run after the first,
+	// neither of which is what the bonus is for.
+	const fishPerCast = D(UPGRADES.net.effect).pow(state.upgrades.net);
 
 	const sellMultiplier = D(UPGRADES.market.effect)
 		.pow(state.upgrades.market)
