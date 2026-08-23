@@ -2164,7 +2164,8 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		settings: keep?.settings ?? {
 			offlineProgress: true,
 			reduceMotion: false,
-			scientificNotation: false
+			scientificNotation: false,
+			unlockGuides: true
 		}
 	};
 }

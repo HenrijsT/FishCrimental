@@ -2,6 +2,7 @@
 	import { PRESTIGE_THRESHOLD, PRESTIGE_UPGRADES, PRESTIGE_UPGRADE_IDS } from '$lib/game/config';
 	import { pearlMultiplier, pearlsFor, prestigeUpgradeCost } from '$lib/game/engine';
 	import { game } from '$lib/game/state.svelte';
+	import { shiftName, tierFor } from '$lib/game/shifts';
 	import Num from './Num.svelte';
 
 	// Named `g` rather than `state` — see the note in Fishdex.svelte.
@@ -12,6 +13,8 @@
 	const pearlBonus = $derived(pearlMultiplier(g.pearls));
 	/** What one more Pearl would be worth, for the panel's "next" line. */
 	const nextBonus = $derived(pearlMultiplier(g.pearls.plus(1)));
+
+	const tier = $derived(tierFor(g.prestigeCount));
 
 	const progress = $derived(Math.min(1, g.lifetimeCoins.div(PRESTIGE_THRESHOLD).toNumber() || 0));
 
@@ -30,6 +33,11 @@
 		Sail out to the Ocean, earn <Num value={PRESTIGE_THRESHOLD} tone="coin" /> across a single run, and
 		trade the whole operation in for Pearls. You keep the Fishdex, the Pearls and everything you bought
 		with them; the coins, the gear, the crew and the charts go back to the Pond.
+	</p>
+
+	<p class="tier">
+		Next: <strong>{shiftName(g.prestigeCount)}</strong>
+		<span class="faint">· {tier.blurb}</span>
 	</p>
 
 	<dl class="stats">
@@ -71,7 +79,8 @@
 	{#if confirming}
 		<div class="confirm">
 			<p>
-				Cash in for <strong><Num value={pending} tone="pearl" /></strong> Pearls? The run ends here.
+				Ride out <strong>{shiftName(g.prestigeCount)}</strong> for
+				<strong><Num value={pending} tone="pearl" /></strong> Pearls? The run ends here.
 			</p>
 			<div class="row">
 				<button class="go" onclick={commit}>Trade it all in</button>
@@ -81,9 +90,9 @@
 	{:else}
 		<button class="go wide" disabled={!game.prestigeReady} onclick={() => (confirming = true)}>
 			{#if game.prestigeReady}
-				Prestige for <Num value={pending} tone="pearl" /> Pearls
+				{shiftName(g.prestigeCount)} · <Num value={pending} tone="pearl" /> Pearls
 			{:else}
-				Not ready to prestige
+				{shiftName(g.prestigeCount)} is not here yet
 			{/if}
 		</button>
 	{/if}
@@ -265,5 +274,11 @@
 
 	.tree button {
 		min-width: 5rem;
+	}
+
+	.tier {
+		font-size: 0.82rem;
+		margin: 0.4rem 0 0.2rem;
+		max-width: 62ch;
 	}
 </style>

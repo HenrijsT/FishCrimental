@@ -14,6 +14,9 @@
 	import Fishdex from '$lib/components/Fishdex.svelte';
 	import HarbourPanel from '$lib/components/HarbourPanel.svelte';
 	import HoldPanel from '$lib/components/HoldPanel.svelte';
+	import HelpPanel from '$lib/components/HelpPanel.svelte';
+	import UnlockGuide from '$lib/components/UnlockGuide.svelte';
+	import { availableTopics } from '$lib/game/help';
 	import MapPanel from '$lib/components/MapPanel.svelte';
 	import MarketPanel from '$lib/components/MarketPanel.svelte';
 	import PondPanel from '$lib/components/PondPanel.svelte';
@@ -35,6 +38,33 @@
 	let focus = $state<string | null>(null);
 	/** Tabs the player has already seen, so a new one can announce itself once. */
 	let seen = $state<TabId[]>(['water']);
+
+	/**
+	 * Help topics already explained, and the one queued to explain.
+	 *
+	 * Both are session state on purpose. A guide that has been shown once should
+	 * not come back in this sitting; making that survive a reload would mean a
+	 * persisted, migrated list of things the player has been told, which is more
+	 * machinery than a one-line pop-up is worth. Worst case on a reload is a
+	 * second look at a note about something they have just unlocked.
+	 */
+	let explained = $state<string[]>([]);
+	let guide = $state<string | null>(null);
+
+	// Announce one new thing at a time, and only what has actually opened up.
+	$effect(() => {
+		if (!game.state.settings.unlockGuides || guide !== null) return;
+		const fresh = availableTopics(game.state).find((topic) => !explained.includes(topic.id));
+		if (!fresh) return;
+		// Everything already open at the moment the player first sees this is
+		// taken as read — a new tab should not produce eleven pop-ups at once.
+		if (explained.length === 0) {
+			explained = availableTopics(game.state).map((topic) => topic.id);
+			return;
+		}
+		explained = [...explained, fresh.id];
+		guide = fresh.id;
+	});
 
 	const tabs = $derived(
 		availableTabs(game.state).map((tab) => ({
@@ -157,6 +187,8 @@
 					<PrestigePanel />
 				{:else if active === 'records'}
 					<AchievementsPanel {focus} />
+				{:else if active === 'help'}
+					<HelpPanel />
 				{:else if active === 'settings'}
 					<SettingsPanel />
 				{/if}
@@ -166,6 +198,8 @@
 </div>
 
 <ModalHost />
+
+<UnlockGuide topic={guide} onclose={() => (guide = null)} onhelp={(tab) => selectTab(tab)} />
 
 <div inert={game.activeModal !== null} class="contents">
 	<Toasts onnavigate={(tab, target) => selectTab(tab, target ?? null)} />

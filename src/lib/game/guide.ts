@@ -37,6 +37,7 @@ export const TAB_IDS = [
 	'dex',
 	'pearls',
 	'records',
+	'help',
 	'settings'
 ] as const;
 
@@ -123,6 +124,14 @@ export const TABS: TabDefinition[] = [
 		label: 'Records',
 		blurb: 'Milestones, and the log of everything you have done.',
 		available: (state) => state.achievements.length > 0
+	},
+	{
+		id: 'help',
+		label: 'Help',
+		blurb: 'What everything you have already got actually does.',
+		// Not from the first second: there is nothing to explain before the
+		// first cast, and a Help tab on an empty game is a wall of nothing.
+		available: (state) => state.totalCasts.gte(3)
 	},
 	{
 		id: 'settings',

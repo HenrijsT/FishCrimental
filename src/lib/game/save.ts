@@ -581,7 +581,8 @@ export function fromRaw(data: Raw): GameState {
 		settings: {
 			offlineProgress: bool(settingsRaw.offlineProgress, true),
 			reduceMotion: bool(settingsRaw.reduceMotion, false),
-			scientificNotation: bool(settingsRaw.scientificNotation, false)
+			scientificNotation: bool(settingsRaw.scientificNotation, false),
+			unlockGuides: bool(settingsRaw.unlockGuides, true)
 		}
 	};
 }

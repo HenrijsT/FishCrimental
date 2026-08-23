@@ -1,21 +1,30 @@
 <script lang="ts">
 	import { game } from '$lib/game/state.svelte';
+	import { lastTier, shiftName } from '$lib/game/shifts';
 	import Modal from './Modal.svelte';
 	import Num from './Num.svelte';
 
 	const result = $derived(game.prestigeResult);
+	// `prestigeCount` has already been incremented by the time this shows, so
+	// the shift just ridden out is the one before the next.
+	const ridden = $derived(lastTier(game.state.prestigeCount));
+	const name = $derived(shiftName(game.state.prestigeCount.minus(1)));
 </script>
 
 {#if result}
 	<Modal
-		title={result.firstTime ? 'You finished it' : 'Traded in'}
+		title={result.firstTime ? 'You finished it' : `${name} — ridden out`}
 		closeLabel="Start the next run"
 		onclose={() => game.dismissPrestigeResult()}
 	>
 		<p>
-			The whole operation sold for <strong><Num value={result.gained} tone="pearl" /></strong>
-			Pearls. Everything starts again at the Pond, but you keep the Fishdex and the Pearls.
+			<strong>{name}</strong> took the whole operation and left
+			<strong><Num value={result.gained} tone="pearl" /></strong> Pearls behind it. Everything starts
+			again at the Pond, and you keep the Fishdex and the Pearls.
 		</p>
+		{#if ridden}
+			<p class="faint small">{ridden.blurb}</p>
+		{/if}
 
 		{#if result.firstTime}
 			{#if result.jellyFree}

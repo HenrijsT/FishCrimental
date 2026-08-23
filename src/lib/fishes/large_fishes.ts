@@ -20,7 +20,7 @@ export const largeFishes = {
 		sources: [FishingSources.Lake],
 		baseChance: 13,
 		description:
-			'Oscar Fish, also known as Astronotus ocellatus, are large and intelligent freshwater fish. They are known for their striking colors and engaging personalities. Oscars can be territorial and are best kept in spacious aquariums with suitable tankmates.'
+			'Holds one weedbed on the lake and drives off everything else that comes near it, so where one sits there is nothing else worth working. Dark green with orange blotching, and it watches the boat the whole way in.'
 	},
 	[LargeFishes.Arowana]: {
 		name: LargeFishes.Arowana,
@@ -28,7 +28,7 @@ export const largeFishes = {
 		sources: [FishingSources.Lake, FishingSources.Lagoon],
 		baseChance: 5,
 		description:
-			'Arowanas are majestic and sought-after freshwater fish known for their elongated bodies and large scales. They are strong jumpers and require well-covered aquariums. Arowanas can grow quite large, so they need ample space.'
+			'A long silver thing that fights upward instead of out, and it will clear the gunwale in one jump if the net is slow. Scales the size of a thumbnail, loose enough to thumb off. The only fish a buyer asks for by name.'
 	},
 	[LargeFishes.Arapaima]: {
 		name: LargeFishes.Arapaima,
@@ -36,7 +36,7 @@ export const largeFishes = {
 		sources: [FishingSources.Sea, FishingSources.Offshore, FishingSources.Ocean],
 		baseChance: 2,
 		description:
-			'Arapaimas are massive and prehistoric-looking freshwater fish. They are native to the Amazon River and are one of the largest freshwater fish species in the world. Arapaimas require extremely large and well-maintained aquariums.'
+			'It has to surface for air every twenty minutes, which is the only warning anybody gets. Prehistoric plating along the back, a tail that soaks a man to the waist, and enough meat on it to pay for the trip out.'
 	},
 	[LargeFishes.GiantGourami]: {
 		name: LargeFishes.GiantGourami,
@@ -44,7 +44,7 @@ export const largeFishes = {
 		sources: [FishingSources.Pond],
 		baseChance: 8,
 		description:
-			'Giant Gouramis are large and peaceful freshwater fish. They are known for their size and interesting behaviors. Giant Gouramis require ample space and are best suited for spacious aquariums or outdoor ponds.'
+			'Too big for the pond it lives in and seems to know it, sulking in the reeds and eating weed until something drops past. Puts up almost no fight. Comes in heavy and flat-sided and feeds four, which is rare here.'
 	},
 	[LargeFishes.RedtailCatfish]: {
 		name: LargeFishes.RedtailCatfish,
@@ -52,7 +52,7 @@ export const largeFishes = {
 		sources: [FishingSources.River],
 		baseChance: 15,
 		description:
-			'Redtail Catfish are large and striking freshwater catfish known for their red tails and barbels. They are predatory and can consume large amounts of food. Redtail Catfish require very large aquariums and proper tank maintenance.'
+			'Lies on the river bottom doing nothing, then takes the bait and runs downstream like it has somewhere to be. Red tail, whiskers, and an appetite that empties a stretch of water. Costs a line most times. Worth it when it does not.'
 	},
 	[LargeFishes.ClownKnifefish]: {
 		name: LargeFishes.ClownKnifefish,
@@ -60,7 +60,7 @@ export const largeFishes = {
 		sources: [FishingSources.River, FishingSources.Lagoon],
 		baseChance: 10,
 		description:
-			'Clown Knifefish are unique and intriguing freshwater fish known for their elongated bodies and knife-like shape. They are nocturnal and prefer dimly lit aquariums. Clown Knifefish require large aquariums with plenty of hiding spots.'
+			'Nothing moves it in daylight. After dark it works the shallows on its edge, thin as a blade and spotted along the back, and it swims backwards as fast as forwards the moment the hook sets. Most nights it wins.'
 	},
 	[LargeFishes.AlligatorGar]: {
 		name: LargeFishes.AlligatorGar,
@@ -68,7 +68,7 @@ export const largeFishes = {
 		sources: [FishingSources.River, FishingSources.Offshore],
 		baseChance: 7,
 		description:
-			'Alligator Gar are ancient and predatory freshwater fish. They are named for their alligator-like appearance. Alligator Gar require very large aquariums or outdoor ponds with adequate filtration.'
+			'Its mouth is all bone, so the hook slides free four times out of five and the only method is to wait and hope it swallows. Scales that turn a knife, teeth that ruin a net past mending, and older than the river itself.'
 	},
 	[LargeFishes.FreshwaterStingray]: {
 		name: LargeFishes.FreshwaterStingray,
@@ -76,6 +76,6 @@ export const largeFishes = {
 		sources: [FishingSources.Lake, FishingSources.Lagoon],
 		baseChance: 3,
 		description:
-			'Freshwater Stingrays are fascinating and captivating fish known for their flattened bodies and venomous tail spines. They require specialized care and should only be kept by experienced aquarium hobbyists.'
+			'Lies buried in the silt with nothing showing but its eyes, flat as a dinner plate, until something puts a foot wrong. The barb on its tail goes through a boot and takes a week of standing with it. No buyer within thirty miles.'
 	}
 } satisfies Record<LargeFishes, Fish>;

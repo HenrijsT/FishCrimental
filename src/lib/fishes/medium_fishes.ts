@@ -24,7 +24,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Lake, FishingSources.Lagoon],
 		baseChance: 4,
 		description:
-			'Angelfish are elegant and graceful freshwater fish known for their distinctive shape and long, flowing fins. They are peaceful but may become territorial during breeding. Angelfish are a popular choice for community aquariums.'
+			'All fin and very little meat. It turns sideways to slip through the weed beds along the lake edge, so the net comes up empty more often than not. In the spawning months it will square up to a hook rather than run.'
 	},
 	[MediumFishes.DiscusFish]: {
 		name: MediumFishes.DiscusFish,
@@ -32,7 +32,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Lagoon],
 		baseChance: 2,
 		description:
-			'Discus fish are vibrant and captivating freshwater fish. They are known for their circular body shape and striking colors. Discus fish are more demanding to keep compared to other freshwater fish and require stable water conditions.'
+			'Round and flat as a saucer, and it holds only in the warm still corners of the lagoon where nothing else bothers to feed. Stir that water and it sulks off into the reeds. Two a season, and the fishmonger pays properly for both.'
 	},
 	[MediumFishes.RainbowFish]: {
 		name: MediumFishes.RainbowFish,
@@ -40,7 +40,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Stream, FishingSources.Lagoon],
 		baseChance: 14,
 		description:
-			'Rainbowfish are colorful and peaceful freshwater fish. They are named for their iridescent scales that shimmer like a rainbow under the light. Rainbowfish are a great addition to community aquariums.'
+			"Common enough in the stream that a morning's work fills a pail. The scales throw colour back at the sun the moment the fish is lifted, then lose it within the hour, long before anyone in the market has seen it."
 	},
 	[MediumFishes.BoesemaniRainbowfish]: {
 		name: MediumFishes.BoesemaniRainbowfish,
@@ -48,7 +48,7 @@ export const mediumFishes = {
 		sources: [FishingSources.River],
 		baseChance: 6,
 		description:
-			'Boesemani Rainbowfish are a specific species of rainbowfish known for their vibrant colors, including shades of blue, yellow, and orange. They are peaceful and prefer to be kept in schools. Boesemani Rainbowfish can brighten up any aquarium.'
+			'Blue at the head and orange at the tail, as though two fish were joined badly in the middle. It runs the river in numbers, so where one takes the hook there are forty more behind it, and none of them worth chasing alone.'
 	},
 	[MediumFishes.Gouramis]: {
 		name: MediumFishes.Gouramis,
@@ -56,7 +56,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Lake],
 		baseChance: 7,
 		description:
-			'Gouramis are a diverse group of freshwater fish known for their colorful bodies and feelers. They come in various sizes and colors and can be a stunning addition to community aquariums. Gouramis are generally peaceful, but males can be territorial.'
+			'They rise to gulp air off the top of the lake, which gives their position away on a flat morning. Two long feelers trail beneath the body and tangle in a net worse than any weed. The males will not share a stretch of bank.'
 	},
 	[MediumFishes.PearlGourami]: {
 		name: MediumFishes.PearlGourami,
@@ -64,7 +64,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Lake, FishingSources.Lagoon],
 		baseChance: 5,
 		description:
-			'Pearl Gouramis are a variety of gourami known for their pearly white and iridescent scales. They are peaceful and well-suited for community aquariums. Pearl Gouramis are generally hardy and easy to care for.'
+			'Speckled all over as though someone had flicked white paint at it. Hardy, too: one will lie in a bucket half the day and still be moving at dusk, which keeps it fresh enough for the long walk into town.'
 	},
 	[MediumFishes.KilliFish]: {
 		name: MediumFishes.KilliFish,
@@ -72,7 +72,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Pond],
 		baseChance: 18,
 		description:
-			'Killifish, or simply Killies, are a diverse group of small, colorful freshwater fish. They are known for their stunning colors and complex breeding behaviors. Killifish can be challenging to keep and are more suitable for experienced hobbyists.'
+			'The pond throws these up all year, small and painted in colours nobody asked for. Their eggs sit in the dried mud through the summer and hatch when the rain returns, which is why the pond is never once empty of them.'
 	},
 	[MediumFishes.KribensisCichlid]: {
 		name: MediumFishes.KribensisCichlid,
@@ -80,7 +80,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Stream],
 		baseChance: 10,
 		description:
-			'Kribensis Cichlids, also known as Kribs, are small and peaceful cichlids. They are known for their bright colors and interesting behaviors, especially during breeding. Kribensis Cichlids are well-suited for community aquariums.'
+			'A hand-length fish that goes red along the belly when it is minded to breed, and then holds a hole under the stream bank as though it were land it owned. It bites a finger that comes near. Sells by the dozen, never singly.'
 	},
 	[MediumFishes.DwarfCichlids]: {
 		name: MediumFishes.DwarfCichlids,
@@ -88,7 +88,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Pond],
 		baseChance: 9,
 		description:
-			'Dwarf Cichlids are small and colorful cichlids that are suitable for community aquariums. They have vibrant colors and interesting behaviors. Dwarf Cichlids prefer well-planted tanks with plenty of hiding spots.'
+			'Small, and a good deal cleverer than small fish have any business being. They take cover under root and stone the moment a shadow crosses the pond, so the trick is to fish them at noon, when nothing casts one.'
 	},
 	[MediumFishes.SilverDollarFish]: {
 		name: MediumFishes.SilverDollarFish,
@@ -96,7 +96,7 @@ export const mediumFishes = {
 		sources: [FishingSources.River, FishingSources.Lake],
 		baseChance: 12,
 		description:
-			'Silver Dollar Fish are large and silver-colored freshwater fish. They are named for their circular, disk-like shape. Silver Dollar Fish are peaceful and prefer to be kept in groups. They require a spacious aquarium due to their size.'
+			'Flat and round and near enough the size of a saucer. A shoal of them turning in the river looks like coin going over a table, which is the whole of the joke: a dozen fetch less than the price of one new hook.'
 	},
 	[MediumFishes.TigerBarb]: {
 		name: MediumFishes.TigerBarb,
@@ -104,7 +104,7 @@ export const mediumFishes = {
 		sources: [FishingSources.Stream, FishingSources.River],
 		baseChance: 16,
 		description:
-			"Tiger Barbs are active and colorful freshwater fish known for their black stripes resembling a tiger's pattern. They are social but can be nippy, so it's best to keep them in groups. Tiger Barbs are a popular choice for community aquariums."
+			'Striped black over gold and never still for a second. They arrive in a pack and strip a bait down to bare metal before a proper fish can get near it, which is the ruin of a quiet afternoon and the making of a poor one.'
 	},
 	[MediumFishes.BristlenosePleco]: {
 		name: MediumFishes.BristlenosePleco,
@@ -112,6 +112,6 @@ export const mediumFishes = {
 		sources: [FishingSources.Pond, FishingSources.River],
 		baseChance: 8,
 		description:
-			'Bristlenose Plecos, also known as Bushynose Plecos, are small and peaceful catfish. They are named for their bristle-like appendages on their noses. Bristlenose Plecos are excellent algae eaters and help keep the aquarium clean.'
+			'Armoured, flat-headed, and fixed to a river stone by the mouth rather than swimming anywhere. Prising one loose takes both hands. Old males grow bristles across the snout like a wet brush, and grazed stone is all they eat.'
 	}
 } satisfies Record<MediumFishes, Fish>;

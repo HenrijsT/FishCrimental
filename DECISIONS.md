@@ -3298,17 +3298,17 @@ avoided.
 
 Four properties are load-bearing, and each has a test:
 
-| Property | How |
-| --- | --- |
-| **Confiscation is bounded by construction** | Everything landed on the poach is logged as it lands (`poachedValue`), so a bust takes exactly the poached catch and leaves the legal fish beside it in the same bucket alone |
-| **Coins approach zero and never reach it** | `POACH_FINE_STEPS = [0, 0.15, 0.30, 0.45]` as a *fraction*. Twelve busts at one water leave 0.3% of the bank. The first offence is a warning |
-| **A boat owner is never stranded** | The floor is one full tank, `fuelCapacity × FUEL_PRICE`, **checked before the fine rather than clamped after it**, so the fine is never quietly larger than what is taken |
-| **Nothing ever goes negative** | The `ideas.txt` clause "I cannot buy anything new until I pay the fine" is deliberately *not* implemented — with negative coins `buyFuel` returns zero, `repairBoat` returns false and `fuelForTrip` silently skips: every button in the game dies at once and not one says why |
+| Property                                    | How                                                                                                                                                                                                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Confiscation is bounded by construction** | Everything landed on the poach is logged as it lands (`poachedValue`), so a bust takes exactly the poached catch and leaves the legal fish beside it in the same bucket alone                                                                                                   |
+| **Coins approach zero and never reach it**  | `POACH_FINE_STEPS = [0, 0.15, 0.30, 0.45]` as a _fraction_. Twelve busts at one water leave 0.3% of the bank. The first offence is a warning                                                                                                                                    |
+| **A boat owner is never stranded**          | The floor is one full tank, `fuelCapacity × FUEL_PRICE`, **checked before the fine rather than clamped after it**, so the fine is never quietly larger than what is taken                                                                                                       |
+| **Nothing ever goes negative**              | The `ideas.txt` clause "I cannot buy anything new until I pay the fine" is deliberately _not_ implemented — with negative coins `buyFuel` returns zero, `repairBoat` returns false and `fuelForTrip` silently skips: every button in the game dies at once and not one says why |
 
 **Two places had to learn about poaching, not one.** `accumulate` skipping an
 unlicensed source and `autoCastsPerSecond` returning zero for it are different
-bugs with the same symptom, and the test that caught it — *"actually pays — the
-crew work it"* — was written before the second one was found.
+bugs with the same symptom, and the test that caught it — _"actually pays — the
+crew work it"_ — was written before the second one was found.
 
 **Offline: one eviction, then a legal night.** The warden arrives once — he is
 not standing over the boat for eight hours — and the crew carry on from wherever
@@ -3336,12 +3336,12 @@ shipped incremental fires an involuntary progression loss on an uncontrolled
 roll — an event trigger is not a roll, so this game does not have to be that
 experiment.
 
-| Setback | Arms on | Fires on | Takes |
-| --- | --- | --- | --- |
-| **The Bait Thief** | first deckhand | the River opens | Glimmer Lure |
-| **The Snag** | the boat | Offshore opens | Wider Net |
-| **The Harbourmaster's Cut** | the Lake permit | the Deep Sea Charter | Market Contacts |
-| **The Crash** (R67) | the bicycle | 5e7 lifetime coins, *if the bicycle is still what you depend on* | Graphite Rod |
+| Setback                     | Arms on         | Fires on                                                         | Takes           |
+| --------------------------- | --------------- | ---------------------------------------------------------------- | --------------- |
+| **The Bait Thief**          | first deckhand  | the River opens                                                  | Glimmer Lure    |
+| **The Snag**                | the boat        | Offshore opens                                                   | Wider Net       |
+| **The Harbourmaster's Cut** | the Lake permit | the Deep Sea Charter                                             | Market Contacts |
+| **The Crash** (R67)         | the bicycle     | 5e7 lifetime coins, _if the bicycle is still what you depend on_ | Graphite Rod    |
 
 The Crash fires **once, at a threshold**, and hiring the Assistant first disarms
 it permanently — a deadline you can outrun. Travel keeps its forty seconds and
@@ -3357,7 +3357,7 @@ income, and **hands the rest back as coins on the spot.**
 **`refundUpgrade` credits `state.coins` and nothing else.** `pearlsFor` reads
 `lifetimeCoins` directly as `floor((lifetime / 1e15) ^ 0.42)`, so crediting a
 refund there would silently mint a whole prestige for a player near the boundary
-— a Setback that *gave* you a Pearl. There is a test asserting both fields come
+— a Setback that _gave_ you a Pearl. There is a test asserting both fields come
 out byte-identical.
 
 **The escalation rides on `playTime`, and the notice is load-bearing.**
@@ -3365,7 +3365,7 @@ out byte-identical.
 pauses exactly when the player is away — a wall clock would mean a fortnight's
 holiday returned you to maximum damage, contradicting the whole of R51. The
 5× between the ends is real but both ends are small, so an unannounced Setback
-would read as noise. Arming raises a *notice* — "word on the water" — and that
+would read as noise. Arming raises a _notice_ — "word on the water" — and that
 notice is why the escalation is felt at all.
 
 Evaluated in `tick()` and **only** in `tick()`. Never in `#settleOffline`, never
@@ -3375,7 +3375,7 @@ in `resume()`.
 and `cheapestPurchase` would re-buy the levels on the next step anyway, so the
 simulation could never measure the cost to a human.
 
-**Achievements gain a Setback family**, generated *from* `SETBACKS` rather than
+**Achievements gain a Setback family**, generated _from_ `SETBACKS` rather than
 written into the list — a new Setback brings its own record with it and there is
 no second list to forget. `evaluateAchievements` stays append-only; nothing is
 ever revoked.
@@ -3386,14 +3386,86 @@ Setbacks arriving on load. New games start on version 6 and never see that line.
 
 ### Pacing
 
-| | Stage 6 | **Stage 7** |
-| --- | --- | --- |
+|                | Stage 6  | **Stage 7**  |
+| -------------- | -------- | ------------ |
 | First prestige | 3h13m20s | **3h12m38s** |
-| Boat | 1h19m18s | 1h17m44s |
-| Ocean | 1h55m36s | 1h53m37s |
+| Boat           | 1h19m18s | 1h17m44s     |
+| Ocean          | 1h55m36s | 1h53m37s     |
 
 Chain unchanged: 3h13m / 13m27 / 3m01 / 2m19 / 1m46 / 1m41. Neither mechanic is
 in the simulation — poaching is a choice the reference player never makes, and
 Setbacks are deliberately excluded — so the small movement is Stage 6's
 `autoCastsPerSecond` change reaching the estimator, not consequences leaking into
 the ladder.
+
+## Stage 8 — Naming, Help, and the Fishdex (`feat/voice`)
+
+### The shift tiers are named (R61) — and derived, not stored
+
+**Storms**, then **Bosses**, then **Megalodon**, thirty-two apiece, Megalodon
+without end. A shift is never "a shift" in the copy any more: the button says
+*Storm 7*, the modal says *Boss 3 — ridden out*, and each tier carries a line
+about what kind of thing it is.
+
+**The tier is derived from `prestigeCount` rather than stored, and that is a
+deliberate deviation from "in the save".** `prestigeCount` is already persisted,
+so the tier is in the save by construction; storing it too would be a second
+field to keep honest and a migration to write for a value that can never
+disagree with the first. `shifts.ts` is the one place a count becomes a name,
+and when the real shift layer lands it will still be counting shifts.
+
+### Help (R55)
+
+A **Help** tab, browsable, twelve topics, **covering only what the player has
+already unlocked**. That constraint is the whole design and it is what makes
+Help different from `guide.ts`: the guide says *what to do next*, one line, and
+vanishes when you do it; Help says *what the thing you already have does*, and
+stays. A wiki tells you about systems you have not met, which is how a wiki
+spoils a game. Reading all of Help at any moment is a complete and accurate
+account of the game you are currently playing, and nothing more.
+
+Setbacks appear once lived through (R62), and the topic writes itself out of
+`setbacksSeen` — a Setback documents itself and there is no second list to
+forget.
+
+**The prerequisite was already met.** `Tabs.svelte` has arrow, Home and End
+handling through `guide.ts`'s `nextTabIndex`, which the third pass added when a
+roving tabindex shipped without its key handler. Help would otherwise have been
+keyboard-unreachable, as R55 warned; there is now a test asserting both that
+`help` is in `TAB_IDS` and that the strip walks.
+
+**The opt-out guide** is a small modal when something opens for the first time,
+toggled by `settings.unlockGuides`, **on by default** — opt-out rather than
+opt-in, because the players who need it are exactly the ones who will not go
+looking for a setting. It is two paragraphs and a link to Help, never a wall.
+Everything already open when a player first meets it is taken as read, so a
+returning save does not produce eleven pop-ups at once.
+
+### The 47 Fishdex descriptions, rewritten
+
+Written by five writers working in parallel, one per file, each given the voice
+brief, the three approved samples, and **a different list of forbidden openers
+and phrases** — because five independent writers converge on the same tics, and
+sameness is the failure mode here, not offence.
+
+Each was required to report the one concrete detail it gave each fish. Reading
+those 47 details side by side is what the consolidation pass was for: three
+collisions were found and rewritten (`which is the only` three times, `the
+moment a shadow` twice, and one phrase I introduced while fixing the first).
+
+The result, measured rather than asserted:
+
+| | |
+| --- | --- |
+| Length | 198 – 244 characters, median **222** (was 171–256, median 226) |
+| Aquarium framing | **none** |
+| Addresses the reader as "you" | **none** (the four oddities did; they no longer do) |
+| Five-word phrases shared by two entries | **none** |
+| Most-repeated opening word | 5 of 47 |
+
+Four tests hold that line, and they assert **variety rather than taste**, which
+is the only part of this a test can honestly check.
+
+The four oddity entries got a consistency pass rather than a rewrite — they were
+already close, and the humour is the point of them. What changed is that they
+stopped talking to the reader.
