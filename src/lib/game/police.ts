@@ -141,6 +141,14 @@ export function poachSource(state: GameState, source: FishingSources): boolean {
 export function stopPoaching(state: GameState): void {
 	if (!state.poaching) return;
 	state.poaching = null;
+	// The catch is yours, so the debt against it goes with the visit.
+	//
+	// It used to survive, and `confiscate` settles the standing debt out of
+	// whatever happens to be in the bucket at the next bust — so packing up,
+	// selling, fishing legally and coming back to the same water had the warden
+	// take the *legal* fish for a catch the player had already been told was
+	// theirs. The clock still belongs to the water; the fish do not.
+	state.poached = emptyLedger();
 	if (sourceBlocker(state, state.activeSource)) state.activeSource = shoreSource(state);
 }
 

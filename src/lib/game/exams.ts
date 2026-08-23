@@ -75,7 +75,7 @@ export const EXAMS: Record<LicenceId, ExamDefinition> = {
 		kind: 'longline',
 		name: 'The Long Line',
 		brief:
-			'Nobody charters a deep sea boat on a bucket of minnows. Land eight fish that are actually worth the fuel — rare or better. Luck is what buys this one down.',
+			'Nobody charters a deep sea boat on a bucket of minnows. Land twenty-five fish that are actually worth the fuel — rare or better. Luck is what buys this one down.',
 		target: 25
 	}
 };

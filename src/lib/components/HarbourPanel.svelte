@@ -110,8 +110,8 @@
 				</p>
 			{:else if exam.kind === 'longline'}
 				<p class="task">
-					Land <strong>{exam.target}</strong> fish that are rare or better. Glimmer Lure and the Pearl
-					Diver's Eye are what move this along.
+					Land <strong>{exam.target - exam.progress}</strong> more fish that are rare or better. Glimmer
+					Lure and the Pearl Diver's Eye are what move this along.
 				</p>
 			{:else if exam.kind === 'cull'}
 				<p class="task">
@@ -183,9 +183,18 @@
 					{/if}
 				</div>
 				{#if !held}
-					<button disabled={blocked || exam !== null} onclick={() => game.sitExam(id)}>
+					<!--
+						`canSit` also refuses a licence the water in front of you does
+						not need yet, and `sitExam` returns false without saying so —
+						so this button was live and inert from the first second of a
+						new game, on the very first licence a player meets.
+					-->
+					{@const sittable = game.sittable.includes(id)}
+					<button disabled={blocked || exam !== null || !sittable} onclick={() => game.sitExam(id)}>
 						{#if exam !== null}
 							Busy
+						{:else if !sittable}
+							Not yet
 						{:else}
 							Sit {EXAMS[id].name}
 						{/if}

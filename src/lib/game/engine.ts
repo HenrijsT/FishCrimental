@@ -88,7 +88,7 @@ import {
 	type PrestigeUpgradeId,
 	type UpgradeId
 } from './config';
-import type { GameState, Modifiers, PondState } from './types';
+import type { GameState, Modifiers, PondState, SpeciesLedger } from './types';
 import type { SetbackId } from './setbacks';
 
 // ---------------------------------------------------------------------------
@@ -1326,11 +1326,23 @@ export function accumulate(
 			(state.poaching === source || (state.unlocked[source] && !missingLicence(state, source))) &&
 			(rigRoom === null || rigRoom.gt(0))
 		) {
-			const casts = takeWhole(
-				state,
-				AUTO_FISHER_CARRY_KEY,
-				perSecond.times(seconds).times(efficiency).times(autoFisherShare)
-			);
+			// Trimmed to what the bucket can take **before** the casts are minted,
+			// exactly as the crew loop above is, and for the same reason:
+			// `routeCasts(spend = true)` buys fuel and wears the hull for every
+			// cast handed to it, and the catch was only clamped afterwards. The
+			// gate above bails out at exactly zero room, so partial room let a
+			// whole interval through — and with the night shift bought, that
+			// interval is the entire night.
+			let rigWanted = perSecond.times(seconds).times(efficiency).times(autoFisherShare);
+			if (rigRoom !== null && modifiers.fishPerCast.gt(0)) {
+				const affordable = rigRoom.div(modifiers.fishPerCast);
+				if (affordable.lt(rigWanted)) {
+					bucketBound = true;
+					rigWanted = affordable;
+				}
+			}
+
+			const casts = rigWanted.gt(0) ? takeWhole(state, AUTO_FISHER_CARRY_KEY, rigWanted) : d0();
 
 			if (casts.gt(0)) {
 				const route = routeCasts(state, modifiers, source, casts, true);
@@ -1542,6 +1554,8 @@ export function holdCount(state: GameState): Decimal {
  * existing caller — and every existing test — keeps its old meaning.
  */
 export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RATE): Decimal {
+	releasePoached(state, state.holdSpecies);
+
 	if (state.holdValue.lte(0)) {
 		// Both ledgers clear here too. Worthless fish still take up the bucket
 		// and still move a price, and a species ledger that outlived the fish
@@ -1563,6 +1577,39 @@ export function sellHold(state: GameState, modifiers: Modifiers, rate = TOWN_RAT
 	for (const type of FISH_TYPES) state.hold[type] = d0();
 
 	return earned;
+}
+
+/**
+ * A fish that has been sold is a fish the warden cannot confiscate.
+ *
+ * `state.poached` is a standing debt against species, and `confiscate` settles
+ * it out of whatever is in the bucket at the time. Nothing used to write the
+ * debt down when the fish left for money, so a poacher who sold on the way and
+ * kept fishing carried the old debt to the bust — and it was then paid out of
+ * whatever the crew had landed legally in the meantime, which is exactly the
+ * "ninety legal guppies for one stolen pike" outcome `confiscate` documents as
+ * fixed. Called wherever a ledger is emptied for coins.
+ */
+function releasePoached(state: GameState, ledger: SpeciesLedger): void {
+	for (const species of Object.keys(ledger.fish)) {
+		const owed = state.poached.fish[species];
+		if (!owed || owed.lte(0)) continue;
+
+		const leaving = ledger.fish[species];
+		if (!leaving || leaving.lte(0)) continue;
+
+		const released = Decimal.min(owed, leaving);
+		const rest = owed.minus(released);
+		if (rest.lte(0)) {
+			delete state.poached.fish[species];
+			delete state.poached.worth[species];
+			continue;
+		}
+
+		const worth = state.poached.worth[species] ?? d0();
+		state.poached.fish[species] = rest;
+		state.poached.worth[species] = worth.times(rest.div(owed));
+	}
 }
 
 /** What the bucket would actually fetch today, market and knowledge included. */
@@ -1655,6 +1702,8 @@ export function settleConsignment(
 	modifiers: Modifiers,
 	rate = TOWN_RATE
 ): Decimal {
+	releasePoached(state, state.consignmentSpecies);
+
 	if (state.consignmentValue.lte(0)) {
 		for (const type of FISH_TYPES) state.consignment[type] = d0();
 		drainLedger(state, state.consignmentSpecies);

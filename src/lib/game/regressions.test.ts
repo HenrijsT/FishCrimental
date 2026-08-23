@@ -4,7 +4,14 @@ import { D } from '$lib/decimal';
 import { formatNumber } from '$lib/format';
 import { FISH_TYPES, FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
-import { SAVE_VERSION, SOURCE_ORDER, TOWN_RATE } from './config';
+import {
+	OFFLINE_EFFICIENCY,
+	OFFLINE_HOLD_MULTIPLIER,
+	SAVE_VERSION,
+	SOURCE_ORDER,
+	TOWN_RATE,
+	UPGRADES
+} from './config';
 import {
 	accumulate,
 	autoCastsPerSecond,
@@ -15,11 +22,15 @@ import {
 	createInitialState,
 	deckhandBulkCost,
 	deckhandCost,
+	holdCount,
 	performCast,
 	runTrader,
 	saleRate,
-	sellHold
+	sellHold,
+	upgradeCeiling
 } from './engine';
+import { nextStep } from './guide';
+import { poachSource, stopPoaching } from './police';
 import { fromRaw, serialize } from './save';
 import type { GameState } from './types';
 
@@ -274,5 +285,128 @@ describe('the trader stops buying once there is an Assistant (R63)', () => {
 		const state = stocked();
 		state.hasAssistant = true;
 		expect(saleRate(state)).toBe(TOWN_RATE);
+	});
+});
+
+/**
+ * The review pass over the fifth pass. Same rule as above: one test per defect
+ * actually found, tied to the thing that was wrong rather than to the design.
+ */
+
+describe('review: the rig was billed for a night the bucket could not hold', () => {
+	// The crew loop trims its casts to the keepnet before minting them, because
+	// `routeCasts(spend = true)` buys fuel and wears the hull for every cast it
+	// is handed. The rig block was left on the old shape: it bailed out only at
+	// *exactly* zero room, so partial room let a whole interval through — and
+	// offline, with the night shift bought, that interval is the entire night.
+	it('trims the rig to the keepnet before the casts are minted', () => {
+		const state = createInitialState();
+		state.coins = D(1e30);
+		state.autoFisher = D(5);
+		state.autoFisherOffline = true;
+		state.activeSource = FishingSources.MudPool;
+
+		const modifiers = computeModifiers(state);
+		const result = accumulate(
+			state,
+			modifiers,
+			8 * 3600,
+			OFFLINE_EFFICIENCY,
+			undefined,
+			Math.random,
+			1,
+			OFFLINE_HOLD_MULTIPLIER
+		);
+
+		expect(result.bucketBound).toBe(true);
+		// Casts minted, not fish landed: the old bug spent fuel on eight hours of
+		// them and threw the catch away.
+		const affordable = holdCount(state).div(modifiers.fishPerCast).plus(2);
+		expect(state.totalCasts.lte(affordable)).toBe(true);
+	});
+});
+
+describe('review: the warden collected a debt out of legal fish', () => {
+	/**
+	 * Someone working water they have no paper for. The rig, not the crew — a
+	 * deckhand is hired at a source and there is no hiring one at water you do
+	 * not own, so the crew never poach.
+	 */
+	function poacher(): GameState {
+		const state = createInitialState();
+		state.mapLevel = D(3);
+		state.coins = D(1e9);
+		state.hasAssistant = true;
+		state.autoFisher = D(20);
+
+		poachSource(state, POACHED_WATER);
+		accumulate(state, computeModifiers(state), 30);
+		return state;
+	}
+
+	const POACHED_WATER = FishingSources.Stream;
+
+	// `state.poached` is a standing debt against species, and `confiscate`
+	// settles it out of whatever is in the bucket at the time of the bust. It
+	// used to survive a sale, so a poacher who sold on the way and kept fishing
+	// carried the old debt to the bust and paid it with whatever the crew had
+	// landed legally in the meantime.
+	it('cannot confiscate a fish that has already been sold', () => {
+		const state = poacher();
+		expect(Object.keys(state.poached.fish).length).toBeGreaterThan(0);
+
+		sellHold(state, computeModifiers(state));
+
+		expect(Object.keys(state.poached.fish)).toHaveLength(0);
+	});
+
+	// `stopPoaching` promises the catch is yours. The debt outlived the visit,
+	// and because the clock belongs to the water, coming back to the same spot
+	// and being busted settled the old debt out of the new bucket.
+	it('lets go of the catch when you pack up and walk away', () => {
+		const state = poacher();
+		stopPoaching(state);
+		expect(Object.keys(state.poached.fish)).toHaveLength(0);
+	});
+});
+
+describe('review: the guide named an upgrade nobody could buy', () => {
+	// Cold Storage is a flat 250,000 and `upgradeCeiling` returns 0 for it until
+	// the market opens, which makes it the cheapest thing on the board for most
+	// of run 1 — and the Gear tab renders it disabled as "Not sold here".
+	it('never points at a track above its shopkeeper ceiling', () => {
+		const state = createInitialState();
+		state.totalCasts = D(500);
+		state.lifetimeCoins = D(1e6);
+		state.autoFisher = D(1);
+		state.licences.inland = true;
+		state.licences.lakes = true;
+		for (const source of [FishingSources.Pond, FishingSources.Stream, FishingSources.River]) {
+			state.unlocked[source] = true;
+		}
+		state.deckhands[FishingSources.MudPool] = D(1);
+
+		// Deep enough that every track the shopkeepers actually stock costs more
+		// than Cold Storage's flat 250,000, which is the whole of the trap.
+		state.upgrades.rod = D(8);
+		state.upgrades.net = D(6);
+		state.upgrades.lure = D(5);
+		state.upgrades.market = D(6);
+		state.upgrades.crew = D(3);
+
+		// Enough to buy something, not enough to open the Lake.
+		state.coins = D(300_000);
+
+		expect(upgradeCeiling(state, 'storage')).toBe(0);
+		expect(nextStep(state)?.text ?? '').not.toContain(UPGRADES.storage.name);
+	});
+});
+
+describe('review: a thousand written the long way', () => {
+	// The tier carry was skipped when there was no next suffix to carry into,
+	// and then fell out of the branch and printed the uncarried string anyway.
+	it('does not print a mantissa its own suffix cannot hold', () => {
+		expect(formatNumber(999_999_000_000_000)).toBe('1.00e15');
+		expect(formatNumber(999_999_999_999.9)).toBe('1.00T');
 	});
 });

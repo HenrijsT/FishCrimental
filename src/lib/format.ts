@@ -89,12 +89,18 @@ export function formatNumber(value: DecimalSource, options: FormatOptions = {}):
 		// Rounding can push the mantissa past its own suffix: 999,999 rounds to
 		// "1000.00K", which is a thousand thousand written the long way. Carry
 		// into the next tier instead.
-		if (Number(mantissa.toFixed(precision)) >= 1000 && tier + 1 < SHORT_SUFFIXES.length) {
-			tier += 1;
-			mantissa = magnitude / Math.pow(1000, tier);
+		//
+		// At the top of the table there is no next tier to carry into — 9.9999e14
+		// rounds to "1000.00T" and T is the last suffix — so that band falls
+		// through to the scientific form below, which is where 1e15 lands anyway.
+		const carries = Number(mantissa.toFixed(precision)) >= 1000;
+		if (!carries || tier + 1 < SHORT_SUFFIXES.length) {
+			if (carries) {
+				tier += 1;
+				mantissa = magnitude / Math.pow(1000, tier);
+			}
+			return `${mantissa.toFixed(precision)}${SHORT_SUFFIXES[tier]}`;
 		}
-
-		return `${mantissa.toFixed(precision)}${SHORT_SUFFIXES[tier]}`;
 	}
 
 	let mantissa = magnitude / Math.pow(10, exponent);

@@ -23,8 +23,9 @@
 				<span class="desc">
 					{hit.blow}
 					<br />
-					Two levels of {describeTrack(hit.track)} gone, {Math.round(hit.seconds)} seconds of income with
-					them{#if hit.refunded.gt(0)}, and <Num value={hit.refunded} tone="coin" /> back for the rest{/if}.
+					{hit.levels === 1 ? 'One level' : `${hit.levels} levels`} of {describeTrack(hit.track)} gone,
+					{Math.round(hit.seconds)} seconds of income with them{#if hit.refunded.gt(0)}, and
+						<Num value={hit.refunded} tone="coin" /> back for the rest{/if}.
 				</span>
 			</div>
 			<button

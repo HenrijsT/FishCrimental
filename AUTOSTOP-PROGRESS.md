@@ -38,3 +38,17 @@ Known and deliberate, not defects — see design/IDEAS.md N3:
   ponds gate on prestigeCount > 0 because in this codebase a prestige IS the shift.
 - Non-fish drops (N2) still deferred.
 - Run 2 at 4m51 is the one pacing figure worth arguing with; left alone on purpose.
+
+## Code review pass (post-merge, working tree)
+Reviewed `git diff @{upstream}...HEAD` (40 commits, 86 files). Nine findings, all
+applied, each of the five behavioural ones reproduced by a test first (R73).
+Gates green: lint, check 0 errors, test 620 passed / 7 skipped, build ok.
+- engine.ts: rig casts clamped to keepnet room before minting (fuel/hull leak)
+- engine.ts + police.ts: `state.poached` released on sale and on walking away
+- guide.ts: `nextStep` no longer names an upgrade above its shopkeeper ceiling
+- state.svelte.ts: `rescued` restored from the backup key on init
+- format.ts: top-tier carry falls through to scientific instead of "1000.00T"
+- exams.ts / HarbourPanel: Long Line brief said eight, target is 25; Sit button
+  disabled when `canSit` is false; longline task line shows the remainder
+- Toasts.svelte: setback level count read from the hit, not hardcoded "Two"
+- base.css: `.visually-hidden` / `.sr-only` merged into one rule

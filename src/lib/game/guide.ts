@@ -22,6 +22,7 @@ import {
 	missingLicence,
 	nextLockedSource,
 	traderInStock,
+	upgradeCeiling,
 	upgradeCost
 } from './engine';
 import { EXAMS, canSit } from './exams';
@@ -249,12 +250,21 @@ export function nextStep(state: GameState): NextStep | null {
 				};
 	}
 
-	const cheapest = UPGRADE_IDS.map((id) => ({
-		id,
-		cost: upgradeCost(id, state.upgrades[id])
-	})).sort((a, b) => (a.cost.lt(b.cost) ? -1 : 1))[0];
+	// Only tracks the player could actually buy from.
+	//
+	// `upgradeCeiling` is zero for Cold Storage until the market opens, and it is
+	// the cheapest thing on the board for most of run 1 — so the unfiltered list
+	// spent the whole opening act pointing at a button the Gear tab renders
+	// disabled and labelled "Not sold here".
+	const cheapest = UPGRADE_IDS.filter((id) => state.upgrades[id].lt(upgradeCeiling(state, id)))
+		.map((id) => ({ id, cost: upgradeCost(id, state.upgrades[id]) }))
+		.sort((a, b) => (a.cost.lt(b.cost) ? -1 : 1))[0];
 
-	if (UPGRADE_IDS.every((id) => state.upgrades[id].eq(0)) && state.coins.gte(cheapest.cost)) {
+	if (
+		cheapest &&
+		UPGRADE_IDS.every((id) => state.upgrades[id].eq(0)) &&
+		state.coins.gte(cheapest.cost)
+	) {
 		return {
 			text: `You can afford the ${UPGRADES[cheapest.id].name}. Gear compounds — buy early.`,
 			tab: 'gear'
@@ -317,7 +327,7 @@ export function nextStep(state: GameState): NextStep | null {
 	// something they can actually do with the coins they have rather than
 	// repeating the same line for eight minutes.
 	if (next) {
-		if (state.coins.gte(cheapest.cost)) {
+		if (cheapest && state.coins.gte(cheapest.cost)) {
 			return {
 				text: `You can afford the ${UPGRADES[cheapest.id].name}. Everything you buy makes the ${next} closer.`,
 				tab: 'gear'

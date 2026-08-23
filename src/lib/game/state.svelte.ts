@@ -243,6 +243,15 @@ export class Game {
 	init(): void {
 		if (this.loaded) return;
 
+		// A copy set aside in an earlier session is still a copy set aside.
+		//
+		// `rescued` only ever turned true in the sitting that did the rescuing,
+		// and Settings hides the Recover button behind it — so the one path the
+		// corrupt-save banner recommends, "export it and start fresh", copied the
+		// save aside, reset, saved, and the very next reload made the only
+		// surviving copy unreachable from anywhere in the UI.
+		this.rescued = readBackupSave() !== null;
+
 		const outcome = loadFromStorage();
 
 		if (outcome.kind === 'loaded') {
