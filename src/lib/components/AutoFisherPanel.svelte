@@ -83,7 +83,7 @@
 
 		<button
 			class="buy"
-			aria-label="Buy a level of the rig"
+			aria-label={maxed ? 'The rig: maxed' : 'Buy a level of the rig'}
 			disabled={maxed || !affordable}
 			onclick={() => game.buyRig()}
 		>
@@ -111,7 +111,7 @@
 		{#if !g.autoFisherOffline}
 			<button
 				class="buy"
-				aria-label="Buy the night shift"
+				aria-label={owned ? 'Buy the night shift' : 'Night shift: needs a rig'}
 				disabled={!canBuyOffline}
 				onclick={() => game.buyRigOffline()}
 			>

@@ -84,6 +84,14 @@ function clampBustDeadline(value: unknown): number {
 	return Math.min(parsed, Date.now() + POACH_BUSTED_SECONDS * 1000);
 }
 
+/** A "last settled at" stamp. Never in the future, never before the epoch. */
+function clampMark(value: unknown): number {
+	const now = Date.now();
+	const parsed = num(value, now);
+	if (parsed <= 0) return now;
+	return Math.min(parsed, now);
+}
+
 function clampTraderDeadline(value: unknown): number {
 	const parsed = num(value, 0);
 	if (parsed <= 0) return 0;
@@ -380,14 +388,6 @@ function readLedger(raw: unknown): SpeciesLedger {
 	};
 }
 
-/**
- * Breeding ponds.
- *
- * Capped at `POND_MAX` on the way in, and an unknown species is read as an
- * unstocked pond rather than dropped — the pond was paid for, and losing it
- * because a fish was renamed would be worse than losing what it was breeding.
- */
-/** Busts per source, this run. Anything not a source is dropped. */
 /** Setbacks already lived through. Unknown ids are dropped. */
 function readSetbacks(raw: unknown): SetbackId[] {
 	if (!Array.isArray(raw)) return [];
@@ -407,6 +407,14 @@ function readArmedAt(raw: unknown): Partial<Record<SetbackId, number>> {
 	return out;
 }
 
+/** A stored source name, or null for anything that is not one. */
+function readSource(raw: unknown): FishingSources | null {
+	return typeof raw === 'string' && (SOURCE_ORDER as string[]).includes(raw)
+		? (raw as FishingSources)
+		: null;
+}
+
+/** Busts per source, this run. Anything not a source is dropped. */
 function readOffences(raw: unknown): Partial<Record<FishingSources, number>> {
 	const source = isRecord(raw) ? raw : {};
 	const out: Partial<Record<FishingSources, number>> = {};
@@ -417,6 +425,13 @@ function readOffences(raw: unknown): Partial<Record<FishingSources, number>> {
 	return out;
 }
 
+/**
+ * Breeding ponds.
+ *
+ * Capped at `POND_MAX` on the way in, and an unknown species is read as an
+ * unstocked pond rather than dropped — the pond was paid for, and losing it
+ * because a fish was renamed would be worse than losing what it was breeding.
+ */
 function readPonds(raw: unknown): PondState[] {
 	if (!Array.isArray(raw)) return [];
 	return raw.slice(0, POND_MAX).map((entry) => {
@@ -554,7 +569,14 @@ export function fromRaw(data: Raw): GameState {
 		marketPressure: readSpeciesPile(migrated.marketPressure, false),
 		// A book loaded with no timestamp has not decayed yet, not decayed
 		// forever. `settleMarket` runs immediately after the load.
-		marketUpdatedAt: num(migrated.marketUpdatedAt, Date.now()),
+		//
+		// Clamped to now, like every other deadline in this function. A mark in
+		// the future makes `settleMarket` compute `seconds = 0` and return every
+		// time, and unlike `lastUpdate` — which the next tick repairs — nothing
+		// walks it back. A device clock a day fast at the moment of an autosave,
+		// then corrected, froze every price the player had crushed for a full day
+		// of real play.
+		marketUpdatedAt: clampMark(migrated.marketUpdatedAt),
 
 		ponds: readPonds(migrated.ponds),
 		// Never read, never written. An exam in progress is free to restart and
@@ -564,12 +586,13 @@ export function fromRaw(data: Raw): GameState {
 		// Poaching. `settlePoachOnLoad` drops the flag if the licence has since
 		// been taken or the source is not open in this run — a stale flag would
 		// mean a bust for water the player is entitled to fish.
-		poaching:
-			typeof migrated.poaching === 'string' &&
-			(SOURCE_ORDER as string[]).includes(migrated.poaching)
-				? (migrated.poaching as FishingSources)
-				: null,
+		poaching: readSource(migrated.poaching),
 		poachElapsed: Math.max(0, num(migrated.poachElapsed, 0)),
+		// A save written before this field existed has a clock and no owner for
+		// it. Reading it back as the water being poached is the only honest
+		// answer available, and it is the answer that keeps the grace period
+		// un-farmable across that one reload.
+		poachClockAt: readSource(migrated.poachClockAt) ?? readSource(migrated.poaching),
 		poached: readLedger(migrated.poached),
 		poachOffences: readOffences(migrated.poachOffences),
 		bustedUntil: clampBustDeadline(migrated.bustedUntil),

@@ -65,13 +65,13 @@ import {
 	computeModifiers,
 	createInitialState,
 	deckhandCost,
-	catchTable,
 	nextLockedSource,
 	performPrestige,
 	buyPrestigeUpgrade,
 	buyUpgrade,
 	prestigeUpgradeCost,
 	sellHold,
+	handIncomePerSecond,
 	totalIncomePerSecond,
 	unlockSource,
 	upgradeCost
@@ -192,11 +192,19 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 		const manual = inTownNow ? 0 : 1 / modifiers.castSeconds[state.activeSource];
 
 		if (idleCrossoverAt === null) {
-			const table = catchTable(state.activeSource, modifiers.luck);
-			const manualIncome = modifiers.fishPerCast
-				.times(manual)
-				.times(table.averageSourceValue)
-				.times(modifiers.sellMultiplier);
+			// Both sides through `handIncomePerSecond`/`totalIncomePerSecond`, so
+			// they are the same convention.
+			//
+			// The inline copy this replaces was what `handIncomePerSecond` was
+			// extracted from, and it never caught up: `castIncome` has since
+			// gained the buyer's rate and the market multiplier, and the manual
+			// side had neither. Pre-bicycle that is `TRADER_RATE = 0.55`, so the
+			// player's own hands read 1.82x high and the crossover was reported
+			// later than it happens; once the market opens it ignored knowledge
+			// and price on top of that.
+			// `handIncomePerSecond` is already one cast every `castSeconds`, which
+			// is exactly `manual` — so in town it is zero and out of it is itself.
+			const manualIncome = inTownNow ? d0() : handIncomePerSecond(state, modifiers);
 			if (totalIncomePerSecond(state, modifiers).gt(manualIncome)) idleCrossoverAt = elapsed;
 		}
 

@@ -5,8 +5,10 @@ import { formatNumber } from '$lib/format';
 import { FISH_TYPES, FishType } from '$lib/fish_types';
 import { FishingSources } from '$lib/fishing_sources';
 import {
+	ASSISTANT_COST,
 	OFFLINE_EFFICIENCY,
 	OFFLINE_HOLD_MULTIPLIER,
+	POACH_GRACE_SECONDS,
 	SAVE_VERSION,
 	SOURCE_ORDER,
 	TOWN_RATE,
@@ -15,22 +17,28 @@ import {
 import {
 	accumulate,
 	autoCastsPerSecond,
+	bucketCapacity,
+	buyAssistant,
 	buyDeckhand,
 	buyUpgrade,
+	consignmentCount,
 	listForSale,
+	traderInStock,
 	computeModifiers,
 	createInitialState,
 	deckhandBulkCost,
 	deckhandCost,
 	holdCount,
 	performCast,
+	rodClampLevel,
 	runTrader,
 	saleRate,
 	sellHold,
-	upgradeCeiling
+	upgradeCeiling,
+	upgradeStockedAt
 } from './engine';
 import { nextStep } from './guide';
-import { poachSource, stopPoaching } from './police';
+import { poachSource, runPolice, stopPoaching } from './police';
 import { fromRaw, serialize } from './save';
 import type { GameState } from './types';
 
@@ -408,5 +416,187 @@ describe('review: a thousand written the long way', () => {
 	it('does not print a mantissa its own suffix cannot hold', () => {
 		expect(formatNumber(999_999_000_000_000)).toBe('1.00e15');
 		expect(formatNumber(999_999_999_999.9)).toBe('1.00T');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Round three: the full-branch review
+// ---------------------------------------------------------------------------
+
+describe('review: the poach clock walked onto water it had never been near', () => {
+	// The clock belongs to the water, so packing up deliberately does not reset
+	// it. It was keyed off `state.poaching`, which packing up *does* clear, so a
+	// near-expired clock followed the player to a source they had just arrived
+	// at — and `#keepFishable` and `claimLicence` pack up on the player's behalf.
+	function unlicensed(): GameState {
+		const state = createInitialState();
+		state.mapLevel = D(3);
+		state.coins = D(1_000_000);
+		return state;
+	}
+
+	it('starts fresh at different water, even after packing up', () => {
+		const state = unlicensed();
+		poachSource(state, FishingSources.Stream);
+		runPolice(state, computeModifiers(state), POACH_GRACE_SECONDS - 5);
+		stopPoaching(state);
+
+		poachSource(state, FishingSources.River);
+		expect(state.poachElapsed).toBe(0);
+		expect(runPolice(state, computeModifiers(state), 1)).toBeNull();
+	});
+
+	it('still refuses to forget the water you left, so the grace cannot be farmed', () => {
+		const state = unlicensed();
+		poachSource(state, FishingSources.Stream);
+		runPolice(state, computeModifiers(state), POACH_GRACE_SECONDS - 5);
+		stopPoaching(state);
+
+		poachSource(state, FishingSources.Stream);
+		expect(state.poachElapsed).toBeCloseTo(POACH_GRACE_SECONDS - 5, 6);
+		expect(runPolice(state, computeModifiers(state), 6)).not.toBeNull();
+	});
+
+	it('carries the owner of the clock across a save', () => {
+		const state = unlicensed();
+		poachSource(state, FishingSources.Stream);
+		runPolice(state, computeModifiers(state), 10);
+		stopPoaching(state);
+
+		const reloaded = fromRaw(JSON.parse(serialize(state)));
+		expect(reloaded.poachClockAt).toBe(FishingSources.Stream);
+	});
+});
+
+describe('review: a partial listing drowned the remainder', () => {
+	// `fraction` was applied straight to each `FishType` bucket, and `readHold`
+	// floors every bucket on load — so listing 3 of 5 fish and reloading lost 2.
+	// Coming back from a night away the hold is `OFFLINE_HOLD_MULTIPLIER`
+	// bucketfuls against one bucketful of quay, so every listing is a partial one.
+	it('moves whole fish, and the count survives a reload', () => {
+		const state = createInitialState();
+		const cap = bucketCapacity(state.bucketLevel);
+		state.hold[FishType.Small] = D(3);
+		state.hold[FishType.Medium] = D(2);
+		state.holdValue = D(500);
+		state.consignment[FishType.Small] = cap.minus(3);
+
+		const before = holdCount(state).plus(consignmentCount(state));
+		listForSale(state);
+
+		for (const type of FISH_TYPES) {
+			expect(state.hold[type].eq(state.hold[type].floor())).toBe(true);
+			expect(state.consignment[type].eq(state.consignment[type].floor())).toBe(true);
+		}
+
+		const reloaded = fromRaw(JSON.parse(serialize(state)));
+		expect(holdCount(reloaded).plus(consignmentCount(reloaded)).toNumber()).toBe(before.toNumber());
+	});
+});
+
+describe('review: hiring the Assistant stranded the quay', () => {
+	// The merchant never calls again once there is an Assistant, `sell()` drains
+	// only the hold, and `HoldPanel` hides the quay block outright — so listed
+	// fish became unsellable *and* invisible in the same click.
+	it('puts anything already listed back in the bucket', () => {
+		const state = createInitialState();
+		state.hold[FishType.Small] = D(20);
+		state.holdValue = D(400);
+		listForSale(state);
+		expect(consignmentCount(state).toNumber()).toBe(20);
+
+		state.coins = D(ASSISTANT_COST).times(2);
+		// Rotate the cart until he is carrying one, without letting him call —
+		// a visit would settle the consignment and hide the defect.
+		while (!traderInStock(state, 'assistant')) state.traderVisits += 1;
+
+		expect(buyAssistant(state)).toBe(true);
+		expect(consignmentCount(state).toNumber()).toBe(0);
+		expect(state.consignmentValue.toNumber()).toBe(0);
+		expect(holdCount(state).toNumber()).toBe(20);
+		expect(state.holdValue.toNumber()).toBe(400);
+	});
+});
+
+describe('review: a manual cast on a full bucket bought fuel for nothing', () => {
+	// Both `accumulate` loops were hardened against `routeCasts(spend = true)`
+	// spending before the catch was clamped. `performCast` was the caller the
+	// fix missed.
+	it('does not burn fuel or wear the hull when there is nowhere to put a fish', () => {
+		const state = createInitialState();
+		state.unlocked[FishingSources.Ocean] = true;
+		state.licences = { inland: true, lakes: true, coastal: true, deep: true };
+		state.activeSource = FishingSources.Ocean;
+		state.boat.owned = true;
+		const modifiers = computeModifiers(state);
+		state.boat.fuel = modifiers.fuelCapacity;
+		state.boat.condition = 100;
+
+		// Fill the bucket to the brim.
+		state.hold[FishType.Small] = bucketCapacity(state.bucketLevel);
+
+		const fuelBefore = state.boat.fuel;
+		for (let i = 0; i < 50; i++) performCast(state, FishingSources.Ocean, modifiers);
+
+		expect(state.boat.fuel.eq(fuelBefore)).toBe(true);
+		expect(state.boat.condition).toBe(100);
+	});
+});
+
+describe('review: the rod was declared finished while the hull was dragging', () => {
+	// `computeModifiers` divides open-water cast times by `boatEfficiency`;
+	// `rodClampLevel` did not, so it clamped at the level a pristine boat would
+	// reach and refused to sell rods that genuinely still helped.
+	it('a worn boat leaves rod levels worth buying', () => {
+		const pristine = createInitialState();
+		pristine.unlocked[FishingSources.Ocean] = true;
+		pristine.licences = { inland: true, lakes: true, coastal: true, deep: true };
+		pristine.boat.owned = true;
+		pristine.boat.condition = 100;
+
+		const worn = { ...pristine, boat: { ...pristine.boat, condition: 0 } };
+
+		const clean = rodClampLevel(pristine);
+		const dragging = rodClampLevel(worn);
+		expect(clean).not.toBeNull();
+		expect(dragging === null || dragging > (clean as number)).toBe(true);
+	});
+});
+
+describe('review: Cold Storage claimed to be stocked one source deeper', () => {
+	// `upgradeCeiling` gained a market gate for `storage`; `upgradeStockedAt` did
+	// not, so the panel spent the whole first run naming a source that would not
+	// sell it either.
+	it('names nowhere while the market is shut', () => {
+		const state = createInitialState();
+		expect(upgradeCeiling(state, 'storage')).toBe(0);
+		expect(upgradeStockedAt(state, 'storage')).toBeNull();
+	});
+});
+
+describe('review: the guide answered "keep casting" to a full quay', () => {
+	// Listing is what empties the bucket, so the empty-hold branch always fired
+	// first and the quay line was unreachable.
+	it('points at the quay once the catch is on it', () => {
+		const state = createInitialState();
+		state.totalCasts = D(5);
+		state.hold[FishType.Small] = D(5);
+		state.holdValue = D(50);
+		listForSale(state);
+
+		expect(holdCount(state).toNumber()).toBe(0);
+		expect(nextStep(state)?.text ?? '').toContain('quay');
+	});
+});
+
+describe('review: a market mark from the future froze every price', () => {
+	// `settleMarket` refuses to move the mark backwards, so a stamp written by a
+	// fast device clock stopped all recovery until real time caught up.
+	it('clamps a stored mark to now', () => {
+		const state = createInitialState();
+		const raw = JSON.parse(serialize(state));
+		raw.marketUpdatedAt = Date.now() + 24 * 60 * 60 * 1000;
+
+		expect(fromRaw(raw).marketUpdatedAt).toBeLessThanOrEqual(Date.now());
 	});
 });

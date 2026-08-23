@@ -286,20 +286,30 @@ export function moveLedger(from: SpeciesLedger, to: SpeciesLedger, fraction: Dec
 	const whole = fraction.gte(1);
 
 	for (const species of Object.keys(from.fish)) {
-		const fish = whole ? from.fish[species] : from.fish[species].times(fraction);
-		const worth = whole
-			? (from.worth[species] ?? d0())
-			: (from.worth[species] ?? d0()).times(fraction);
+		const held = from.fish[species];
+		// Whole fish, for the same reason `listForSale` moves whole fish: the
+		// counts here are floored on load, so a fraction left behind is a fish
+		// deleted on the next reload.
+		const fish = whole || held.lte(0) ? held : held.times(fraction).floor();
+		// A species with no fish left still has to be swept, or its stale worth
+		// sits in the old ledger for ever and the market prices a bucket that is
+		// not there.
+		if (fish.lte(0) && held.gt(0)) continue;
+
+		// Worth follows the fish that moved rather than the requested fraction —
+		// flooring the count and not the money would drift the two apart.
+		const stored = from.worth[species] ?? d0();
+		const worth = whole || held.lte(0) ? stored : stored.times(fish.div(held));
 
 		to.fish[species] = (to.fish[species] ?? d0()).plus(fish);
 		to.worth[species] = (to.worth[species] ?? d0()).plus(worth);
 
-		if (whole) {
+		if (whole || fish.gte(held)) {
 			delete from.fish[species];
 			delete from.worth[species];
 		} else {
-			from.fish[species] = from.fish[species].minus(fish);
-			from.worth[species] = (from.worth[species] ?? d0()).minus(worth);
+			from.fish[species] = held.minus(fish);
+			from.worth[species] = stored.minus(worth);
 		}
 	}
 }

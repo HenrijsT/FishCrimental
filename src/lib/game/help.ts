@@ -101,7 +101,11 @@ export const HELP_TOPICS: HelpTopic[] = [
 		title: 'Fishing without paper',
 		body: [
 			`It works, and it pays, for exactly ${POACH_GRACE_SECONDS} seconds. Then a warden arrives. It is not a gamble — the clock is the same every time and it is on screen.`,
-			`He takes everything you landed there, fines a share of your coins, and puts you ashore for ${POACH_BUSTED_SECONDS} seconds. Your legal fish are not touched, and the first time is a warning.`,
+			// Not "the first time is a warning": `POACH_FINE_STEPS[0]` is 0.1, and
+			// `config.ts` says in as many words that the first offence is not free.
+			// Help is the one surface that has to describe the game the player is
+			// actually playing.
+			`He takes everything you landed there, fines a share of your coins, and puts you ashore for ${POACH_BUSTED_SECONDS} seconds. Your legal fish are not touched, but there is no free first offence.`,
 			'The fine is a percentage, and it goes up each time at the same water. It can never take your last coin, and it can never leave a boat owner short of a tank of fuel.'
 		],
 		available: (state) => state.poaching !== null || Object.keys(state.poachOffences).length > 0

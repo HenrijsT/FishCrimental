@@ -68,7 +68,9 @@
 				</div>
 
 				<button
-					aria-label="Hire a deckhand at the {sources[source].name}"
+					aria-label={step.lte(0) || cost === null
+						? `Deckhands at the ${sources[source].name}: not yet`
+						: `Hire a deckhand at the ${sources[source].name}`}
 					disabled={!affordable || step.lte(0)}
 					onclick={() => game.hire(source)}
 				>
@@ -99,7 +101,11 @@
 			{/if}
 		</div>
 		<button
-			aria-label="Buy {UPGRADES.crew.name}"
+			aria-label={crewMaxed
+				? `${UPGRADES.crew.name}: maxed`
+				: crewCost === null
+					? `${UPGRADES.crew.name}: not sold here`
+					: `Buy ${UPGRADES.crew.name}`}
 			disabled={crewCost === null || !state.coins.gte(crewCost)}
 			onclick={() => game.buy('crew')}
 		>

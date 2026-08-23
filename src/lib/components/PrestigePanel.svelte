@@ -125,7 +125,7 @@
 					</p>
 				</div>
 				<button
-					aria-label="Buy {config.name}"
+					aria-label={maxed ? `${config.name}: maxed` : `Buy ${config.name}`}
 					disabled={maxed || g.pearls.lt(cost)}
 					onclick={() => game.buyPearlUpgrade(id)}
 				>

@@ -117,10 +117,20 @@ export function poachSource(state: GameState, source: FishingSources): boolean {
 
 	// Switching to a *different* water starts a fresh clock. Returning to one
 	// you were already working does not — see `stopPoaching`.
-	if (state.poaching !== null && state.poaching !== source) {
+	//
+	// Keyed off `poachClockAt` rather than off `poaching`, because `poaching` is
+	// null the moment the player packs up and the clock deliberately outlives
+	// that. Comparing against the live flag meant "poach the Stream for eighty-
+	// nine seconds, pack up, poach the River" carried the eighty-nine onto the
+	// River: a fine, a permanent River offence and a lockout, four seconds after
+	// arriving on water the warden had never seen the player near. Packing up is
+	// not optional either — `#keepFishable` and `claimLicence` both call
+	// `stopPoaching` on the player's behalf.
+	if (state.poachClockAt !== null && state.poachClockAt !== source) {
 		state.poachElapsed = 0;
 		state.poached = emptyLedger();
 	}
+	state.poachClockAt = source;
 	state.poaching = source;
 	state.activeSource = source;
 	return true;
@@ -192,6 +202,8 @@ export function bust(state: GameState, modifiers: Modifiers, now = Date.now()): 
 
 	state.poaching = null;
 	state.poachElapsed = 0;
+	// The debt is settled, so the clock is nobody's.
+	state.poachClockAt = null;
 	state.poached = emptyLedger();
 	state.bustedUntil = now + POACH_BUSTED_SECONDS * 1000;
 
@@ -311,6 +323,7 @@ export function settlePoachOnLoad(state: GameState): void {
 	if (!trespass(state, state.poaching)) {
 		state.poaching = null;
 		state.poachElapsed = 0;
+		state.poachClockAt = null;
 		state.poached = emptyLedger();
 	}
 }

@@ -75,7 +75,7 @@
 								<Num value={cost} tone="coin" />
 							</button>
 						{:else}
-							<button disabled>Max</button>
+							<button disabled aria-label="Pond {index + 1}: max depth">Max</button>
 						{/if}
 					</li>
 				{/each}
@@ -94,7 +94,7 @@
 				</p>
 			</div>
 			<button
-				aria-label="Dig another pond"
+				aria-label={full ? 'No room for another pond' : 'Dig another pond'}
 				onclick={() => game.digPond()}
 				disabled={full || g.coins.lt(game.nextPondPrice)}
 			>

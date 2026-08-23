@@ -297,7 +297,11 @@
 						{/if}
 					</div>
 					<button
-						aria-label="Fit {config.name}"
+						aria-label={maxed
+							? `${config.name}: done`
+							: capped
+								? `${config.name}: not fitted here`
+								: `Fit ${config.name}`}
 						disabled={maxed || capped || g.coins.lt(cost)}
 						onclick={() => game.upgradeBoat(id)}
 					>

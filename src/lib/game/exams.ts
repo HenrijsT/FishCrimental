@@ -140,6 +140,15 @@ export function startExam(
 	licence: LicenceId,
 	random: () => number = Math.random
 ): boolean {
+	// One attempt at a time.
+	//
+	// `canSit` only asks whether the card is already held, so it stays true for
+	// the very exam being sat — and calling this again quietly built a fresh
+	// `ExamState` over the top, taking a 13-of-14 Cull back to zero. The panel
+	// disables the button, but the panel is not the guard: this function is what
+	// the tests and the simulation drive. Abandoning is explicit, and is what
+	// `abandonExam` is for.
+	if (state.exam) return false;
 	if (!canSit(state, licence)) return false;
 
 	const definition = examFor(licence);
@@ -275,7 +284,15 @@ export function cullCall(
 }
 
 /** Call a depth. Returns what the sounder says back. */
-export function sounderCall(state: GameState, guess: number): 'deeper' | 'shallower' | 'found' {
+export function sounderCall(
+	state: GameState,
+	guess: number,
+	// Injected for the same reason `startExam` and `cullCall` inject it: the
+	// examiner has to be reproducible under test and under the simulation. The
+	// re-roll below used a hard-coded `Math.random`, so an attempt was
+	// deterministic for its first sounding and not for any after it.
+	random: () => number = Math.random
+): 'deeper' | 'shallower' | 'found' {
 	const exam = state.exam;
 	if (!exam || exam.kind !== 'sounder' || exam.secret === undefined) return 'found';
 	if (exam.progress >= exam.target) return 'found';
@@ -292,7 +309,7 @@ export function sounderCall(state: GameState, guess: number): 'deeper' | 'shallo
 		if (exam.progress < exam.target) {
 			exam.low = 1;
 			exam.high = SOUNDER_MAX;
-			exam.secret = 1 + Math.floor(Math.random() * SOUNDER_MAX);
+			exam.secret = 1 + Math.floor(random() * SOUNDER_MAX);
 		}
 		return 'found';
 	}
@@ -373,7 +390,12 @@ export const EXAM_SECONDS_PER_STEP: Record<ExamKind, number> = {
  * against a twenty-second step means the exam never advances at all, which is
  * how this first shipped and how the whole licence chain stalled.
  */
-export function advanceExamIdle(state: GameState, seconds: number, perCall?: number): void {
+export function advanceExamIdle(
+	state: GameState,
+	seconds: number,
+	perCall?: number,
+	random: () => number = Math.random
+): void {
 	const exam = state.exam;
 	if (!exam || exam.progress >= exam.target) return;
 	if (exam.kind !== 'cull' && exam.kind !== 'sounder') return;
@@ -388,6 +410,17 @@ export function advanceExamIdle(state: GameState, seconds: number, perCall?: num
 	if (calls <= 0) return;
 	exam.progress = Math.min(exam.target, exam.progress + calls);
 	exam.attempts += calls;
+
+	// A sounding the warden finished is a sounding that is over.
+	//
+	// Leaving `low`/`high`/`secret` alone let a player narrow the range to a
+	// single candidate, wait twenty seconds, and then score the sounding they
+	// had already solved — two steps of a three-step exam for one piece of work.
+	if (exam.kind === 'sounder' && exam.progress < exam.target) {
+		exam.low = 1;
+		exam.high = SOUNDER_MAX;
+		exam.secret = 1 + Math.floor(random() * SOUNDER_MAX);
+	}
 }
 
 /** An exam's progress, 0 to 1, for a bar. */

@@ -217,14 +217,19 @@ export function nextStep(state: GameState): NextStep | null {
 	// catch rather than selling it. Saying "sell them" and leaving them to find
 	// out that nothing happened for forty-five seconds is not an answer.
 	if (state.lifetimeCoins.lt(1)) {
-		if (holdCount(state).lte(0)) {
-			return { text: 'Keep casting. Something will come up.' };
-		}
+		// The quay is checked *before* the empty bucket, because listing is what
+		// empties the bucket. Asked in the other order, "keep casting" answered
+		// first and the quay line was only ever reachable with fish in both
+		// places — so the one moment it exists for, the cast right after a new
+		// player's first List, got the wrong message.
 		if (consignmentCount(state).gt(0)) {
 			return {
 				text: 'Your catch is on the quay. The travelling merchant settles it when he arrives.',
 				tab: 'shore'
 			};
+		}
+		if (holdCount(state).lte(0)) {
+			return { text: 'Keep casting. Something will come up.' };
 		}
 		return {
 			text: 'There are fish in the bucket. List them, and the merchant pays for them when he comes past.',

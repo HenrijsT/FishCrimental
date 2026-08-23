@@ -32,6 +32,24 @@
 			{@const step = game.upgradeStep(id)}
 			{@const cost = step.gt(0) ? upgradeBulkCost(id, level, step) : null}
 			{@const affordable = cost !== null && state.coins.gte(cost)}
+			<!--
+				The reason has to survive into the accessible name.
+
+				`aria-label` replaces the button's text content, and in every
+				disabled state that text is not a price — it is the reason word.
+				A flat "Buy Fishing Rod" left a screen-reader user with "button,
+				unavailable" and nothing else, for states like Maxed and Not sold
+				here that have no explanatory paragraph beside them either.
+			-->
+			{@const reason = maxed
+				? 'maxed'
+				: inert
+					? 'no faster'
+					: capped
+						? 'not sold here'
+						: step.lte(0) || cost === null
+							? 'not yet'
+							: null}
 			<li class="upgrade" class:maxed class:capped>
 				<div class="text">
 					<h3 class="name">
@@ -65,7 +83,7 @@
 
 				<button
 					class="buy"
-					aria-label="Buy {config.name}"
+					aria-label={reason ? `${config.name}: ${reason}` : `Buy ${config.name}`}
 					disabled={maxed || capped || inert || !affordable || step.lte(0)}
 					onclick={() => game.buy(id)}
 				>

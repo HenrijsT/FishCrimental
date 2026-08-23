@@ -265,6 +265,13 @@ export function upgradeCeiling(state: GameState, id: UpgradeId): number {
 
 /** Where the next tier of a track is sold, or null if it is all available. */
 export function upgradeStockedAt(state: GameState, id: UpgradeId): FishingSources | null {
+	// Cold Storage before the first shift is not stocked one source deeper — it
+	// is not stocked anywhere, because there is no market for it to give depth
+	// in. `upgradeCeiling` gained that gate and this did not, so the panel spent
+	// the whole of run 1 telling the player Cold Storage was "stocked at the
+	// Pond", then the Stream, then the River, each claim as false as the last.
+	if (id === 'storage' && !marketOpen(state)) return null;
+
 	const ceiling = upgradeCeiling(state, id);
 	if (UPGRADES[id].maxLevel <= ceiling) return null;
 
@@ -300,10 +307,21 @@ export function rodClampLevel(state: GameState): number | null {
 	//
 	// The deepest open water is the one that pays, so it is the one that decides
 	// when the rod is genuinely finished.
+	// The hull's drag counts, because `computeModifiers` applies it.
+	//
+	// A cast in open water is `base * speedFactor / boatEfficiency`, and this
+	// used to leave the divisor out — so it declared the rod finished at the
+	// level where a *pristine* boat would hit the floor, while the player's
+	// actual boat was still well above it. At condition 60 the real Ocean cast
+	// is 0.064s against a 0.05s floor; at condition 0 it is 0.122s, nearly two
+	// and a half times the floor and about eleven rod levels that genuinely help
+	// and that `upgradeDoesNothing` refuses to sell. Any wear at all triggered
+	// it, and the reference player only repairs below 65.
+	const drag = 1 / boatEfficiency(state.boat.condition);
 	const deepest = SOURCE_ORDER.filter((source) => state.unlocked[source]);
 	const slowest = Math.max(
 		...(deepest.length ? deepest : [SOURCE_ORDER[0]]).map(
-			(source) => SOURCE_CONFIG[source].castSeconds
+			(source) => SOURCE_CONFIG[source].castSeconds * (needsBoat(source) ? drag : 1)
 		)
 	);
 
@@ -796,13 +814,26 @@ export function autoCastsPerSecond(
 function speciesAdjustedValue(state: GameState, table: CatchTable): number {
 	if (!marketOpen(state)) return table.averageSourceValue;
 
+	// `E[v·m]`, weighted species by species — **not** `E[v] · E[m]`.
+	//
+	// Scaling the table's own average by the average multiplier is only the same
+	// sum when value and multiplier are uncorrelated across the species, and the
+	// market exists to correlate them: a player farms the commonest fish, its
+	// price falls and its knowledge rises, and both move hardest on exactly the
+	// species carrying the most probability mass. Measured on a one-prestige
+	// save with the commonest species farmed down, the old form read 1.55x high
+	// on the Offshore table and 0.84x low on the Ocean.
+	//
+	// It matters twice over: this is the headline coins/s the player reads, and
+	// it is the figure `setbacks.strike()` sizes every Setback against.
 	let total = 0;
 	for (const { fish, probability } of table.species) {
-		total += probability * speciesMultiplier(state, fish.name).toNumber();
+		total +=
+			probability *
+			fishTypeBaseValue[fish.category] *
+			speciesMultiplier(state, fish.name).toNumber();
 	}
-	// `total` is the probability-weighted multiplier; the table's own average is
-	// already probability-weighted, so scaling it is the same sum.
-	return table.averageSourceValue * total;
+	return total * SOURCE_CONFIG[table.source].valueMultiplier;
 }
 
 function castIncome(
@@ -1148,17 +1179,25 @@ export function performCast(
 	modifiers: Modifiers,
 	random: () => number = Math.random
 ): { caught: Map<Fish, Decimal>; value: Decimal; fish: Decimal; source: FishingSources } {
+	// A full bucket stops the cast before the boat leaves.
+	//
+	// Both loops in `accumulate` were hardened against this — `routeCasts` with
+	// `spend = true` buys fuel and wears the hull for every cast handed to it,
+	// and the catch was only clamped afterwards — and the manual path was the
+	// one caller the fix missed. Two hundred casts on a full bucket burned 170
+	// litres and a point of condition for nothing. `OFFLINE_HOLD_MULTIPLIER`
+	// makes it routine: the player comes back to a hold twenty-four bucketfuls
+	// deep, and every cast before they sell is pure loss.
+	const room = holdRoom(state);
+	if (room !== null && room.lte(0)) {
+		state.totalCasts = state.totalCasts.plus(1);
+		return { caught: new Map(), value: d0(), fish: d0(), source };
+	}
+
 	const route = routeCasts(state, modifiers, source, d1(), true);
 	const working = route.sailed.gt(0) ? source : (route.fallback ?? source);
 
-	const result = distributeCatch(
-		state,
-		working,
-		modifiers.fishPerCast,
-		modifiers,
-		random,
-		holdRoom(state)
-	);
+	const result = distributeCatch(state, working, modifiers.fishPerCast, modifiers, random, room);
 	state.totalCasts = state.totalCasts.plus(1);
 	return { ...result, source: working };
 }
@@ -1666,19 +1705,54 @@ export function listForSale(state: GameState, count?: Decimal): Decimal {
 	const room = consignmentRoom(state);
 	let wanted = count === undefined ? held : Decimal.min(count, held);
 	if (room !== null) wanted = Decimal.min(wanted, room);
+	// Whole fish only.
+	//
+	// The proportional split used to be applied straight to each bucket, so a
+	// partial listing left fractions on both sides — and `readHold` floors every
+	// bucket on load, exactly as `takeWhole` and the carry bank exist to make
+	// unnecessary. Listing 3 of 5 fish and reloading lost 2 of them. A partial
+	// listing is not an edge case either: coming back from a night away the hold
+	// is up to `OFFLINE_HOLD_MULTIPLIER` bucketfuls and the quay holds one, so
+	// every listing is a partial one.
+	wanted = wanted.floor();
 	if (wanted.lte(0)) return d0();
 
-	const fraction = wanted.div(held);
+	const share = wanted.div(held);
+	const moving: Partial<Record<FishType, Decimal>> = {};
 	let listed = d0();
 
+	// Proportional, floored — which lands short of `wanted` by up to one fish
+	// per bucket.
 	for (const type of FISH_TYPES) {
-		const moving = state.hold[type].times(fraction);
-		if (moving.lte(0)) continue;
-		state.hold[type] = Decimal.max(d0(), state.hold[type].minus(moving));
-		state.consignment[type] = state.consignment[type].plus(moving);
-		listed = listed.plus(moving);
+		const take = state.hold[type].times(share).floor();
+		if (take.lte(0)) continue;
+		moving[type] = take;
+		listed = listed.plus(take);
 	}
 
+	// Then hand the shortfall to whichever buckets still have fish in them, so
+	// the player gets the room they asked for rather than one fish less per type.
+	for (const type of FISH_TYPES) {
+		if (listed.gte(wanted)) break;
+		const left = state.hold[type].minus(moving[type] ?? d0());
+		if (left.lte(0)) continue;
+		const take = Decimal.min(left, wanted.minus(listed));
+		moving[type] = (moving[type] ?? d0()).plus(take);
+		listed = listed.plus(take);
+	}
+
+	if (listed.lte(0)) return d0();
+
+	for (const type of FISH_TYPES) {
+		const take = moving[type];
+		if (!take || take.lte(0)) continue;
+		state.hold[type] = Decimal.max(d0(), state.hold[type].minus(take));
+		state.consignment[type] = state.consignment[type].plus(take);
+	}
+
+	// Value follows the fish that actually moved, not the fish that were asked
+	// for, or the two accounts drift by whatever the flooring left behind.
+	const fraction = listed.div(held);
 	const movingValue = state.holdValue.times(fraction);
 	state.holdValue = Decimal.max(d0(), state.holdValue.minus(movingValue));
 	state.consignmentValue = state.consignmentValue.plus(movingValue);
@@ -2012,6 +2086,30 @@ export function buyBicycle(state: GameState): boolean {
 	return true;
 }
 
+/**
+ * Take everything back off the quay and put it in the bucket.
+ *
+ * Hiring an Assistant stops the merchant calling for good (R63): `runTrader`
+ * returns early forever on `hasAssistant`, `sell()` drains only the hold, and
+ * `HoldPanel` drops the whole "On the quay" block — so a catch already listed
+ * for him had no buyer, no way back, and nothing on screen to say it was still
+ * there. It goes in the bucket instead, which an Assistant does not limit, and
+ * the Sell button then pays full price for it rather than the merchant's cut.
+ */
+function recallConsignment(state: GameState): void {
+	if (consignmentCount(state).lte(0) && state.consignmentValue.lte(0)) return;
+
+	for (const type of FISH_TYPES) {
+		if (state.consignment[type].lte(0)) continue;
+		state.hold[type] = state.hold[type].plus(state.consignment[type]);
+		state.consignment[type] = d0();
+	}
+
+	state.holdValue = state.holdValue.plus(state.consignmentValue);
+	state.consignmentValue = d0();
+	moveLedger(state.consignmentSpecies, state.holdSpecies, d1());
+}
+
 export function buyAssistant(state: GameState): boolean {
 	if (state.hasAssistant) return false;
 	if (!traderInStock(state, 'assistant')) return false;
@@ -2021,6 +2119,7 @@ export function buyAssistant(state: GameState): boolean {
 	state.hasAssistant = true;
 	// Whatever trip was in progress is over — that is what hiring help buys.
 	state.fishingBlockedUntil = 0;
+	recallConsignment(state);
 	return true;
 }
 
@@ -2359,6 +2458,7 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		exam: null,
 		poaching: null,
 		poachElapsed: 0,
+		poachClockAt: null,
 		poached: emptyLedger(),
 		// Per source, and per run — a fresh operation is not known to anyone.
 		poachOffences: {},

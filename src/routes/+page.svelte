@@ -49,18 +49,44 @@
 	 */
 	let explained = $state<string[]>([]);
 
+	/**
+	 * The `GameState` `explained` was seeded against.
+	 *
+	 * Deliberately a plain `let`: it is written from inside the effect below and
+	 * must not retrigger it.
+	 */
+	let seededFor: object | null = null;
+
 	// Announce one new thing at a time, and only what has actually opened up.
 	// The guide queues behind any other modal — `ModalHost` decides the order.
 	$effect(() => {
-		if (!game.state.settings.unlockGuides || game.unlockGuide !== null) return;
-		const fresh = availableTopics(game.state).find((topic) => !explained.includes(topic.id));
-		if (!fresh) return;
-		// Everything already open at the moment the player first sees this is
-		// taken as read — a new tab should not produce eleven pop-ups at once.
-		if (explained.length === 0) {
-			explained = availableTopics(game.state).map((topic) => topic.id);
+		// Seeding keys off the state object, not off `explained` being empty.
+		//
+		// This effect is created before the `onMount` that calls `game.init()`,
+		// and Svelte runs user effects in creation order — so the first pass ran
+		// against the *default* `GameState`, where `availableTopics` is exactly
+		// `['casting']`. The old `explained.length === 0` branch took that one
+		// topic as read, `init()` then swapped in the real save and re-ran the
+		// effect, and every topic the player had unlocked months ago now looked
+		// fresh. Dismissing one re-ran the effect and raised the next: up to ten
+		// pop-ups in a row, on every load, and again after an import — the exact
+		// failure the seeding branch exists to prevent.
+		//
+		// A wholesale swap of `game.state` is a load, an import or a reset; in
+		// all three, whatever is already open belongs to a player who has seen
+		// it. Only what opens up after that is worth a pop-up.
+		if (!game.loaded) return;
+
+		const state = game.state;
+		if (seededFor !== state) {
+			seededFor = state;
+			explained = availableTopics(state).map((topic) => topic.id);
 			return;
 		}
+
+		if (!state.settings.unlockGuides || game.unlockGuide !== null) return;
+		const fresh = availableTopics(state).find((topic) => !explained.includes(topic.id));
+		if (!fresh) return;
 		explained = [...explained, fresh.id];
 		game.unlockGuide = fresh.id;
 	});

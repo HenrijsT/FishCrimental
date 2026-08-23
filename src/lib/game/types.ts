@@ -155,6 +155,17 @@ export interface GameState {
 	/** Seconds fished on the current poach. Cleared by a bust or by leaving. */
 	poachElapsed: number;
 	/**
+	 * Which water `poachElapsed` was accrued on.
+	 *
+	 * The clock belongs to the water, not to the visit — packing up does not
+	 * reset it, so that the grace period cannot be farmed by leaving and coming
+	 * straight back. That only works if the clock knows whose it is: without
+	 * this, packing up at eighty-nine seconds and then starting on *different*
+	 * water inherited the eighty-nine, and the warden arrived within seconds on
+	 * a source the player had only just set foot on.
+	 */
+	poachClockAt: FishingSources | null;
+	/**
 	 * What has been landed on this poach, by species.
 	 *
 	 * A ledger and not a scalar, so a bust can take the poached fish and leave
