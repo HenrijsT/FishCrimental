@@ -69,10 +69,12 @@
 				{#each book as row (row.species)}
 					<tr>
 						<th scope="row">{row.species}</th>
-						<td class:hurt={row.price.lt(0.75)}>×{row.price.toNumber().toFixed(3)}</td>
-						<td class="good">×{row.knowledge.toNumber().toFixed(3)}</td>
+						<td class:hurt={row.price.lt(0.75)}
+							>×<Num value={row.price} precision={3} smallPrecision={3} /></td
+						>
+						<td class="good">×<Num value={row.knowledge} precision={3} smallPrecision={3} /></td>
 						<td class:hurt={row.net.lt(1)} class:good={row.net.gte(1)}>
-							×{row.net.toNumber().toFixed(3)}
+							×<Num value={row.net} precision={3} smallPrecision={3} />
 						</td>
 					</tr>
 				{/each}

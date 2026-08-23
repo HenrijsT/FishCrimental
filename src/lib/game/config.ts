@@ -755,6 +755,16 @@ export const PRESTIGE_UPGRADE_IDS = Object.keys(PRESTIGE_UPGRADES) as PrestigeUp
 export const TICK_MS = 200;
 
 /**
+ * A gap larger than this is time the player was away, not time the tick missed.
+ *
+ * One number, because two systems have to draw the same line: the tick loop
+ * hands anything longer to the offline settle instead of replaying it, and the
+ * trader treats it as a visit slept through. When those disagreed the trader
+ * could fire for a night the settle had already accounted for.
+ */
+export const RESUME_THRESHOLD_SECONDS = 120;
+
+/**
  * Offline earnings are capped at eight hours, before the Night Watch.
  *
  * Use `offlineSeconds(state)` rather than this constant anywhere a player's

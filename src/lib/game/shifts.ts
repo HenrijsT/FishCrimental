@@ -1,4 +1,5 @@
 import type Decimal from 'break_eternity.js';
+import { D } from '$lib/decimal';
 
 /**
  * Paradigm shift tiers (R61): **Storms**, **Bosses**, **Megalodon**.
@@ -61,34 +62,38 @@ export const TIERS: TierDefinition[] = [
 	}
 ];
 
-/** Which tier the *next* shift belongs to, given how many have been ridden out. */
-export function tierFor(prestigeCount: Decimal | number): TierDefinition {
-	const count = typeof prestigeCount === 'number' ? prestigeCount : prestigeCount.toNumber();
+/**
+ * Which tier a shift falls in, and how far into it — the one walk of `TIERS`.
+ *
+ * The last tier is unbounded, so a count that runs off the end belongs to it
+ * with whatever is left over as the index; that is what makes "Megalodon 3"
+ * keep counting rather than stopping at the end of the table.
+ */
+function locate(prestigeCount: Decimal | number): { tier: TierDefinition; index: number } {
+	const count = D(prestigeCount).toNumber();
 	let remaining = Math.max(0, Math.floor(count));
 
 	for (const tier of TIERS) {
-		if (remaining < tier.length) return tier;
+		if (remaining < tier.length) return { tier, index: remaining };
 		remaining -= tier.length;
 	}
-	return TIERS[TIERS.length - 1];
+	return { tier: TIERS[TIERS.length - 1], index: remaining };
+}
+
+/** Which tier the *next* shift belongs to, given how many have been ridden out. */
+export function tierFor(prestigeCount: Decimal | number): TierDefinition {
+	return locate(prestigeCount).tier;
 }
 
 /** Where in its tier the next shift sits — "Storm 7", "Megalodon 3". */
 export function shiftName(prestigeCount: Decimal | number): string {
-	const count = typeof prestigeCount === 'number' ? prestigeCount : prestigeCount.toNumber();
-	const whole = Math.max(0, Math.floor(count));
-
-	let remaining = whole;
-	for (const tier of TIERS) {
-		if (remaining < tier.length) return `${tier.singular} ${remaining + 1}`;
-		remaining -= tier.length;
-	}
-	return `${TIERS[TIERS.length - 1].singular} ${remaining + 1}`;
+	const { tier, index } = locate(prestigeCount);
+	return `${tier.singular} ${index + 1}`;
 }
 
 /** The tier of the shift most recently ridden out, or null before the first. */
 export function lastTier(prestigeCount: Decimal | number): TierDefinition | null {
-	const count = typeof prestigeCount === 'number' ? prestigeCount : prestigeCount.toNumber();
+	const count = D(prestigeCount).toNumber();
 	if (count < 1) return null;
 	return tierFor(count - 1);
 }

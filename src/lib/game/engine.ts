@@ -82,6 +82,7 @@ import {
 	SAVE_VERSION,
 	SOURCE_CONFIG,
 	SOURCE_ORDER,
+	RESUME_THRESHOLD_SECONDS,
 	UPGRADES,
 	UPGRADE_IDS,
 	type BoatUpgradeId,
@@ -857,6 +858,30 @@ function castIncome(
 }
 
 /**
+ * Price a cast rate at the water it actually reaches.
+ *
+ * The routing rule — pay the target for what sailed, pay the fallback for what
+ * was stranded — is the whole reason these figures can be trusted, so it lives
+ * in one place. It had two homes once: reading the active source's table
+ * straight through reported 20,907/s for someone standing over the Ocean with a
+ * dry tank whose casts were in fact landing at the Sea for 1,418/s.
+ */
+function routedIncome(
+	state: GameState,
+	modifiers: Modifiers,
+	source: FishingSources,
+	casts: Decimal
+): Decimal {
+	const route = routeCasts(state, modifiers, source, casts);
+
+	let total = route.sailed.gt(0) ? castIncome(state, modifiers, source, route.sailed) : d0();
+	if (route.stranded.gt(0) && route.fallback !== null) {
+		total = total.plus(castIncome(state, modifiers, route.fallback, route.stranded));
+	}
+	return total;
+}
+
+/**
  * Coins per second the hold gains from a source, at present rates.
  *
  * Priced through `routeCasts`, so a crew the boat cannot carry is costed where
@@ -870,13 +895,7 @@ export function sourceIncomePerSecond(
 	const casts = autoCastsPerSecond(state, modifiers, source);
 	if (casts.lte(0)) return d0();
 
-	const route = routeCasts(state, modifiers, source, casts);
-
-	let total = route.sailed.gt(0) ? castIncome(state, modifiers, source, route.sailed) : d0();
-	if (route.stranded.gt(0) && route.fallback !== null) {
-		total = total.plus(castIncome(state, modifiers, route.fallback, route.stranded));
-	}
-	return total;
+	return routedIncome(state, modifiers, source, casts);
 }
 
 /**
@@ -893,20 +912,9 @@ export function handIncomePerSecond(state: GameState, modifiers: Modifiers): Dec
 	const seconds = modifiers.castSeconds[source];
 	if (!seconds || seconds <= 0) return d0();
 
-	// Routed, like everything else that earns.
-	//
-	// Reading the active source's table straight through reported 20,907/s for
-	// someone standing over the Ocean with a dry tank and no coins, whose casts
-	// were in fact landing at the Sea for 1,418/s — a 14.7x overstatement, and
-	// `strike()` sizes a Setback against this figure.
-	const perSecond = d1().div(seconds);
-	const route = routeCasts(state, modifiers, source, perSecond);
-
-	let total = route.sailed.gt(0) ? castIncome(state, modifiers, source, route.sailed) : d0();
-	if (route.stranded.gt(0) && route.fallback !== null) {
-		total = total.plus(castIncome(state, modifiers, route.fallback, route.stranded));
-	}
-	return total;
+	// Routed, like everything else that earns — `strike()` sizes a Setback
+	// against this figure, so an unrouted overstatement lands as damage.
+	return routedIncome(state, modifiers, source, d1().div(seconds));
 }
 
 export function totalIncomePerSecond(state: GameState, modifiers: Modifiers): Decimal {
@@ -1257,6 +1265,30 @@ export function accumulate(
 		return room;
 	};
 
+	/**
+	 * Trim a cast count to what the bucket can take, **before** minting it.
+	 *
+	 * `routeCasts(spend = true)` buys fuel and wears the hull for every cast
+	 * handed to it, and the catch was only clamped afterwards. The loops bail
+	 * out at exactly zero room, so partial room let a whole interval through —
+	 * and offline that interval is the entire night. A bucket-limited open-water
+	 * crew was billed for eight hours of casts and landed twenty-four
+	 * bucketfuls: measured at 1.39e9 of fish against 1.56e10 of fuel, a hull
+	 * worn from 100 to 0, and a night that lost money.
+	 *
+	 * `room` is the read taken at the top of the caller's iteration — nothing
+	 * between there and here touches the hold. When the bucket is what decides
+	 * the interval that is recorded here, because the clamp means `roomFor` will
+	 * never see a request bigger than the room again.
+	 */
+	const trimToRoom = (want: Decimal, room: Decimal | null): Decimal => {
+		if (room === null || modifiers.fishPerCast.lte(0)) return want;
+		const affordable = room.div(modifiers.fishPerCast);
+		if (affordable.gte(want)) return want;
+		bucketBound = true;
+		return affordable;
+	};
+
 	// Which water gets the room when there is not enough of it.
 	//
 	// `SOURCE_ORDER` runs cheapest first, so a bucket-limited crew filled the
@@ -1266,7 +1298,7 @@ export function accumulate(
 	// shallows get whatever is left, which is what a fisherman with one bucket
 	// does. With an Assistant there is no bucket and the order cannot matter.
 	const order =
-		holdRoom(state, holdMultiplier) === null ? SOURCE_ORDER : [...SOURCE_ORDER].reverse();
+		holdRoom(state, holdMultiplier) === null ? SOURCE_ORDER : SOURCE_ORDER_DEEPEST_FIRST;
 
 	for (const source of order) {
 		// A full bucket stops the work before it starts. This has to be checked
@@ -1293,28 +1325,7 @@ export function accumulate(
 		const castsPerSecond = autoCastsPerSecond(state, modifiers, source).plus(extra);
 		if (castsPerSecond.lte(0)) continue;
 
-		// Trim the casts to what the bucket can take **before** minting them.
-		//
-		// `routeCasts(spend = true)` buys fuel and wears the hull for every cast
-		// handed to it, and the catch was only clamped afterwards. The top of the
-		// loop bails out at exactly zero room, so partial room let a whole
-		// interval through — and offline that interval is the entire night. A
-		// bucket-limited open-water crew was billed for eight hours of casts and
-		// landed twenty-four bucketfuls: measured at 1.39e9 of fish against
-		// 1.56e10 of fuel, a hull worn from 100 to 0, and a night that lost money.
-		// `room` is the one read at the top of this iteration — nothing between
-		// there and here touches the hold.
-		let wanted = castsPerSecond.times(seconds).times(efficiency);
-		if (room !== null && modifiers.fishPerCast.gt(0)) {
-			const affordable = room.div(modifiers.fishPerCast);
-			if (affordable.lt(wanted)) {
-				// The bucket, and not the crew, decided this interval. Recorded
-				// here because the clamp below means `roomFor` will never see a
-				// request bigger than the room again.
-				bucketBound = true;
-				wanted = affordable;
-			}
-		}
+		const wanted = trimToRoom(castsPerSecond.times(seconds).times(efficiency), room);
 		if (wanted.lte(0)) continue;
 
 		const casts = takeWhole(state, castCarryKey(source), wanted);
@@ -1366,21 +1377,10 @@ export function accumulate(
 			(state.poaching === source || (state.unlocked[source] && !missingLicence(state, source))) &&
 			(rigRoom === null || rigRoom.gt(0))
 		) {
-			// Trimmed to what the bucket can take **before** the casts are minted,
-			// exactly as the crew loop above is, and for the same reason:
-			// `routeCasts(spend = true)` buys fuel and wears the hull for every
-			// cast handed to it, and the catch was only clamped afterwards. The
-			// gate above bails out at exactly zero room, so partial room let a
-			// whole interval through — and with the night shift bought, that
-			// interval is the entire night.
-			let rigWanted = perSecond.times(seconds).times(efficiency).times(autoFisherShare);
-			if (rigRoom !== null && modifiers.fishPerCast.gt(0)) {
-				const affordable = rigRoom.div(modifiers.fishPerCast);
-				if (affordable.lt(rigWanted)) {
-					bucketBound = true;
-					rigWanted = affordable;
-				}
-			}
+			const rigWanted = trimToRoom(
+				perSecond.times(seconds).times(efficiency).times(autoFisherShare),
+				rigRoom
+			);
 
 			const casts = rigWanted.gt(0) ? takeWhole(state, AUTO_FISHER_CARRY_KEY, rigWanted) : d0();
 
@@ -1997,15 +1997,6 @@ export function traderInStock(state: GameState, id: TraderOfferId): boolean {
 	return traderStock(state).includes(id);
 }
 
-/**
- * A gap larger than this is time the player was away, not time the tick missed.
- *
- * Deliberately the same number as `RESUME_THRESHOLD_SECONDS` in
- * `state.svelte.ts` — that is the line between "a throttled background tab" and
- * "a night", and the trader has to draw it in the same place the settle does.
- */
-const RESUME_THRESHOLD_MS = 120_000;
-
 /** Seconds until the next trader, for the progress bar. */
 export function traderSecondsLeft(state: GameState, now = Date.now()): number {
 	if (state.nextTraderAt <= 0) return TRADER_PERIOD_SECONDS;
@@ -2071,7 +2062,7 @@ export function runTrader(
 	//
 	// So a gap longer than the resume threshold is a gap he slept through: the
 	// appointment is moved to the next one due from now, and nothing is bought.
-	if (now - state.nextTraderAt > RESUME_THRESHOLD_MS) {
+	if (now - state.nextTraderAt > RESUME_THRESHOLD_SECONDS * 1000) {
 		// `floor + 1`, not `ceil`: an absence that is an exact multiple of the
 		// period would otherwise leave the appointment landing on `now`, and he
 		// would arrive on the very tick the player got back.
@@ -2288,22 +2279,38 @@ export function canPrestige(state: GameState): boolean {
 }
 
 export function jellyCaught(state: GameState): Decimal {
+	return caughtOfType(state, FishType.Jelly);
+}
+
+export function eroticCaught(state: GameState): Decimal {
+	return caughtOfType(state, FishType.Erotic);
+}
+
+/**
+ * How many of one type the player has ever landed.
+ *
+ * Reads the pre-grouped `SPECIES_BY_TYPE` rather than filtering all 47 species
+ * by category on each call: both callers are achievement predicates *and* store
+ * `$derived`, so they ran several times a tick and again on every cast, each
+ * time allocating a fresh 47-element array to keep two or three of it.
+ */
+function caughtOfType(state: GameState, type: FishType): Decimal {
 	let total = d0();
-	for (const fish of Object.values(fishes)) {
-		if (fish.category !== FishType.Jelly) continue;
+	for (const fish of SPECIES_BY_TYPE[type]) {
 		total = total.plus(state.dex[fish.name] ?? d0());
 	}
 	return total;
 }
 
-export function eroticCaught(state: GameState): Decimal {
-	let total = d0();
-	for (const fish of Object.values(fishes)) {
-		if (fish.category !== FishType.Erotic) continue;
-		total = total.plus(state.dex[fish.name] ?? d0());
-	}
-	return total;
-}
+/**
+ * `SOURCE_ORDER` deepest-first, built once.
+ *
+ * `accumulate` picks between the two orders every tick; reversing a fresh copy
+ * each time allocated an array five times a second to read it in the other
+ * direction. Reversed here rather than in place, because `SOURCE_ORDER` is
+ * shared and `reverse()` mutates.
+ */
+const SOURCE_ORDER_DEEPEST_FIRST: readonly FishingSources[] = [...SOURCE_ORDER].reverse();
 
 /** Species names in catalogue order, for the Fishdex. */
 export const ALL_SPECIES: Fish[] = Object.values(fishes);
@@ -2319,7 +2326,10 @@ export const SPECIES_BY_TYPE: Record<FishType, Fish[]> = FISH_TYPES.reduce(
 export function discoveredCount(state: GameState): number {
 	let found = 0;
 	for (const fish of ALL_SPECIES) {
-		if ((state.dex[fish.name] ?? d0()).gte(1)) found++;
+		// Read once rather than `?? d0()` — an undiscovered species does not
+		// need a fresh Decimal built just to be compared against one.
+		const caught = state.dex[fish.name];
+		if (caught !== undefined && caught.gte(1)) found++;
 	}
 	return found;
 }

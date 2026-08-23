@@ -58,7 +58,11 @@
 										tone="coin"
 									/> / s
 									<span class="faint">
-										· market ×{speciesPrice(g, pond.species).toNumber().toFixed(3)}
+										· market ×<Num
+											value={speciesPrice(g, pond.species)}
+											precision={3}
+											smallPrecision={3}
+										/>
 									</span>
 								</p>
 							{:else}

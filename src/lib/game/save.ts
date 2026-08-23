@@ -686,11 +686,8 @@ function storage(): Storage | null {
 }
 
 export function saveToStorage(state: GameState): boolean {
-	const store = storage();
-	if (!store) return false;
 	try {
-		store.setItem(SAVE_KEY, serialize(state));
-		return true;
+		return writeKey(SAVE_KEY, serialize(state));
 	} catch {
 		return false;
 	}
@@ -707,22 +704,7 @@ export type LoadOutcome =
  * back labelled so the caller can refuse to overwrite it.
  */
 export function loadFromStorage(): LoadOutcome {
-	const store = storage();
-	if (!store) return { kind: 'empty' };
-
-	// The read is inside the try as well.
-	//
-	// `storage()` guards the property *access*, not the read — a browser that
-	// exposes a working `localStorage` object whose `getItem` throws (blocked
-	// storage, hardened privacy modes) took `init()` down with it, `loaded`
-	// stayed false, `start()` never ran, and the player got a blank page. Every
-	// other storage entry point here is defensive; this one was not.
-	let raw: string | null;
-	try {
-		raw = store.getItem(SAVE_KEY);
-	} catch {
-		return { kind: 'empty' };
-	}
+	const raw = readKey(SAVE_KEY);
 	if (!raw) return { kind: 'empty' };
 
 	try {
@@ -739,6 +721,37 @@ export function clearStorage(): void {
 }
 
 /**
+ * Read one key, defensively.
+ *
+ * `storage()` guards the property *access*, not the read: a browser that
+ * exposes a working `localStorage` object whose `getItem` throws (blocked
+ * storage, hardened privacy modes) took `init()` down with it. Every read here
+ * goes through this so no entry point can be the one that forgot the `try` —
+ * which is exactly how `readRawSave` came to be the odd one out.
+ */
+function readKey(key: string): string | null {
+	const store = storage();
+	if (!store) return null;
+	try {
+		return store.getItem(key);
+	} catch {
+		return null;
+	}
+}
+
+/** Write one key. Returns false if storage refused it. */
+function writeKey(key: string, value: string): boolean {
+	const store = storage();
+	if (!store) return false;
+	try {
+		store.setItem(key, value);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * The save exactly as it sits on disk, unparsed.
  *
  * A save this build cannot read still has to be rescuable — exported, or
@@ -747,30 +760,17 @@ export function clearStorage(): void {
  * it in the first place.
  */
 export function readRawSave(): string | null {
-	return storage()?.getItem(SAVE_KEY) ?? null;
+	return readKey(SAVE_KEY);
+}
+
+/** Read back whatever `backupRawSave` last set aside, if anything. */
+export function readBackupSave(): string | null {
+	return readKey(SAVE_BACKUP_KEY);
 }
 
 /** Copy a raw save to the backup key. Returns false if storage refused it. */
-/** Read back whatever `backupRawSave` last set aside, if anything. */
-export function readBackupSave(): string | null {
-	const store = storage();
-	if (!store) return null;
-	try {
-		return store.getItem(SAVE_BACKUP_KEY);
-	} catch {
-		return null;
-	}
-}
-
 export function backupRawSave(raw: string): boolean {
-	const store = storage();
-	if (!store) return false;
-	try {
-		store.setItem(SAVE_BACKUP_KEY, raw);
-		return true;
-	} catch {
-		return false;
-	}
+	return writeKey(SAVE_BACKUP_KEY, raw);
 }
 
 // ---------------------------------------------------------------------------

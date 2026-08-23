@@ -19,24 +19,17 @@ export const fishTypeBaseValue: Record<FishType, number> = {
 	[FishType.Jelly]: 0
 };
 
-/**
- * Fallback rarity weights.
+/*
+ * The intended relative rarity of the six types, for reference only:
  *
- * Nothing reads this any more: every source in `src/lib/game/config.ts` gives
- * its own `typeWeights`, and `buildCatchTable` uses those. It is kept as the
- * documented shape of a mix — the numbers a source would fall back to if one
- * ever shipped without one — and deliberately not deleted along with the
- * probability model that used to consume it, because it is the only place the
- * intended relative rarity of the six types is written down.
+ *     Small 90 · Medium 7 · Large 2 · Shark 1 · Jelly 4 · Erotic 0.00011
+ *
+ * This was a `fishTypeBaseChance` map until nothing read it: every source in
+ * `src/lib/game/config.ts` carries its own `typeWeights` and `buildCatchTable`
+ * uses those. It stayed behind as documentation, which is what it now is — a
+ * live binding nobody imports reads as a second, competing rarity table, and a
+ * reader looking for the real weights would find this one first.
  */
-export const fishTypeBaseChance = new Map<FishType, number>([
-	[FishType.Small, 90],
-	[FishType.Medium, 7],
-	[FishType.Large, 2],
-	[FishType.Shark, 1],
-	[FishType.Jelly, 4],
-	[FishType.Erotic, 0.00011]
-]);
 
 /** Types that count as a "rare" catch — the luck stat pushes weight into these. */
 export const RARE_FISH_TYPES: readonly FishType[] = [

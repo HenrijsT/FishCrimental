@@ -1,5 +1,8 @@
 import { FishingSources } from '$lib/fishing_sources';
 import {
+	MARKET_HALF_LIFE,
+	OFFLINE_FUEL_SHARE,
+	OFFLINE_HOLD_MULTIPLIER,
 	POACH_BUSTED_SECONDS,
 	POACH_GRACE_SECONDS,
 	POND_MAX,
@@ -73,7 +76,7 @@ export const HELP_TOPICS: HelpTopic[] = [
 		title: 'While you are away',
 		body: [
 			'The crew fish and the ponds fill. Nothing else happens: nobody sells, no merchant calls, and no decision is taken for you.',
-			'What you come back to is fish, not coins. The keepnet holds twenty-four bucketfuls, so a bigger bucket is a bigger night.'
+			`What you come back to is fish, not coins. The keepnet holds ${OFFLINE_HOLD_MULTIPLIER} bucketfuls, so a bigger bucket is a bigger night.`
 		],
 		available: (state) => anyCrew(state)
 	},
@@ -115,7 +118,7 @@ export const HELP_TOPICS: HelpTopic[] = [
 		title: 'The boat',
 		body: [
 			'Past the Sea there is no bank to stand on. The boat burns fuel per cast and wears out, and a worn hull slows every cast in open water — for the crew as well as for you.',
-			'A standing order buys fuel automatically out of coins, including while you are away. While you are away it may spend at most half of what you left in the purse.',
+			`A standing order buys fuel automatically out of coins, including while you are away. While you are away it may spend at most ${Math.round(OFFLINE_FUEL_SHARE * 100)}% of what you left in the purse.`,
 			'A dry tank never strands the crew: the casts the boat cannot cover are worked from the shore instead, at shore money.'
 		],
 		available: (state) => state.boat.owned
@@ -133,7 +136,7 @@ export const HELP_TOPICS: HelpTopic[] = [
 		id: 'market',
 		title: 'The market',
 		body: [
-			'Every species has its own price, and your own selling is what moves it. Sell a lot of one fish and that fish is worth less; leave it alone and the price comes back — half of the damage undone every thirty minutes.',
+			`Every species has its own price, and your own selling is what moves it. Sell a lot of one fish and that fish is worth less; leave it alone and the price comes back — half of the damage undone every ${MARKET_HALF_LIFE / 60} minutes.`,
 			'Everything you have ever caught also makes you permanently better at catching it, and that part is never lost, not even to a paradigm shift. The price penalty resets every shift and has to be earned back. That asymmetry is the whole mechanic.',
 			'Selling as you go and selling in one lump are worth exactly the same. A sale is priced fish by fish as it moves the price, so sitting on a full bucket waiting for a number to rise costs you the fishing and gains you nothing.',
 			'Cold Storage buys depth — how much selling it takes to move a price at all. It is the answer to a growing operation walking down its own prices.'

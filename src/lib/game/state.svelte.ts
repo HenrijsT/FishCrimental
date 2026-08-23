@@ -11,6 +11,7 @@ import {
 	OFFLINE_FUEL_SHARE,
 	OFFLINE_HOLD_MULTIPLIER,
 	POACH_GRACE_SECONDS,
+	RESUME_THRESHOLD_SECONDS,
 	SAVE_KEY,
 	SOURCE_CONFIG,
 	TICK_MS,
@@ -126,12 +127,6 @@ import {
 	saveToStorage
 } from './save';
 import type { GameState, Modifiers, OfflineReport } from './types';
-
-/**
- * A gap longer than this is settled as offline progress rather than replayed
- * by the tick loop.
- */
-const RESUME_THRESHOLD_SECONDS = 120;
 
 export interface SaveProblem {
 	kind: 'future' | 'corrupt' | 'conflict' | 'write-failed';
@@ -440,14 +435,20 @@ export class Game {
 		return true;
 	}
 
-	dismissSaveProblem(): void {
-		const problem = this.saveProblem;
-		if (!problem) return;
-
-		// Dismissing re-arms the ten-second autosave, which is about to write
-		// the fresh game over the save the banner exists to protect. Copy it
-		// aside first, so Dismiss stops being a one-click total loss.
-		if (BLOCKING_SAVE_PROBLEMS.has(problem.kind) && this.#preservedSave !== null) {
+	/**
+	 * Copy aside any save the game is refusing to overwrite, then clear the banner.
+	 *
+	 * Every path that is about to write over a protected blob goes through here:
+	 * dismissing the banner, importing, and starting fresh. Two of the three
+	 * used to go straight to `save()` — the destructive one was the one the
+	 * banner recommended — and keeping the five-field invariant in step by hand
+	 * in three places is what let them drift apart.
+	 *
+	 * `#preservedSave` is only ever set alongside a `future` or `corrupt`
+	 * problem, so a non-null blob already means the blocking case.
+	 */
+	#preserveAndClearProblem(): void {
+		if (this.#preservedSave !== null) {
 			backupRawSave(this.#preservedSave);
 			this.rescued = true;
 		}
@@ -455,6 +456,32 @@ export class Game {
 		this.saveProblem = null;
 		this.#preservedSave = null;
 		this.#preservedFor = null;
+	}
+
+	/**
+	 * Drop the banners that describe a game that is no longer here.
+	 *
+	 * Prestiging, importing and starting fresh all swap the whole `GameState`,
+	 * and a warden, a Setback or a merchant receipt from the run before is a
+	 * banner about nothing. Written once because the three hand-copies had
+	 * already drifted — the reset path forgot `lastTraderEarned`.
+	 */
+	#clearTransientBanners(): void {
+		this.strandedFrom = null;
+		this.lastBust = null;
+		this.setbackNotices = [];
+		this.setbackHits = [];
+		this.lastTraderEarned = null;
+	}
+
+	dismissSaveProblem(): void {
+		const problem = this.saveProblem;
+		if (!problem) return;
+
+		// Dismissing re-arms the ten-second autosave, which is about to write
+		// the fresh game over the save the banner exists to protect. Copy it
+		// aside first, so Dismiss stops being a one-click total loss.
+		this.#preserveAndClearProblem();
 	}
 
 	// -----------------------------------------------------------------------
@@ -1079,14 +1106,7 @@ export class Game {
 			this.endCast();
 			this.recentCatches = [];
 			this.lastCatch = null;
-			// A banner about being stranded in water the previous operation
-			// owned, shown over a fresh run at the Pond, is a banner about
-			// nothing. Same for the warden, the Setbacks and the merchant.
-			this.strandedFrom = null;
-			this.lastBust = null;
-			this.setbackNotices = [];
-			this.setbackHits = [];
-			this.lastTraderEarned = null;
+			this.#clearTransientBanners();
 			this.prestigeResult = result;
 			this.save();
 		}
@@ -1188,14 +1208,7 @@ export class Game {
 		// other thing the corrupt/future banner sends a player off to do, and it
 		// went straight to `save()`, wiping the protected blob with no backup at
 		// all while merely *dismissing* the banner preserved it.
-		if (this.#preservedSave !== null) {
-			backupRawSave(this.#preservedSave);
-			this.rescued = true;
-		}
-
-		this.saveProblem = null;
-		this.#preservedSave = null;
-		this.#preservedFor = null;
+		this.#preserveAndClearProblem();
 		this.state = imported;
 		// Everything `init()` does to a save on the way in, because this is the
 		// other way one gets in. A poach flag the imported run is no longer
@@ -1206,13 +1219,7 @@ export class Game {
 		settleMarket(this.state);
 		this.state.lastUpdate = Date.now();
 		this.recentCatches = [];
-		// Banners about the game that was here a moment ago are banners about
-		// nothing — the same sweep `prestige()` and `hardReset()` do.
-		this.strandedFrom = null;
-		this.lastBust = null;
-		this.setbackNotices = [];
-		this.setbackHits = [];
-		this.lastTraderEarned = null;
+		this.#clearTransientBanners();
 		this.save();
 		return outcome;
 	}
@@ -1227,23 +1234,13 @@ export class Game {
 		// the protected blob with no backup at all, while merely *dismissing*
 		// the same banner preserved it. The destructive path was the one the
 		// banner recommended.
-		if (this.#preservedSave !== null) {
-			backupRawSave(this.#preservedSave);
-			this.rescued = true;
-		}
-
-		this.saveProblem = null;
-		this.#preservedSave = null;
-		this.#preservedFor = null;
+		this.#preserveAndClearProblem();
 		this.state = createInitialState();
 		this.recentCatches = [];
 		this.offlineReport = null;
 		this.prestigeResult = null;
 		this.newAchievements = [];
-		this.strandedFrom = null;
-		this.setbackNotices = [];
-		this.setbackHits = [];
-		this.lastBust = null;
+		this.#clearTransientBanners();
 		this.save();
 	}
 }
