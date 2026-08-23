@@ -3496,7 +3496,7 @@ three-hour nap came back as 26 fish instead of 719. A gap larger than the resume
 threshold now routes into the settle.
 
 **The merchant called while you were away.** `runTrader` is not inside the
-settle, so R51 *looked* safe — but its catch-up loop resolved `floor(gap / 45s)`
+settle, so R51 _looked_ safe — but its catch-up loop resolved `floor(gap / 45s)`
 arrivals on the first tick back, each one settling a consignment and crediting
 `lifetimeCoins`, which mints Pearls. Eight hours away paid 641 visits and
 rotated the stock 641 times, gating the bicycle and the Assistant behind offers
@@ -3515,11 +3515,11 @@ across every Standing Charter level to be sure.
 
 Poaching is now **water you have no right to be on** — not bought, or not
 licensed — provided it is on the chart and you have a hull if it needs one. The
-crew do not poach, because a deckhand is hired *at* a source; it is the player's
+crew do not poach, because a deckhand is hired _at_ a source; it is the player's
 own hands and rig.
 
 With it actually working, five more defects behind it became reachable and were
-fixed: confiscation took a *value share* of every bucket (ninety legal guppies
+fixed: confiscation took a _value share_ of every bucket (ninety legal guppies
 went back in the water so one stolen pike could stay) and now takes the poached
 species out of the bucket **and** off the quay; listing used to launder a poach
 outright; the grace clock reset on walking away, making it farmable for ever at
@@ -3535,7 +3535,7 @@ nothing at all.
 equal powers, and past about `q/(S+p) ≈ 1e-16` every significant digit cancels:
 a hold of a hundred fish worth a million coins sold for **0**, while the price
 board showed a healthy 8.8e-4. The same instability priced a single fish at
-1.0000640 at ordinary scale — *above* the untouched price, which a
+1.0000640 at ordinary scale — _above_ the untouched price, which a
 strictly-decreasing curve cannot do. Small sales are now priced at their
 midpoint, which agrees with the integral to second order and does no
 subtraction.
@@ -3564,14 +3564,14 @@ subtraction.
 
 #### Persistence
 
-`bustedUntil` was clamped with the *town trip* constant — forty seconds against a
+`bustedUntil` was clamped with the _town trip_ constant — forty seconds against a
 sixty-second ban — so reloading erased twenty seconds of every bust, repeatably,
 with no save editing. `getItem` sat outside the try, so a browser that throws on
 it took `init()` down and the game never booted. The rescue backup
 `backupRawSave` writes had **no reader anywhere in the codebase**, so the comment
 promising that Dismiss "stops being a one-click total loss" described something
 the player could not reach; there is now a Recover button in Settings.
-`hardReset` destroyed a protected future save that merely *dismissing* the banner
+`hardReset` destroyed a protected future save that merely _dismissing_ the banner
 would have preserved — and the banner recommends starting fresh. `exportBlob`
 handed back an old blob kept for a different, already-dismissed problem. An
 unreadable `version` was read as zero and re-migrated from the beginning.
@@ -3590,14 +3590,14 @@ mantissa instead of printing "1000.00K".
 **Glimmer Lure was dominated** at Offshore and the Ocean — luck ceilings of
 **×1.031 and ×1.042**, because those sources are 97% and 96% rare by weight
 already, while the button read "rare weight ×66749.59" and the game's own advice
-bought about seventeen near-null levels. Luck now also sorts *within* the rare
+bought about seventeen near-null levels. Luck now also sorts _within_ the rare
 types by depth, as a **pure redistribution** that cannot change the rare/common
 split at all:
 
-| | Pond | Lake | Offshore | Ocean |
-| --- | --- | --- | --- | --- |
+|        | Pond  | Lake  | Offshore  | Ocean     |
+| ------ | ----- | ----- | --------- | --------- |
 | Before | ×2.37 | ×1.82 | **×1.03** | **×1.04** |
-| After | ×4.17 | ×3.00 | **×1.81** | **×1.50** |
+| After  | ×4.17 | ×3.00 | **×1.81** | **×1.50** |
 
 The joke fish is deliberately excluded from the sort: weighted 0.00011 and worth
 999, including it made the punchline the dominant catch at every source and took
@@ -3605,7 +3605,7 @@ the Pond ceiling to ×274.
 
 ### The first ten minutes, walked
 
-A transcript of what the game *says*, minute by minute, to someone who has never
+A transcript of what the game _says_, minute by minute, to someone who has never
 seen it. Three things it said wrong:
 
 1. **The Harbour opened two minutes in**, on a cast count — seven minutes before
@@ -3613,7 +3613,7 @@ seen it. Three things it said wrong:
    every one, and a boat priced in the billions. It now opens when there is
    something to do in it.
 2. **The guide never said how to sell.** It said "sell them for MarketCoins",
-   and the Sell button does not sell: without an Assistant it *lists* the catch
+   and the Sell button does not sell: without an Assistant it _lists_ the catch
    for a merchant who comes when he comes. It now names listing, says who pays
    and when, and has a rung for the full bucket, which is the commonest way an
    opening stalls.
@@ -3625,23 +3625,23 @@ seen it. Three things it said wrong:
 
 ### The final ladder (seed 7)
 
-| | Start of pass | **End of pass** |
-| --- | --- | --- |
-| First prestige | 3h25m12s | **2h42m58s** |
-| Idle crossover | — | 24m47s |
-| Pond → Stream → River | — | 8m16s · 18m01s · 42m07s |
-| Boat | 1h29m11s | **1h14m09s** |
-| Ocean | — | **1h42m56s** |
-| Licences | 17m16 / 44m16 / 1h03 / 1h15 | 12m50 / 42m42 / 1h05 / 1h27 |
+|                       | Start of pass               | **End of pass**             |
+| --------------------- | --------------------------- | --------------------------- |
+| First prestige        | 3h25m12s                    | **2h42m58s**                |
+| Idle crossover        | —                           | 24m47s                      |
+| Pond → Stream → River | —                           | 8m16s · 18m01s · 42m07s     |
+| Boat                  | 1h29m11s                    | **1h14m09s**                |
+| Ocean                 | —                           | **1h42m56s**                |
+| Licences              | 17m16 / 44m16 / 1h03 / 1h15 | 12m50 / 42m42 / 1h05 / 1h27 |
 
 | Run | Before the pass | **After** |
-| --- | --- | --- |
-| 1 | 3h25m | **2h43m** |
-| 2 | 20m20s | **4m51s** |
-| 3 | 2m48s | **2m20s** |
-| 4 | 1m35s | **2m10s** |
-| 5 | 48s | **1m42s** |
-| 6 | 46s | **1m38s** |
+| --- | --------------- | --------- |
+| 1   | 3h25m           | **2h43m** |
+| 2   | 20m20s          | **4m51s** |
+| 3   | 2m48s           | **2m20s** |
+| 4   | 1m35s           | **2m10s** |
+| 5   | 48s             | **1m42s** |
+| 6   | 46s             | **1m38s** |
 
 **Judged, not just measured.** The first run lost forty minutes across the pass,
 almost all of it in this stage, and almost all of that is the Glimmer Lure fix —
@@ -3681,6 +3681,6 @@ blocks.
 `pnpm audit:ui` **100 / 100 / 100 / 100** across three runs.
 
 **Lighthouse cannot see the contrast defects** — axe returns colour-contrast as
-*incomplete* against gradient backgrounds — so those were computed by hand from
+_incomplete_ against gradient backgrounds — so those were computed by hand from
 the hex values and are recorded above with their ratios. A 100 is not evidence
 of contrast here and never was.
