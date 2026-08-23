@@ -152,7 +152,14 @@ export interface GameState {
 	 * only `poachSource` sets this. Nothing drifts into poaching by accident.
 	 */
 	poaching: FishingSources | null;
-	/** Seconds fished on the current poach. Cleared by a bust or by leaving. */
+	/**
+	 * Seconds fished on the current poach.
+	 *
+	 * Cleared by a bust, by moving to *different* water, and by a prestige —
+	 * **not** by packing up. `stopPoaching` deliberately leaves it standing so
+	 * the grace period cannot be farmed by leaving and coming straight back; see
+	 * `poachClockAt` below, which is what makes that safe.
+	 */
 	poachElapsed: number;
 	/**
 	 * Which water `poachElapsed` was accrued on.

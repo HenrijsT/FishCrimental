@@ -3684,3 +3684,94 @@ blocks.
 _incomplete_ against gradient backgrounds — so those were computed by hand from
 the hex values and are recorded above with their ratios. A 100 is not evidence
 of contrast here and never was.
+
+---
+
+# THE REVIEW BRANCH — post-pass fixes, and one correction
+
+Seven commits after Stage 9 closed, `89b6b33..81d1e84`. They were never recorded
+here as they landed, so this section is written afterwards from the diff and from
+an independent verification. It is a record, not a plan.
+
+## What landed
+
+| Commit    | What                                                                                                 |
+| --------- | ---------------------------------------------------------------------------------------------------- |
+| `89b6b33` | Four of the five findings from an independent audit of the fifth pass, and the first component tests |
+| `6a5aff7` | Nine findings from a full read of the branch, five with tests                                        |
+| `43092d1` | Fifteen findings, ten with tests                                                                     |
+| `5be51fd` | Eight findings, four with tests                                                                      |
+| `2ce899e` | Thirteen cleanups from a four-angle quality review                                                   |
+| `81d1e84` | Eleven findings, seven with tests                                                                    |
+
+Tests 604 → **642**. `pnpm lint`, `pnpm check` (0 errors, 445 files), `pnpm build`
+and `pnpm test` all green.
+
+## The correction this section exists to make
+
+**Two earlier entries in this log are now false.** `DECISIONS.md:408` and `:1045`
+both record _"no component-level UI tests … jsdom would be packages beyond what
+the work requires."_
+
+That reasoning did not survive. The audit found that `SourcePicker` gated the
+poach button on `unlocked && missingLicence` — a pair the engine cannot construct
+— so roughly three hundred lines of `police.ts`, the fines, confiscation, the
+grace timer and a Help topic were unreachable in every run. A six-agent bug hunt
+and six hundred green tests missed it, and could not have caught it: no test in
+the project rendered a component.
+
+`89b6b33` therefore added `jsdom`, pointed Vitest at Svelte's client build, and
+added `src/lib/components/render.test.ts`, which mounts `SourcePicker` and
+asserts the button is on screen. It fails against the old gate; that was verified
+by reverting it.
+
+This log is append-only, so those two entries stand as written. **They are
+superseded here.**
+
+## What the verification found
+
+Five audit lenses over the range, each finding then attacked by a separate
+verifier. Seven claims were refuted. **One live defect survived:**
+
+**A partial listing drifts the bucket count and the species ledger by one fish.**
+`listForSale` (`engine.ts:1768`) computes a whole-fish count, discards it, and
+passes `listed / held` as a ratio; `moveLedger` (`market.ts:325`) re-derives its
+own count from that ratio and the round-trip lands short. Measured
+independently: **4,905 of 45,150 (held, listed) pairs for held ≤ 300 are wrong —
+10.9%.** `held = 49, listed = 1` gives a target of **0**.
+
+No coins are lost: `holdValue` and `ledgerWorth` stay equal, and only the fish
+_count_ split disagrees. It is bounded to one fish, self-corrects on the next
+listing, and vanishes above about 1e6 hold. Introduced by `43092d1`'s whole-fish
+flooring — before it, both sides moved the same unfloored fraction and could not
+diverge.
+
+**The fix is to pass the count rather than the ratio**, plus the invariant test
+nobody wrote: bucket total equals ledger total after any partial listing.
+
+## Three cleanups that were not behaviour-preserving
+
+`2ce899e` says "no behavioural change intended". Three of the thirteen changed
+behaviour anyway. All harmless, two are improvements, but they are recorded here
+because a refactor commit is where nobody looks for them:
+
+- **Market and Pond price readouts moved to `<Num>`**, which trims trailing zeros
+  and floors under 0.01 — so `×1.000` now prints `×1` and `0.001` prints `<0.01`,
+  and the three-decimal column alignment is gone.
+- **`#preserveAndClearProblem()` dropped its `BLOCKING_SAVE_PROBLEMS` conjunct.**
+  Inert today, because the only two assignment sites are blocking kinds, but the
+  check that guaranteed it is now only a comment.
+- **`save.ts`'s `readRawSave` gained the defensiveness its comment already
+  claimed** — a bug fix inside a refactor commit.
+
+## What was left standing
+
+Pre-existing, not caused by this range, and still open: poach alternation resets
+the warden's clock through one global timer; `help.ts:106` describes a clock that
+is neither the same every time nor on screen; Cold Storage is a dead Gear row for
+all of run 1; `aria-label`s drop the price in the cannot-afford state; and
+`render.test.ts` shares the game singleton without resetting it between cases.
+
+The seven refactors deferred out of the cleanup pass — the triple fish storage
+being the largest — are in `design/IDEAS.md` N6, to be verified before any of
+them is implemented.
