@@ -31,6 +31,15 @@
 			Nobody sold anything while you were gone — the catch is still in the hold, waiting for you.
 		</p>
 
+		{#if report.evicted}
+			<p class="fell-back">
+				A warden found the boat on the {report.evicted.source}. Everything landed there went back in
+				the water{#if report.evicted.fine.gt(0)}, and the fine was
+					<Num value={report.evicted.fine} tone="coin" />{/if}. The crew worked the
+				{report.evicted.movedTo} for the rest of the night.
+			</p>
+		{/if}
+
 		{#if report.holdFull}
 			<p class="fell-back">
 				The keepnet filled and everything after it went back in the water. A bigger bucket holds a

@@ -84,6 +84,24 @@ import {
 } from './engine';
 import { evaluateAchievements } from './achievements';
 import {
+	evaluateSetbacks,
+	type SetbackDefinition,
+	type SetbackHit,
+	type SetbackId
+} from './setbacks';
+import {
+	bust,
+	busted,
+	bustedSecondsLeft,
+	graceLeft,
+	graceProgress,
+	poachSource,
+	runPolice,
+	settlePoachOnLoad,
+	stopPoaching,
+	type Bust
+} from './police';
+import {
 	abandonExam,
 	advanceExamIdle,
 	canSit,
@@ -227,6 +245,7 @@ export class Game {
 			// Settle through `this.state`, not the object that was passed in:
 			// assigning to a `$state` field wraps the value in a proxy, and
 			// mutating the raw object afterwards would bypass reactivity.
+			settlePoachOnLoad(this.state);
 			this.offlineReport = this.#settleOffline(this.state);
 			// After the settle, not before: prices recover over wall-clock time
 			// whether or not anyone was fishing, and the settle has just moved
@@ -323,8 +342,14 @@ export class Game {
 		);
 		// The warden works through the pile whether or not you do. Slowly.
 		advanceExamIdle(this.state, elapsed);
+
+		// The other warden. Never inside `accumulate` — a confiscation in the
+		// catch loop would take fish that had not been landed yet.
+		const caught = runPolice(this.state, this.modifiers, elapsed, now);
+		if (caught) this.lastBust = caught;
 		this.#keepFishable();
 		this.#checkJokes();
+		this.#checkSetbacks();
 		this.#checkAchievements();
 	}
 
@@ -425,6 +450,15 @@ export class Game {
 		state.coins = budget;
 
 		const modifiers = computeModifiers(state);
+
+		// One eviction, at the front, and then a legal night (R48).
+		//
+		// The warden arrives once — he is not standing over the boat for eight
+		// hours — and after that the crew carry on from wherever they were put
+		// ashore. Working the poach for its grace period first would be modelling
+		// a player who was there to see it.
+		const evicted = state.poaching ? bust(state, modifiers) : null;
+
 		const step = accumulate(
 			state,
 			modifiers,
@@ -441,7 +475,10 @@ export class Game {
 		// and a negative zero in the purse is a thing nobody should have to read.
 		state.coins = fuelSpent.gt(0) ? coinsBefore.minus(fuelSpent) : coinsBefore;
 
-		if (step.fish.lte(0) && fuelSpent.lte(0)) return null;
+		// An eviction is never invisible. A crewless player used to get no report
+		// and no modal at all, so being fined and put ashore looked exactly like
+		// nothing having happened.
+		if (step.fish.lte(0) && fuelSpent.lte(0) && !evicted) return null;
 
 		return {
 			seconds,
@@ -454,7 +491,8 @@ export class Game {
 			// What is waiting to be sold, all of it, not just tonight's.
 			holdAfter: holdCount(state),
 			// True when the keepnet filled and the rest went back in the water.
-			holdFull: step.bucketBound
+			holdFull: step.bucketBound,
+			evicted
 		};
 	}
 
@@ -468,8 +506,9 @@ export class Game {
 
 	beginCast(): void {
 		if (this.casting) return;
-		// In town selling. The crew are unaffected — `accumulate` never reads this.
-		if (inTown(this.state)) return;
+		// In town selling, or escorted off the water. The crew are unaffected —
+		// `accumulate` never reads either.
+		if (inTown(this.state) || busted(this.state)) return;
 		this.casting = true;
 		this.#castStartedAt = performance.now();
 		this.castProgress = 0;
@@ -490,7 +529,7 @@ export class Game {
 		// The trip can start mid-hold. Bailing out of the frame is not enough:
 		// the catch-up loop below lands up to 25 casts at a time, so the cast
 		// has to actually be ended.
-		if (inTown(this.state)) {
+		if (inTown(this.state) || busted(this.state)) {
 			this.endCast();
 			return;
 		}
@@ -557,6 +596,7 @@ export class Game {
 		}
 
 		this.#checkJokes();
+		this.#checkSetbacks();
 		this.#checkAchievements();
 	}
 
@@ -649,6 +689,43 @@ export class Game {
 		const bought = buyAssistant(this.state);
 		if (bought) this.#checkAchievements();
 		return bought;
+	}
+
+	/**
+	 * Setbacks, evaluated here and nowhere else.
+	 *
+	 * Not in `#settleOffline` and not in `resume()`. A Setback is something that
+	 * happens to you while you are watching; one that fires while the tab is
+	 * shut is a number that changed for no reason anyone saw.
+	 */
+	#checkSetbacks(): void {
+		const result = evaluateSetbacks(this.state, this.modifiers);
+		if (result.armed.length > 0) this.setbackNotices = [...this.setbackNotices, ...result.armed];
+		if (result.hits.length > 0) this.setbackHits = [...this.setbackHits, ...result.hits];
+	}
+
+	dismissSetbackNotice(id: SetbackId): void {
+		this.setbackNotices = this.setbackNotices.filter((setback) => setback.id !== id);
+	}
+
+	dismissSetbackHit(id: SetbackId): void {
+		this.setbackHits = this.setbackHits.filter((hit) => hit.id !== id);
+	}
+
+	dismissBust(): void {
+		this.lastBust = null;
+	}
+
+	/** Fish water you have no paper for. Deliberate, never accidental. */
+	poach(source: FishingSources): boolean {
+		const started = poachSource(this.state, source);
+		if (started) this.endCast();
+		return started;
+	}
+
+	/** Leave before anyone turns up. The clock resets and the catch is yours. */
+	stopPoaching(): void {
+		stopPoaching(this.state);
 	}
 
 	setSource(source: FishingSources): void {
@@ -775,6 +852,18 @@ export class Game {
 	/** What the last trader paid, for a one-line note on the Shore. */
 	lastTraderEarned = $state<Decimal | null>(null);
 
+	/** The last time a warden turned up, for the banner that says so. */
+	lastBust = $state<Bust | null>(null);
+
+	/**
+	 * Setbacks that have just armed, and Setbacks that have just landed.
+	 *
+	 * The notice is load-bearing, not decoration: the escalation is a 5x that
+	 * nobody can feel unless they were told the clock had started.
+	 */
+	setbackNotices = $state<SetbackDefinition[]>([]);
+	setbackHits = $state<SetbackHit[]>([]);
+
 	traderStock = $derived(traderStock(this.state));
 	traderLeft = $derived(traderSecondsLeft(this.state, this.now));
 	traderFill = $derived(traderProgress(this.state, this.now));
@@ -797,6 +886,12 @@ export class Game {
 	holdWorth = $derived(holdMarketValue(this.state).times(this.modifiers.sellMultiplier));
 
 	marketOpen = $derived(marketOpen(this.state));
+
+	/** Kept off the water by a warden — separate from the town trip. */
+	busted = $derived(busted(this.state, this.now));
+	bustedLeft = $derived(bustedSecondsLeft(this.state, this.now));
+	graceLeft = $derived(graceLeft(this.state));
+	graceFill = $derived(graceProgress(this.state));
 
 	/** The exam being sat, if any, and how it is going. */
 	exam = $derived(this.state.exam);
@@ -960,6 +1055,9 @@ export class Game {
 		this.offlineReport = null;
 		this.prestigeResult = null;
 		this.newAchievements = [];
+		this.setbackNotices = [];
+		this.setbackHits = [];
+		this.lastBust = null;
 		this.save();
 	}
 }

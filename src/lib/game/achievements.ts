@@ -1,6 +1,7 @@
 import { FishingSources } from '$lib/fishing_sources';
 import { SOURCE_ORDER, UPGRADES, UPGRADE_IDS } from './config';
 import { ALL_SPECIES, discoveredCount, eroticCaught, jellyCaught } from './engine';
+import { SETBACKS } from './setbacks';
 import type { GameState } from './types';
 
 export interface Achievement {
@@ -118,6 +119,28 @@ export const ACHIEVEMENTS: Achievement[] = [
 		earned: (s) => eroticCaught(s).gte(1)
 	}
 ];
+
+/**
+ * One record per Setback: *live through it, and it goes on the wall* (R62).
+ *
+ * Appended rather than written into the list above, because
+ * `evaluateAchievements` only ever appends and the family is generated from the
+ * Setbacks themselves — a new Setback brings its own record with it and there
+ * is no second list to forget to update.
+ *
+ * Nothing is ever revoked. A Setback takes two upgrade levels back, and
+ * `maxed_rod` can only go stale if a Setback arms at rod 70 or above; taking a
+ * record away from a player who earned it is not worth guarding against that.
+ */
+for (const setback of SETBACKS) {
+	ACHIEVEMENTS.push({
+		id: `setback_${setback.id}`,
+		name: setback.name,
+		description: `Live through ${setback.name}.`,
+		secret: true,
+		earned: (s) => s.setbacksSeen.includes(setback.id)
+	});
+}
 
 export const ACHIEVEMENTS_BY_ID = new Map(ACHIEVEMENTS.map((entry) => [entry.id, entry]));
 

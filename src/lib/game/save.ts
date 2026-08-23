@@ -31,6 +31,7 @@ import {
 } from './config';
 import { createInitialState } from './engine';
 import { LEGACY_SPECIES } from './market';
+import { SETBACKS, SETBACKS_BY_ID, type SetbackId } from './setbacks';
 import type { BoatState, GameState, PondState, SpeciesLedger } from './types';
 
 const EXPORT_PREFIX = 'FISHC';
@@ -159,6 +160,11 @@ export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {
 		},
 		consignmentSpecies: { fish: {}, worth: {} },
 		marketPressure: {},
+		// Grandfather every existing save (R52). A Setback is a one-time story
+		// beat, and a player deep into a run they started before this build
+		// existed did not sign up for four of them arriving on load. New games
+		// start on version 6 and never see this line.
+		setbacksSeen: SETBACKS.map((setback) => setback.id),
 		version: 6
 	})
 };
@@ -337,6 +343,36 @@ function readLedger(raw: unknown): SpeciesLedger {
  * unstocked pond rather than dropped — the pond was paid for, and losing it
  * because a fish was renamed would be worse than losing what it was breeding.
  */
+/** Busts per source, this run. Anything not a source is dropped. */
+/** Setbacks already lived through. Unknown ids are dropped. */
+function readSetbacks(raw: unknown): SetbackId[] {
+	if (!Array.isArray(raw)) return [];
+	return raw.filter(
+		(id): id is SetbackId => typeof id === 'string' && SETBACKS_BY_ID.has(id as SetbackId)
+	);
+}
+
+function readArmedAt(raw: unknown): Partial<Record<SetbackId, number>> {
+	const source = isRecord(raw) ? raw : {};
+	const out: Partial<Record<SetbackId, number>> = {};
+	for (const [id, value] of Object.entries(source)) {
+		if (!SETBACKS_BY_ID.has(id as SetbackId)) continue;
+		const at = num(value, 0);
+		if (at >= 0) out[id as SetbackId] = at;
+	}
+	return out;
+}
+
+function readOffences(raw: unknown): Partial<Record<FishingSources, number>> {
+	const source = isRecord(raw) ? raw : {};
+	const out: Partial<Record<FishingSources, number>> = {};
+	for (const key of SOURCE_ORDER) {
+		const count = Math.floor(num(source[key], 0));
+		if (count > 0) out[key] = count;
+	}
+	return out;
+}
+
 function readPonds(raw: unknown): PondState[] {
 	if (!Array.isArray(raw)) return [];
 	return raw.slice(0, POND_MAX).map((entry) => {
@@ -480,6 +516,22 @@ export function fromRaw(data: Raw): GameState {
 		// Never read, never written. An exam in progress is free to restart and
 		// is not worth a persisted, validated, migratable record — see `ExamState`.
 		exam: null,
+
+		// Poaching. `settlePoachOnLoad` drops the flag if the licence has since
+		// been taken or the source is not open in this run — a stale flag would
+		// mean a bust for water the player is entitled to fish.
+		poaching:
+			typeof migrated.poaching === 'string' &&
+			(SOURCE_ORDER as string[]).includes(migrated.poaching)
+				? (migrated.poaching as FishingSources)
+				: null,
+		poachElapsed: Math.max(0, num(migrated.poachElapsed, 0)),
+		poachedValue: positive(migrated.poachedValue),
+		poachOffences: readOffences(migrated.poachOffences),
+		bustedUntil: clampDeadline(migrated.bustedUntil),
+
+		setbacksSeen: readSetbacks(migrated.setbacksSeen),
+		setbacksArmedAt: readArmedAt(migrated.setbacksArmedAt),
 
 		dex: readDex(migrated.dex),
 		carry: readCarry(migrated.carry),

@@ -5,7 +5,10 @@
 	import { LICENCES, needsBoat } from '$lib/game/config';
 	import { sources } from '$lib/fishing_sources';
 	import { SCENES } from '$lib/game/scenes';
+	import CastBar from './CastBar.svelte';
 	import Num from './Num.svelte';
+	import { POACH_BUSTED_SECONDS } from '$lib/game/config';
+	import { finePercent } from '$lib/game/police';
 	import SourceThumb from './SourceThumb.svelte';
 
 	const g = $derived(game.state);
@@ -51,6 +54,10 @@
 								<span class="stats warn">Tank empty — fuel up at the harbour</span>
 							{:else if open && blocker === 'boat'}
 								<span class="stats warn">Needs a boat</span>
+							{:else if open && blocker === 'licence'}
+								<span class="stats warn">
+									Needs the {LICENCES[licence!].name} — or a nerve
+								</span>
 							{:else if open}
 								<span class="stats faint">
 									{game.modifiers.castSeconds[source].toFixed(2)}s a cast ·
@@ -71,10 +78,47 @@
 							{/if}
 						</span>
 					</button>
+
+					{#if open && blocker === 'licence' && !game.busted}
+						<button
+							class="poach"
+							onclick={() => game.poach(source)}
+							disabled={g.poaching === source}
+						>
+							{#if g.poaching === source}
+								Poaching — {Math.ceil(game.graceLeft)}s
+							{:else}
+								Fish it anyway
+							{/if}
+						</button>
+					{/if}
 				</li>
 			{/if}
 		{/each}
 	</ul>
+
+	{#if g.poaching}
+		<div class="poaching">
+			<p class="line">
+				<strong>You are poaching the {sources[g.poaching].name}.</strong>
+				Nobody has noticed yet. They will in about {Math.ceil(game.graceLeft)} seconds.
+			</p>
+			<CastBar progress={game.graceFill} label="Time before someone notices" active />
+			<p class="line faint">
+				When they do: everything you have landed here goes back in the water, they take
+				{finePercent(g, g.poaching)}% of your coins, and you are off the water for
+				{POACH_BUSTED_SECONDS}s. Leave now and the catch is yours.
+			</p>
+			<button onclick={() => game.stopPoaching()}>Pack up and go</button>
+		</div>
+	{/if}
+
+	{#if game.busted}
+		<p class="busted">
+			A warden has you on the bank. Back on the water in {Math.ceil(game.bustedLeft)}s — the crew
+			are still working.
+		</p>
+	{/if}
 
 	<div class="detail">
 		<h3>{sources[g.activeSource].name}</h3>
@@ -164,5 +208,36 @@
 		font-size: 0.78rem;
 		color: var(--foam);
 		margin-top: 0.35rem;
+	}
+
+	.poach {
+		width: 100%;
+		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		padding: 0.25rem 0.4rem;
+		color: var(--coral);
+		border-color: var(--coral);
+	}
+
+	.poaching {
+		margin: 0.8rem 0 0;
+		padding: 0.6rem 0.7rem;
+		border: 1px dashed var(--coral);
+		border-radius: var(--radius-sm);
+		background: rgba(4, 16, 27, 0.55);
+	}
+
+	.poaching .line {
+		font-size: 0.8rem;
+		margin: 0.25rem 0;
+		max-width: 62ch;
+	}
+
+	.busted {
+		margin: 0.8rem 0 0;
+		padding: 0.5rem 0.7rem;
+		font-size: 0.82rem;
+		color: var(--coral);
+		border-left: 2px solid var(--coral);
 	}
 </style>

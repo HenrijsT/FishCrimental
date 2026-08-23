@@ -2,6 +2,8 @@ import type Decimal from 'break_eternity.js';
 import type { FishType } from '$lib/fish_types';
 import type { FishingSources } from '$lib/fishing_sources';
 import type { BoatUpgradeId, LicenceId, PrestigeUpgradeId, UpgradeId } from './config';
+import type { Bust } from './police';
+import type { SetbackId } from './setbacks';
 
 export interface BoatState {
 	owned: boolean;
@@ -135,6 +137,40 @@ export interface GameState {
 	/** The licence exam being sat, if any. Never saved — see `ExamState`. */
 	exam: ExamState | null;
 
+	/**
+	 * Water being fished without the paper for it, if any (R48).
+	 *
+	 * An explicit, deliberate act — `setSource` still refuses blocked water, and
+	 * only `poachSource` sets this. Nothing drifts into poaching by accident.
+	 */
+	poaching: FishingSources | null;
+	/** Seconds fished on the current poach. Cleared by a bust or by leaving. */
+	poachElapsed: number;
+	/** Coin worth of what has been landed on this poach, for confiscation. */
+	poachedValue: Decimal;
+	/** Busts per source, this run. The fine escalates on this. */
+	poachOffences: Partial<Record<FishingSources, number>>;
+	/**
+	 * Absolute deadline, in ms, until which the police keep you off the water.
+	 *
+	 * Its own field and not `fishingBlockedUntil`, which the Assistant is
+	 * allowed to bypass. An Assistant runs your catch into town; it does not
+	 * argue with a warden.
+	 */
+	bustedUntil: number;
+
+	/**
+	 * Setbacks that have already happened — or been outrun, which counts as
+	 * having happened (R52). Mirrors `achievements`, and is carried across a
+	 * prestige: a Setback happens once, in a life, not once a run.
+	 */
+	setbacksSeen: SetbackId[];
+	/**
+	 * `playTime` at which each armed Setback armed. **Not** carried across a
+	 * prestige — the progression that armed it is wiped, so it re-arms fresh.
+	 */
+	setbacksArmedAt: Partial<Record<SetbackId, number>>;
+
 	// Progress
 	/** Lifetime catches per species name — the Fishdex. */
 	dex: Record<string, Decimal>;
@@ -266,4 +302,6 @@ export interface OfflineReport {
 	holdAfter: Decimal;
 	/** True if the keepnet filled and the rest went back in the water. */
 	holdFull: boolean;
+	/** The warden, if he came. Never null and silent — see `#settleOffline`. */
+	evicted: Bust | null;
 }

@@ -422,6 +422,85 @@ export const AUTO_FISHER: AutoFisherConfig = {
 export const AUTO_FISHER_OFFLINE_COST = 5e11;
 
 // ---------------------------------------------------------------------------
+// Setbacks
+// ---------------------------------------------------------------------------
+
+/**
+ * The smallest and largest a Setback can be, in **seconds of the player's own
+ * income** (R52).
+ *
+ * Seconds and not upgrade levels, because two levels of rod is 4,413 coins at
+ * rod 5 and 3.103e17 at rod 30 — thirteen orders of magnitude for the same
+ * "two levels". Seconds of income costs about the same *amount of game*
+ * wherever it lands.
+ *
+ * Thirty to a hundred and fifty is a five-fold escalation, and five is the sole
+ * expression of "the longer he leaves it, the harder it lands". Both ends are
+ * deliberately small: a Setback is a bad day, not a reset.
+ */
+export const SETBACK_BASE_SECONDS = 30;
+export const SETBACK_MAX_SECONDS = 150;
+
+/**
+ * How much `playTime` between arming and firing earns the full escalation.
+ *
+ * Twenty minutes of *active* play. `playTime` advances only in `tick()`, so
+ * this is twenty minutes at the rod, not twenty minutes of wall clock — a
+ * player who puts the game down is not being timed.
+ */
+export const SETBACK_RAMP_SECONDS = 1200;
+
+/**
+ * Levels taken off a track when a Setback lands.
+ *
+ * Theatrical. The levels are what the player *sees*; the seconds above are what
+ * they actually pay, and anything the levels were worth beyond that is refunded
+ * in coins on the spot.
+ */
+export const SETBACK_LEVELS = 2;
+
+// ---------------------------------------------------------------------------
+// Poaching and the police
+// ---------------------------------------------------------------------------
+
+/**
+ * How long you can fish water you have no paper for before someone notices.
+ *
+ * **A fixed period, not a probability roll**, and identical online and offline.
+ * A roll makes the same choice pay differently on identical inputs, which is
+ * the one thing a player cannot learn from. Ninety seconds is long enough to be
+ * a genuine temptation and short enough that it never becomes the strategy.
+ */
+export const POACH_GRACE_SECONDS = 90;
+
+/**
+ * The fine, as a **fraction of the purse**, by how many times you have been
+ * caught at that particular water this run.
+ *
+ * A percentage rather than a flat sum, because `coins x 0.55` is zero only if
+ * coins was already zero. Four busts at one spot leave 18% of the bank, ten
+ * leave about 2% — so "he loses all his money" is approached asymptotically
+ * while the zero-coin state stays mathematically out of reach. A flat fine
+ * would take a new player's entire game and a veteran's rounding error.
+ *
+ * The first offence is free. You get a warning and your catch back to the
+ * water, and that is all.
+ */
+export const POACH_FINE_STEPS = [0, 0.15, 0.3, 0.45];
+
+/** How long being escorted off the water keeps you from casting. */
+export const POACH_BUSTED_SECONDS = 60;
+
+/**
+ * A fine may never take a boat owner below a full tank of fuel.
+ *
+ * Without this the fine can strand a player: no fuel, no open water, no income
+ * to buy fuel with. The floor is a hard one — it is checked before the fine is
+ * applied, not clamped afterwards.
+ */
+export const POACH_FUEL_FLOOR_TANKS = 1;
+
+// ---------------------------------------------------------------------------
 // Breeding ponds
 // ---------------------------------------------------------------------------
 

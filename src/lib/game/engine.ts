@@ -87,6 +87,7 @@ import {
 	type UpgradeId
 } from './config';
 import type { GameState, Modifiers, PondState } from './types';
+import type { SetbackId } from './setbacks';
 
 // ---------------------------------------------------------------------------
 // Catch tables
@@ -644,7 +645,9 @@ export function sourceBlocker(
 	modifiers?: Modifiers
 ): 'locked' | 'licence' | 'boat' | 'fuel' | null {
 	if (!state.unlocked[source]) return 'locked';
-	if (missingLicence(state, source)) return 'licence';
+	// Water you are actively poaching is not blocked — you are on it. Without
+	// this the tick's own safety net would move you off it again next frame.
+	if (missingLicence(state, source) && state.poaching !== source) return 'licence';
 	if (needsBoat(source)) {
 		if (!state.boat.owned) return 'boat';
 		if (!canSail(state, modifiers ?? computeModifiers(state))) return 'fuel';
@@ -669,7 +672,12 @@ export function autoCastsPerSecond(
 	modifiers: Modifiers,
 	source: FishingSources
 ): Decimal {
-	if (!state.unlocked[source] || missingLicence(state, source)) return d0();
+	// Poached water pays. That is the entire point of poaching, and this is the
+	// second of the two places that has to know it — `accumulate` skipping the
+	// source and this returning zero for it are different bugs with the same
+	// symptom.
+	if (!state.unlocked[source]) return d0();
+	if (missingLicence(state, source) && state.poaching !== source) return d0();
 	const crew = state.deckhands[source];
 	if (crew.lte(0)) return d0();
 	return crew.times(modifiers.deckhandCastsPerSecond[source]);
@@ -705,6 +713,25 @@ export function sourceIncomePerSecond(
 		total = total.plus(castIncome(modifiers, route.fallback, route.stranded));
 	}
 	return total;
+}
+
+/**
+ * What the player's own hands are worth per second, at the water they are
+ * standing over.
+ *
+ * Lifted out of `balance.ts`, where it was inlined, because a Setback has to
+ * size its damage against *some* income and `totalIncomePerSecond` is exactly
+ * zero until the first deckhand — which would make every early Setback take
+ * nothing at all and every one after it take the same.
+ */
+export function handIncomePerSecond(state: GameState, modifiers: Modifiers): Decimal {
+	const seconds = modifiers.castSeconds[state.activeSource];
+	if (!seconds || seconds <= 0) return d0();
+
+	return modifiers.fishPerCast
+		.div(seconds)
+		.times(catchTable(state.activeSource, modifiers.luck).averageSourceValue)
+		.times(modifiers.sellMultiplier);
 }
 
 export function totalIncomePerSecond(state: GameState, modifiers: Modifiers): Decimal {
@@ -832,6 +859,11 @@ export function distributeCatch(
 	const table = catchTable(source, modifiers.luck);
 	const valueMultiplier = SOURCE_CONFIG[source].valueMultiplier;
 
+	// Everything landed on poached water is logged separately, so a bust can
+	// confiscate exactly the poached catch and not the legal fish beside it in
+	// the same bucket.
+	const poached = state.poaching === source;
+
 	const add = (fish: Fish, count: Decimal) => {
 		if (count.lte(0)) return;
 		const worth = count.times(fishTypeBaseValue[fish.category]).times(valueMultiplier);
@@ -839,6 +871,7 @@ export function distributeCatch(
 		value = value.plus(worth);
 		landed = landed.plus(count);
 		recordCatch(state, fish, count, worth);
+		if (poached) state.poachedValue = state.poachedValue.plus(worth);
 	};
 
 	if (whole.lte(ROLL_LIMIT)) {
@@ -1064,10 +1097,11 @@ export function accumulate(
 			break;
 		}
 
-		// Unlicensed water pays nothing, however it came to be unlocked. Without
+		// Unlicensed water pays nothing, however it came to be unlocked — unless
+		// it is being poached, which is the whole point of poaching. Without
 		// this, `accumulate` and `reachableSource` disagree about where the crew
 		// are allowed to work.
-		if (missingLicence(state, source)) continue;
+		if (missingLicence(state, source) && state.poaching !== source) continue;
 
 		const extra = state.unlocked[source] ? (extraCastsPerSecond?.[source] ?? 0) : 0;
 		const castsPerSecond = autoCastsPerSecond(state, modifiers, source).plus(extra);
@@ -1124,7 +1158,7 @@ export function accumulate(
 		if (
 			perSecond.gt(0) &&
 			state.unlocked[source] &&
-			!missingLicence(state, source) &&
+			(!missingLicence(state, source) || state.poaching === source) &&
 			(rigRoom === null || rigRoom.gt(0))
 		) {
 			const casts = takeWhole(
@@ -1825,6 +1859,27 @@ export function buyUpgrade(state: GameState, id: UpgradeId, count: Decimal | num
 	return amount;
 }
 
+/**
+ * Hand back some upgrade levels and credit the difference in coins.
+ *
+ * **This touches `state.coins` and nothing else.** Not `lifetimeCoins`, not
+ * `allTimeCoins`. `pearlsFor` reads `lifetimeCoins` directly as
+ * `floor((lifetime / 1e15) ^ 0.42)`, so crediting a refund there would silently
+ * mint a whole prestige for a player standing near the boundary — a Setback
+ * that *gave* you a Pearl. There is a test asserting both fields come out
+ * byte-identical.
+ */
+export function refundUpgrade(
+	state: GameState,
+	id: UpgradeId,
+	levels: Decimal,
+	refund: Decimal
+): void {
+	const current = state.upgrades[id];
+	state.upgrades[id] = Decimal.max(d0(), current.minus(levels));
+	if (refund.gt(0)) state.coins = state.coins.plus(refund);
+}
+
 export function buyDeckhand(
 	state: GameState,
 	source: FishingSources,
@@ -2016,6 +2071,7 @@ export interface CarryOver {
 	prestigeUpgrades: Record<PrestigeUpgradeId, Decimal>;
 	prestigeCount: Decimal;
 	achievements: string[];
+	setbacksSeen: SetbackId[];
 	completed: boolean;
 	jellyJokeSeen: boolean;
 	eroticJokeSeen: boolean;
@@ -2055,6 +2111,16 @@ export function createInitialState(keep?: Partial<CarryOver>): GameState {
 		// Dug with coins on land you just sold, like the boat and the crew.
 		ponds: [],
 		exam: null,
+		poaching: null,
+		poachElapsed: 0,
+		poachedValue: d0(),
+		// Per source, and per run — a fresh operation is not known to anyone.
+		poachOffences: {},
+		bustedUntil: 0,
+		// Carried: a Setback happens once in a life, not once a run.
+		setbacksSeen: keep?.setbacksSeen ?? [],
+		// Not carried: the progression that armed it is wiped, so it re-arms.
+		setbacksArmedAt: {},
 
 		dex: keep?.dex ?? {},
 		carry: {},
@@ -2128,6 +2194,7 @@ export function performPrestige(state: GameState): PrestigeResult | null {
 		prestigeUpgrades: state.prestigeUpgrades,
 		prestigeCount: state.prestigeCount.plus(1),
 		achievements: state.achievements,
+		setbacksSeen: state.setbacksSeen,
 		completed: true,
 		jellyJokeSeen: state.jellyJokeSeen,
 		eroticJokeSeen: state.eroticJokeSeen,
