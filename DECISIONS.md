@@ -3197,16 +3197,16 @@ have meant two ways to get the same card with only one of them designed.
 
 ### Four exams, four verbs
 
-| Licence | Exam | What you do | Target |
-| --- | --- | --- | --- |
-| Inland | **The Quota** | Land N of a named species | 40 |
-| Lakes | **The Cull** | Keep or return, by the warden's rule | 14 calls |
-| Coastal | **The Sounder** | Deeper / shallower, three soundings | 3 |
-| Deep | **The Long Line** | Land N fish rare or better | 25 |
+| Licence | Exam              | What you do                          | Target   |
+| ------- | ----------------- | ------------------------------------ | -------- |
+| Inland  | **The Quota**     | Land N of a named species            | 40       |
+| Lakes   | **The Cull**      | Keep or return, by the warden's rule | 14 calls |
+| Coastal | **The Sounder**   | Deeper / shallower, three soundings  | 3        |
+| Deep    | **The Long Line** | Land N fish rare or better           | 25       |
 
 The Quota is first because it needs no new mechanics at all — it reuses casting,
 luck and the catch tables exactly as they are. The Sounder is the clearest
-expression of *the better you play, the faster you finish*: anyone gets there,
+expression of _the better you play, the faster you finish_: anyone gets there,
 bisecting gets there in seven calls a sounding, and there is no timing, no
 reaction and no memory involved.
 
@@ -3214,7 +3214,7 @@ reaction and no memory involved.
 
 The Quota and the Long Line already complete without you — anything that lands
 counts, including the crew's and the ponds'. The Cull and the Sounder are pure
-decisions, so they would have been the one place in the game where *not* playing
+decisions, so they would have been the one place in the game where _not_ playing
 stops you dead. They drip instead: **one step every twenty seconds, untouched.**
 A fourteen-step Cull is under five minutes ignored against about thirty-five
 seconds played.
@@ -3247,11 +3247,11 @@ covers.** You sit the exam when the water in front of you needs it. That put the
 paper gate back where it always was, paid in time and attention instead of coins:
 
 | Licence | Priced (before) | No gate | **Water gate** |
-| --- | --- | --- | --- |
-| inland | 17m16s | 2m21s | **22m16s** |
-| lakes | 44m16s | 2m56s | **43m07s** |
-| coastal | 1h03m29s | 3m41s | **1h09m08s** |
-| deep | 1h15m43s | 14m01s | **1h34m49s** |
+| ------- | --------------- | ------- | -------------- |
+| inland  | 17m16s          | 2m21s   | **22m16s**     |
+| lakes   | 44m16s          | 2m56s   | **43m07s**     |
+| coastal | 1h03m29s        | 3m41s   | **1h09m08s**   |
+| deep    | 1h15m43s        | 14m01s  | **1h34m49s**   |
 
 **2. A deadlock the simulation caught, which would have hit real players.** The
 warden named a quota species from the Fishdex — and the Fishdex survives a
@@ -3269,16 +3269,131 @@ one-second step, so the drip never dripped. Fractions are banked on the exam.
 
 ### Pacing, re-measured
 
-| | Stage 5 | **Stage 6** |
-| --- | --- | --- |
+|                | Stage 5  | **Stage 6**  |
+| -------------- | -------- | ------------ |
 | First prestige | 3h18m09s | **3h13m20s** |
-| Idle crossover | 27m02s | 28m32s |
-| Boat | 1h23m11s | 1h19m18s |
-| Ocean | 1h59m27s | 1h55m36s |
+| Idle crossover | 27m02s   | 28m32s       |
+| Boat           | 1h23m11s | 1h19m18s     |
+| Ocean          | 1h59m27s | 1h55m36s     |
 
 Chain: **3h13m / 13m27 / 3m01 / 2m19 / 1m46 / 1m41.**
 
 Losing the licence prices is worth under four minutes across a three-hour run.
 That is the honest answer to "removing the price removes a coin sink": the
 licences were never a large sink — 360, 14,000 and 640,000 coins against source
-unlocks that dwarf them. What they were was a *gate*, and the gate is intact.
+unlocks that dwarf them. What they were was a _gate_, and the gate is intact.
+
+## Stage 7 — Poaching and Setbacks (`feat/consequences`)
+
+### Police fines (R48)
+
+Fishing water you have no paper for works, and pays, for exactly ninety seconds.
+Then a warden takes the poached catch, fines a share of the purse, and puts you
+ashore for a minute.
+
+**Nothing in `police.ts` is a roll.** The grace is a fixed period and the fine is
+a fixed schedule, identical online and offline, so the same choice always costs
+the same thing and the mechanic can be learned rather than superstitiously
+avoided.
+
+Four properties are load-bearing, and each has a test:
+
+| Property | How |
+| --- | --- |
+| **Confiscation is bounded by construction** | Everything landed on the poach is logged as it lands (`poachedValue`), so a bust takes exactly the poached catch and leaves the legal fish beside it in the same bucket alone |
+| **Coins approach zero and never reach it** | `POACH_FINE_STEPS = [0, 0.15, 0.30, 0.45]` as a *fraction*. Twelve busts at one water leave 0.3% of the bank. The first offence is a warning |
+| **A boat owner is never stranded** | The floor is one full tank, `fuelCapacity × FUEL_PRICE`, **checked before the fine rather than clamped after it**, so the fine is never quietly larger than what is taken |
+| **Nothing ever goes negative** | The `ideas.txt` clause "I cannot buy anything new until I pay the fine" is deliberately *not* implemented — with negative coins `buyFuel` returns zero, `repairBoat` returns false and `fuelForTrip` silently skips: every button in the game dies at once and not one says why |
+
+**Two places had to learn about poaching, not one.** `accumulate` skipping an
+unlicensed source and `autoCastsPerSecond` returning zero for it are different
+bugs with the same symptom, and the test that caught it — *"actually pays — the
+crew work it"* — was written before the second one was found.
+
+**Offline: one eviction, then a legal night.** The warden arrives once — he is
+not standing over the boat for eight hours — and the crew carry on from wherever
+they were put ashore.
+
+**An eviction is never invisible.** A crewless player used to get no
+`OfflineReport` and no modal at all, so being fined and put ashore looked exactly
+like nothing having happened. The settle now returns a report whenever there was
+an eviction, `OfflineReport.evicted` carries the whole `Bust`, and the modal has
+a line for it.
+
+`bustedUntil` is its own field and **not** `fishingBlockedUntil`, which the
+Assistant is allowed to bypass. An Assistant runs your catch into town; it does
+not argue with a warden.
+
+### Setbacks (R52, R58, R62, R67)
+
+**Called Setbacks everywhere the player can read.** Four of them, and **there is
+no random draw anywhere in `setbacks.ts`.**
+
+A Setback **arms** on one milestone and **fires** on the next. The same play
+always produces the same Setback at the same moment. This is what removes the
+design's largest risk: the genre research recorded, as an absence, that no
+shipped incremental fires an involuntary progression loss on an uncontrolled
+roll — an event trigger is not a roll, so this game does not have to be that
+experiment.
+
+| Setback | Arms on | Fires on | Takes |
+| --- | --- | --- | --- |
+| **The Bait Thief** | first deckhand | the River opens | Glimmer Lure |
+| **The Snag** | the boat | Offshore opens | Wider Net |
+| **The Harbourmaster's Cut** | the Lake permit | the Deep Sea Charter | Market Contacts |
+| **The Crash** (R67) | the bicycle | 5e7 lifetime coins, *if the bicycle is still what you depend on* | Graphite Rod |
+
+The Crash fires **once, at a threshold**, and hiring the Assistant first disarms
+it permanently — a deadline you can outrun. Travel keeps its forty seconds and
+gains nothing: the crash is a Setback, not a travel hazard.
+
+**Damage is seconds of income, and the difference is refunded.** Two levels of
+rod is 4,413 coins at rod 5 and 3.103e17 at rod 30 — thirteen orders of magnitude
+for the same "two levels", which is why levels are the wrong unit. So the levels
+are theatre: the Setback takes two, works out what they cost to rebuy, caps the
+real loss at `SETBACK_BASE_SECONDS → SETBACK_MAX_SECONDS` (30 → 150) of current
+income, and **hands the rest back as coins on the spot.**
+
+**`refundUpgrade` credits `state.coins` and nothing else.** `pearlsFor` reads
+`lifetimeCoins` directly as `floor((lifetime / 1e15) ^ 0.42)`, so crediting a
+refund there would silently mint a whole prestige for a player near the boundary
+— a Setback that *gave* you a Pearl. There is a test asserting both fields come
+out byte-identical.
+
+**The escalation rides on `playTime`, and the notice is load-bearing.**
+`playTime` advances only in `tick()` and never in the offline settle, so it
+pauses exactly when the player is away — a wall clock would mean a fortnight's
+holiday returned you to maximum damage, contradicting the whole of R51. The
+5× between the ends is real but both ends are small, so an unannounced Setback
+would read as noise. Arming raises a *notice* — "word on the water" — and that
+notice is why the escalation is felt at all.
+
+Evaluated in `tick()` and **only** in `tick()`. Never in `#settleOffline`, never
+in `resume()`.
+
+**Not wired into `simulateRun`**, as instructed: it draws from one seeded stream
+and `cheapestPurchase` would re-buy the levels on the next step anyway, so the
+simulation could never measure the cost to a human.
+
+**Achievements gain a Setback family**, generated *from* `SETBACKS` rather than
+written into the list — a new Setback brings its own record with it and there is
+no second list to forget. `evaluateAchievements` stays append-only; nothing is
+ever revoked.
+
+**Every existing save is grandfathered.** `MIGRATIONS[5]` marks all four seen. A
+player deep into a run they started before this build did not sign up for four
+Setbacks arriving on load. New games start on version 6 and never see that line.
+
+### Pacing
+
+| | Stage 6 | **Stage 7** |
+| --- | --- | --- |
+| First prestige | 3h13m20s | **3h12m38s** |
+| Boat | 1h19m18s | 1h17m44s |
+| Ocean | 1h55m36s | 1h53m37s |
+
+Chain unchanged: 3h13m / 13m27 / 3m01 / 2m19 / 1m46 / 1m41. Neither mechanic is
+in the simulation — poaching is a choice the reference player never makes, and
+Setbacks are deliberately excluded — so the small movement is Stage 6's
+`autoCastsPerSecond` change reaching the estimator, not consequences leaking into
+the ladder.

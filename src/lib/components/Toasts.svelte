@@ -2,6 +2,9 @@
 	import { ACHIEVEMENTS_BY_ID } from '$lib/game/achievements';
 	import type { TabId } from '$lib/game/guide';
 	import { game } from '$lib/game/state.svelte';
+	import { sources } from '$lib/fishing_sources';
+	import { describeTrack } from '$lib/game/setbacks';
+	import Num from './Num.svelte';
 
 	interface Props {
 		/** Jump to a tab, and optionally to something inside it. */
@@ -12,6 +15,65 @@
 </script>
 
 <div class="toasts" aria-live="polite">
+	{#each game.setbackHits as hit (hit.id)}
+		<div class="toast setback">
+			<div class="body plain">
+				<span class="kicker">Setback</span>
+				<span class="name">{hit.name}</span>
+				<span class="desc">
+					{hit.blow}
+					<br />
+					Two levels of {describeTrack(hit.track)} gone, {Math.round(hit.seconds)} seconds of income with
+					them{#if hit.refunded.gt(0)}, and <Num value={hit.refunded} tone="coin" /> back for the rest{/if}.
+				</span>
+			</div>
+			<button
+				class="dismiss"
+				aria-label="Dismiss {hit.name}"
+				onclick={() => game.dismissSetbackHit(hit.id)}>×</button
+			>
+		</div>
+	{/each}
+
+	{#each game.setbackNotices as notice (notice.id)}
+		<div class="toast notice">
+			<div class="body plain">
+				<span class="kicker">Word on the water</span>
+				<span class="name">{notice.name}</span>
+				<span class="desc">{notice.notice} The longer this goes on, the worse it will be.</span>
+			</div>
+			<button
+				class="dismiss"
+				aria-label="Dismiss the word about {notice.name}"
+				onclick={() => game.dismissSetbackNotice(notice.id)}>×</button
+			>
+		</div>
+	{/each}
+
+	{#if game.lastBust}
+		{@const caught = game.lastBust}
+		<div class="toast bust">
+			<div class="body plain">
+				<span class="kicker">Caught</span>
+				<span class="name">A warden on the {sources[caught.source].name}</span>
+				<span class="desc">
+					{#if caught.confiscated.gt(0)}
+						<Num value={caught.confiscated} tone="coin" /> of catch back in the water.
+					{/if}
+					{#if caught.fine.gt(0)}
+						Fined <Num value={caught.fine} tone="coin" />.
+					{:else}
+						A warning, this time.
+					{/if}
+					Off the water for a minute, and put ashore at the {sources[caught.movedTo].name}.
+				</span>
+			</div>
+			<button class="dismiss" aria-label="Dismiss the warden" onclick={() => game.dismissBust()}
+				>×</button
+			>
+		</div>
+	{/if}
+
 	{#each game.newAchievements as id (id)}
 		{@const achievement = ACHIEVEMENTS_BY_ID.get(id)}
 		{#if achievement}
@@ -127,5 +189,22 @@
 		line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	.toast.bust,
+	.toast.setback {
+		border-color: var(--coral);
+	}
+
+	.toast.notice {
+		border-color: var(--brass-dim);
+	}
+
+	.body.plain {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		text-align: left;
+		padding: 0.5rem 0.6rem;
 	}
 </style>
