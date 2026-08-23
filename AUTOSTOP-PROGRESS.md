@@ -14,7 +14,7 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - [x] Stage 5 feat/ponds — MERGED
 - [x] Stage 6 feat/minigames — MERGED
 - [x] Stage 7 feat/consequences — MERGED
-- [ ] Stage 8 feat/voice
+- [x] Stage 8 feat/voice — MERGED
 - [ ] Stage 9 fix/finish
 
 ## Done so far
@@ -35,30 +35,30 @@ No AI attribution in commits (R46). ONE SAVE_VERSION bump for the whole pass.
 - Measure with: LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
 
 ## Next steps
-1. Stage 8: feat/voice.
-   a) Name the shift tiers Storms / Bosses / Megalodon in code, save and copy
-      (R61). Shifts are NOT built -- plan: derive the tier from prestigeCount
-      and record the deviation, same as the market gate.
-   b) Help surface (R55): browsable, covers ONLY what is unlocked (distinct from
-      guide.ts which describes the NEXT step). Setbacks documented there once
-      lived through (R62). Plus an opt-out unlock popup toggled in Settings.
-      PREREQUISITE: keyboard nav in Tabs.svelte -- nextTabIndex() already exists
-      in guide.ts, check whether Tabs.svelte actually wires it.
-   c) Rewrite all 47 Fishdex descriptions in voice. Samples in
-      design/archive/VOICE-SAMPLE.md. Failure mode is SAMENESS, not offence --
-      a different concrete detail per fish. If it cannot be sustained across 47,
-      stop and say so rather than shipping forty identical entries.
-2. Stage 9: fix/finish -- budget real time. Adversarial multi-agent bug hunt
-   (every finding verified by a second agent AND reproduced by a test), clear
-   PLAN.md Part 2 audit debt (17 defects; modal host + contrast already done),
-   balance end to end and record the ladder, play the first ten minutes as a new
-   player, pnpm audit:ui, refresh design/STATUS.md + design/IDEAS.md.
+STAGE 9 ONLY -- fix/finish. This is the finishing stage; budget real time.
+1. Adversarial multi-agent bug hunt. Every finding verified by a SECOND agent
+   before it is fixed, and reproduced by a test before it is closed.
+   Lenses: correctness, save/load round-trips, offline, prestige boundaries,
+   UI state, accessibility.
+2. Clear the audit debt still open in design/PLAN.md Part 2 (17 defects; the
+   modal host and contrast are done). Named ones a player actually meets:
+   rod levels past the cast-time clamp, the repair button spending every coin,
+   strandedFrom surviving prestige and hard reset, importSave calling a newer
+   export "not a FishCrimental save".
+3. Balance end to end. Run the full chain, look at the ladder, tune until it
+   reads as a game. Put the FINAL ladder in DECISIONS.md.
+4. Play the first ten minutes as a new player. Write down what confused you and
+   fix it. Then the first prestige, then a shift.
+5. pnpm audit:ui and record the scores (Lighthouse cannot see contrast defects;
+   measure those by hand).
+6. Refresh design/STATUS.md (R45) and leave design/IDEAS.md holding what did not
+   make it, with a reason.
 
 ## Notes / decisions
 - SAVE_VERSION is 6 with MIGRATIONS[5]. DO NOT BUMP AGAIN this pass.
-- Market + ponds gate on prestigeCount > 0 (shifts unbuilt; deviation recorded).
-- Licences: no coin price; canSit requires the next locked water needs it.
+- Market + ponds gate on prestigeCount > 0; shift tiers derived from
+  prestigeCount. Both recorded as deviations (shifts layer is unbuilt).
 - Ladder after Stage 7 (seed 7): first prestige 3h12m38s;
   chain 3h13m / 13m27 / 3m01 / 2m19 / 1m46 / 1m41.
   LADDER=1 pnpm vitest run src/lib/game/ladder.probe.test.ts --reporter=verbose
-- Tests 548 passing, 5 skipped. All four gates green at every merge so far.
+- Tests 564 passing, 5 skipped. All four gates green at every merge.
