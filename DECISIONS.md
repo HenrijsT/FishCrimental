@@ -3153,26 +3153,26 @@ existing one — no per-pond tick, no new timer.
 The numbers, and one thing the design did not anticipate.
 
 **The reference player had to be taught to stock a pond properly.** First attempt
-stocked whichever species the player had landed *most* of — which is by
+stocked whichever species the player had landed _most_ of — which is by
 construction the commonest, and therefore the cheapest, thing they catch. Six
 ponds full of minnows, and ponds measured as a **net loss**: run 2 went 679s to
 753s, because the coins spent on ponds bought less than the upgrades they
 displaced.
 
-Stocking the most *valuable* known species instead — which is what any human
+Stocking the most _valuable_ known species instead — which is what any human
 would do — turns it round completely:
 
 | Run | Before ponds | Ponds, stocked badly | **Ponds, stocked well** |
-| --- | --- | --- | --- |
-| 1 | 3h18m09s | 3h18m09s | **3h18m09s** |
-| 2 | 11m19s | 12m33s | **9m28s** |
-| 3 | 2m44s | 2m56s | **2m08s** |
-| 4 | 1m56s | 2m01s | **1m56s** |
-| 5 | 1m47s | 1m49s | **1m46s** |
-| 6 | 1m41s | 1m41s | **1m41s** |
+| --- | ------------ | -------------------- | ----------------------- |
+| 1   | 3h18m09s     | 3h18m09s             | **3h18m09s**            |
+| 2   | 11m19s       | 12m33s               | **9m28s**               |
+| 3   | 2m44s        | 2m56s                | **2m08s**               |
+| 4   | 1m56s        | 2m01s                | **1m56s**               |
+| 5   | 1m47s        | 1m49s                | **1m46s**               |
+| 6   | 1m41s        | 1m41s                | **1m41s**               |
 
 Lifetime coins at run 2 go 9.8e20 → **6.9e22**. Ponds are a real option that
-rewards a real decision, and the decision is *which fish*, which is the one the
+rewards a real decision, and the decision is _which fish_, which is the one the
 market charges for.
 
 Run 1 is untouched to the second, as the shared gate requires.
@@ -3187,3 +3187,98 @@ species measurably hurts less.
 24 tests. The two handed-down constraints have one each: `pond:<index>` banks
 are independent (an unstocked pond has no bank at all, and two ponds at different
 rates diverge rather than tracking), and ponds never enter `SOURCE_ORDER`.
+
+## Stage 6 — Minigame licences (`feat/minigames`)
+
+R42, `design/IDEAS.md` N1. **A licence has no coin price at all.** `buyLicence`,
+`canBuyLicence` and `LicenceConfig.cost` are deleted rather than left unused —
+the double gate was explicitly rejected, and leaving a coin path in place would
+have meant two ways to get the same card with only one of them designed.
+
+### Four exams, four verbs
+
+| Licence | Exam | What you do | Target |
+| --- | --- | --- | --- |
+| Inland | **The Quota** | Land N of a named species | 40 |
+| Lakes | **The Cull** | Keep or return, by the warden's rule | 14 calls |
+| Coastal | **The Sounder** | Deeper / shallower, three soundings | 3 |
+| Deep | **The Long Line** | Land N fish rare or better | 25 |
+
+The Quota is first because it needs no new mechanics at all — it reuses casting,
+luck and the catch tables exactly as they are. The Sounder is the clearest
+expression of *the better you play, the faster you finish*: anyone gets there,
+bisecting gets there in seven calls a sounding, and there is no timing, no
+reaction and no memory involved.
+
+### Nobody is ever stuck, and that is not a slogan
+
+The Quota and the Long Line already complete without you — anything that lands
+counts, including the crew's and the ponds'. The Cull and the Sounder are pure
+decisions, so they would have been the one place in the game where *not* playing
+stops you dead. They drip instead: **one step every twenty seconds, untouched.**
+A fourteen-step Cull is under five minutes ignored against about thirty-five
+seconds played.
+
+That single constant is what turns "mandatory active content in an idle game" —
+the genre's second-loudest complaint — into "active content that is simply
+faster". It is also the AFK track `IDEAS.md` N1 left unsolved, obtained by
+saying yes to the accessibility requirement rather than by designing it
+separately.
+
+Nothing expires on a wall-clock deadline. Walking away costs nothing.
+Accessibility: no exam needs a held button, a reaction time or a pointer.
+
+### An attempt is not persisted, on purpose
+
+An exam in progress is free, retryable and short. Persisting it would mean state
+to validate, migrate and defend against hand-editing, for a benefit no player
+would notice. A reload costs the attempt and nothing else, **and the panel says
+so in as many words.**
+
+### Two things the removal broke, and how they were fixed
+
+**1. Licences collapsed to the first fourteen minutes.** With no price, nothing
+held the exams back: all four sat and passed inside fourteen minutes, three of
+them before the tenth — precisely the stretch of this game that can least afford
+four minigames stacked on top of learning to fish.
+
+`canSit` now also requires that **the next locked water is water this licence
+covers.** You sit the exam when the water in front of you needs it. That put the
+paper gate back where it always was, paid in time and attention instead of coins:
+
+| Licence | Priced (before) | No gate | **Water gate** |
+| --- | --- | --- | --- |
+| inland | 17m16s | 2m21s | **22m16s** |
+| lakes | 44m16s | 2m56s | **43m07s** |
+| coastal | 1h03m29s | 3m41s | **1h09m08s** |
+| deep | 1h15m43s | 14m01s | **1h34m49s** |
+
+**2. A deadlock the simulation caught, which would have hit real players.** The
+warden named a quota species from the Fishdex — and the Fishdex survives a
+prestige while the water does not. So a run-two player was asked for an Ocean
+fish they had no licence, no boat and no water for. The exam never advanced, and
+because an open exam blocks the next one, **the entire licence chain deadlocked
+behind it.** The six-run chain stopped at two.
+
+The warden now names from the catch tables of water that is actually open and
+legal, intersected with the Fishdex so it is never a hunt for something never
+seen. Regression test.
+
+A third, smaller one: `advanceExamIdle` floored `seconds / 20` on a
+one-second step, so the drip never dripped. Fractions are banked on the exam.
+
+### Pacing, re-measured
+
+| | Stage 5 | **Stage 6** |
+| --- | --- | --- |
+| First prestige | 3h18m09s | **3h13m20s** |
+| Idle crossover | 27m02s | 28m32s |
+| Boat | 1h23m11s | 1h19m18s |
+| Ocean | 1h59m27s | 1h55m36s |
+
+Chain: **3h13m / 13m27 / 3m01 / 2m19 / 1m46 / 1m41.**
+
+Losing the licence prices is worth under four minutes across a three-hour run.
+That is the honest answer to "removing the price removes a coin sink": the
+licences were never a large sink — 360, 14,000 and 640,000 coins against source
+unlocks that dwarf them. What they were was a *gate*, and the gate is intact.

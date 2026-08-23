@@ -11,13 +11,13 @@ import {
 	needsBoat
 } from './config';
 import {
-	canBuyLicence,
 	deckhandCost,
 	discoveredCount,
 	missingLicence,
 	nextLockedSource,
 	upgradeCost
 } from './engine';
+import { EXAMS } from './exams';
 import type { GameState } from './types';
 
 /**
@@ -79,11 +79,12 @@ export const TABS: TabDefinition[] = [
 	{
 		id: 'harbour',
 		label: 'Harbour',
-		blurb: 'Licences for better water, and the boat you need past the Sea.',
+		blurb: 'Licences you sit an exam for, and the boat you need past the Sea.',
+		// Licences have no price any more (R42), so there is no price to be
+		// halfway to. The gate is having fished enough to be thinking about
+		// moving on at all.
 		available: (state) =>
-			state.coins.gte(LICENCES.inland.cost * 0.5) ||
-			LICENCE_IDS.some((id) => state.licences[id]) ||
-			state.boat.owned
+			state.totalCasts.gte(40) || LICENCE_IDS.some((id) => state.licences[id]) || state.boat.owned
 	},
 	{
 		id: 'crew',
@@ -214,11 +215,11 @@ export function nextStep(state: GameState): NextStep | null {
 
 	if (next && missingLicence(state, next)) {
 		const licence = missingLicence(state, next)!;
-		const ready = canBuyLicence(state, licence);
+		const sitting = state.exam?.licence === licence;
 		return {
-			text: ready
-				? `The ${next} needs the ${LICENCES[licence].name}. You can afford it.`
-				: `The ${next} needs the ${LICENCES[licence].name}. Keep selling.`,
+			text: sitting
+				? `You are sitting ${EXAMS[licence].name} for the ${LICENCES[licence].name}. Finish it and the ${next} opens.`
+				: `The ${next} needs the ${LICENCES[licence].name}. It costs nothing — you sit an exam for it.`,
 			tab: 'harbour'
 		};
 	}

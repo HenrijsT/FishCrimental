@@ -20,6 +20,14 @@ import {
 	type PrestigeUpgradeId,
 	type UpgradeId
 } from './config';
+import {
+	EXAM_SECONDS_PER_STEP,
+	advanceExamIdle,
+	canSit,
+	claimLicence,
+	examComplete,
+	startExam
+} from './exams';
 import { settleMarket } from './market';
 import {
 	accumulate,
@@ -47,9 +55,7 @@ import {
 	runTrader,
 	buyDeckhand,
 	buyFuel,
-	buyLicence,
 	boatUpgradeCost,
-	canBuyLicence,
 	canUnlock,
 	hasStandingOrder,
 	nextLicence,
@@ -230,10 +236,25 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 		elapsed += step;
 
 		// Gates first: paper, then a hull, then the water itself.
+		//
+		// Paper is no longer bought (R42). The reference player sits the exam
+		// the moment it is open to them and takes the card the moment it is
+		// passed — which is what a player who wants the next water does. What it
+		// costs them is time rather than coins, and the Cull and the Sounder
+		// cost the seconds it takes to click through them.
 		const licence = nextLicence(state);
-		if (licence && canBuyLicence(state, licence)) {
-			buyLicence(state, licence);
-			licencedAt[licence] = elapsed;
+		if (licence && !state.exam && canSit(state, licence)) {
+			startExam(state, licence, random);
+		}
+
+		// The reference player is actually clicking, so they work through a Cull
+		// or a Sounder at a call every couple of seconds rather than waiting for
+		// the warden's twenty-second drip.
+		if (state.exam) advanceExamIdle(state, step, EXAM_SECONDS_PER_STEP[state.exam.kind]);
+
+		if (examComplete(state.exam)) {
+			const taken = claimLicence(state);
+			if (taken) licencedAt[taken] = elapsed;
 		}
 
 		const next = nextLockedSource(state);

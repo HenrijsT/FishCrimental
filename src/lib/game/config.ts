@@ -720,14 +720,13 @@ export interface LicenceConfig {
 	name: string;
 	/** Sources this licence makes legal to fish. */
 	covers: FishingSources[];
-	cost: number;
 	/** Licences are a chain: each one is only issued to holders of the last. */
 	requires: LicenceId | null;
 	flavour: string;
 }
 
 /**
- * A licence is bought once and is separate from the coin cost of the water
+ * A licence is sat for once (R42) and is separate from the coin cost of the water
  * itself, so opening a new source has two beats: qualify for it, then afford
  * it. Chained rather than independent — a deep sea charter is not something
  * you buy before you have ever held a rod.
@@ -737,7 +736,6 @@ export const LICENCES: Record<LicenceId, LicenceConfig> = {
 		id: 'inland',
 		name: 'Inland Angling Licence',
 		covers: [FishingSources.Stream, FishingSources.River],
-		cost: 360,
 		requires: null,
 		flavour:
 			'A stamped card and a set of rules about what you may keep. Everyone who fishes moving water has one.'
@@ -746,7 +744,6 @@ export const LICENCES: Record<LicenceId, LicenceConfig> = {
 		id: 'lakes',
 		name: 'Lake & Lagoon Permit',
 		covers: [FishingSources.Lake, FishingSources.Lagoon],
-		cost: 14_000,
 		requires: 'inland',
 		flavour:
 			'Standing water is managed water. The permit pays the wardens and buys you the right to a boat launch you do not yet own.'
@@ -755,7 +752,6 @@ export const LICENCES: Record<LicenceId, LicenceConfig> = {
 		id: 'coastal',
 		name: 'Coastal Waters Licence',
 		covers: [FishingSources.Sea, FishingSources.Offshore],
-		cost: 640_000,
 		requires: 'lakes',
 		flavour:
 			'Salt water is federal. This is the first piece of paper that took a fortnight and a signature that was not yours.'
@@ -764,7 +760,6 @@ export const LICENCES: Record<LicenceId, LicenceConfig> = {
 		id: 'deep',
 		name: 'Deep Sea Charter',
 		covers: [FishingSources.Ocean],
-		cost: 38_000_000,
 		requires: 'coastal',
 		flavour:
 			'A charter, not a licence — it names your vessel and the water it may work. Framed, usually, by people who hold one.'

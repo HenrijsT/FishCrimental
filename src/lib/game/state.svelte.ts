@@ -13,6 +13,7 @@ import {
 	TICK_MS,
 	TRADER_RATE,
 	BOAT_UPGRADE_IDS,
+	LICENCE_IDS,
 	UPGRADE_IDS,
 	type BoatUpgradeId,
 	type LicenceId,
@@ -46,7 +47,6 @@ import {
 	buyBoat,
 	buyBoatUpgrade,
 	buyFuel,
-	buyLicence,
 	repairBoat,
 	reachableSource,
 	sourceBlocker,
@@ -83,6 +83,17 @@ import {
 	type Rarity
 } from './engine';
 import { evaluateAchievements } from './achievements';
+import {
+	abandonExam,
+	advanceExamIdle,
+	canSit,
+	claimLicence,
+	cullCall,
+	examComplete,
+	examProgress,
+	sounderCall,
+	startExam
+} from './exams';
 import { marketDepth, marketOpen, pricedSpecies, settleMarket } from './market';
 import {
 	backupRawSave,
@@ -310,6 +321,8 @@ export class Game {
 			Math.random,
 			this.casting ? 0 : 1
 		);
+		// The warden works through the pile whether or not you do. Slowly.
+		advanceExamIdle(this.state, elapsed);
 		this.#keepFishable();
 		this.#checkJokes();
 		this.#checkAchievements();
@@ -648,10 +661,31 @@ export class Game {
 	// Paper and the boat
 	// -----------------------------------------------------------------------
 
-	takeLicence(id: LicenceId): boolean {
-		const bought = buyLicence(this.state, id);
-		if (bought) this.#checkAchievements();
-		return bought;
+	// -----------------------------------------------------------------------
+	// Licence exams (R42)
+	// -----------------------------------------------------------------------
+
+	sitExam(id: LicenceId): boolean {
+		return startExam(this.state, id);
+	}
+
+	abandonExam(): void {
+		abandonExam(this.state);
+	}
+
+	cullCall(keep: boolean): void {
+		cullCall(this.state, keep);
+	}
+
+	sounderCall(guess: number): 'deeper' | 'shallower' | 'found' {
+		return sounderCall(this.state, guess);
+	}
+
+	/** Take the card. There is no coin cost anywhere in this path. */
+	takeLicence(): LicenceId | null {
+		const taken = claimLicence(this.state);
+		if (taken) this.#checkAchievements();
+		return taken;
 	}
 
 	purchaseBoat(): boolean {
@@ -763,6 +797,12 @@ export class Game {
 	holdWorth = $derived(holdMarketValue(this.state).times(this.modifiers.sellMultiplier));
 
 	marketOpen = $derived(marketOpen(this.state));
+
+	/** The exam being sat, if any, and how it is going. */
+	exam = $derived(this.state.exam);
+	examProgress = $derived(examProgress(this.state.exam));
+	examDone = $derived(examComplete(this.state.exam));
+	sittable = $derived(LICENCE_IDS.filter((id) => canSit(this.state, id)));
 	pondsOpen = $derived(pondsOpen(this.state));
 	nextPondPrice = $derived(pondCost(this.state.ponds.length));
 	/** Every species the player has actually landed, for stocking a pond. */

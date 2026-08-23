@@ -56,6 +56,33 @@ export interface PondState {
 	level: Decimal;
 }
 
+/**
+ * A licence examination in progress (R42).
+ *
+ * Deliberately **not persisted**. An attempt is free, retryable and short, and
+ * a half-finished minigame is state that would have to be validated, migrated
+ * and defended against hand-editing for no benefit a player would notice. A
+ * reload costs you the attempt and nothing else, and the panel says so.
+ */
+export interface ExamState {
+	licence: LicenceId;
+	kind: 'quota' | 'cull' | 'sounder' | 'longline';
+	progress: number;
+	target: number;
+	/** Calls made — how well it is going, not whether it can be failed. */
+	attempts: number;
+	/** Quota: the species the warden named. */
+	species?: string;
+	/** Cull: the size of the fish currently in your hands. */
+	offer?: string;
+	/** Sounder: what is still possible, and what the bottom actually is. */
+	low?: number;
+	high?: number;
+	secret?: number;
+	/** Seconds of not being touched, banked toward the next automatic step. */
+	banked?: number;
+}
+
 export interface GameState {
 	version: number;
 
@@ -104,6 +131,9 @@ export interface GameState {
 
 	/** Breeding ponds, in the order they were dug. The index is the pond's id. */
 	ponds: PondState[];
+
+	/** The licence exam being sat, if any. Never saved — see `ExamState`. */
+	exam: ExamState | null;
 
 	// Progress
 	/** Lifetime catches per species name — the Fishdex. */
