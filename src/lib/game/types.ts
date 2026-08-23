@@ -174,6 +174,8 @@ export interface OfflineReport {
 	value: Decimal;
 	/** Coins spent on fuel by the standing order while you were away. */
 	fuelSpent: Decimal;
+	/** This player's offline window, in seconds — eight hours plus Night Watch. */
+	offlineCap: number;
 	/** True if the boat ran dry and the crew worked inshore instead. */
 	fellBack: boolean;
 	/** Everything in the hold now, tonight's catch included. */

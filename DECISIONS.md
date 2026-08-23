@@ -2753,7 +2753,7 @@ its own merits, not only because there were once two themes.
 ## Stage 2 — How fish are sold (`feat/selling`)
 
 R65. **There is a Sell button, always.** With an Assistant it sells everything at
-once, at full price, without leaving the water. Without one it *lists* the catch:
+once, at full price, without leaving the water. Without one it _lists_ the catch:
 the fish move onto the quay for the travelling merchant, out of the bucket
 immediately, and the coins arrive when he does.
 
@@ -2767,7 +2767,7 @@ when; he is the delay rather than the decision.**
 your bucket, and the two grow together.
 
 Without a cap, listing defeats the bucket outright: you would list every fish as
-it landed, the bucket would never fill, and the trader, the bicycle *and* the
+it landed, the bucket would never fill, and the trader, the bicycle _and_ the
 Assistant would all lose the problem they exist to solve. The whole opening act
 is built on the bucket filling. With a cap, listing genuinely doubles what you
 can hold at once — a reward for engaging with the merchant rather than a way
@@ -2786,8 +2786,8 @@ never was.
 
 ### Priced at settlement
 
-`settleConsignment` values the catch with the `sellMultiplier` in force *when he
-pays*, not when the fish were listed. This matters little today and is the whole
+`settleConsignment` values the catch with the `sellMultiplier` in force _when he
+pays_, not when the fish were listed. This matters little today and is the whole
 mechanic once the market lands in Stage 4 — a consignment is exposure to the
 price, not a locked-in receipt. The panel says so in as many words, because
 players will otherwise assume they locked a price.
@@ -2814,7 +2814,7 @@ A version 5 save loads with an empty quay.
 ### Travel: 75s → 40s
 
 R66. `TOWN_TRIP_SECONDS = 40`. Seventy-five seconds was most of two merchant
-periods spent looking at a disabled cast button, and the ride is the *reward* —
+periods spent looking at a disabled cast button, and the ride is the _reward_ —
 it is the full price. Forty is still long enough that the merchant is a real
 alternative.
 
@@ -2824,13 +2824,99 @@ The simulated player now lists when they have no bicycle, **and while the town
 trip is running** — a full bucket stops the crew, and a listed fish at 55% beats
 a fish never caught.
 
-| | Before | After |
-| --- | --- | --- |
+|                | Before   | After        |
+| -------------- | -------- | ------------ |
 | First prestige | 3h23m59s | **3h18m09s** |
-| Boat | 1h29m11s | 1h23m11s |
-| Ocean open | 2h05m00s | 1h59m27s |
-| Idle crossover | 0h27m02s | 0h27m02s |
+| Boat           | 1h29m11s | 1h23m11s     |
+| Ocean open     | 2h05m00s | 1h59m27s     |
+| Idle crossover | 0h27m02s | 0h27m02s     |
 
 Six minutes off the first run, from the shorter trip and from the crew no longer
 standing idle during it. The prestige chain is unchanged in shape — still
 3h18m / 20m / 2m48s / 1m35s / 48s / 46s. Stage 3 is what addresses that.
+
+## Stage 3 — Pearls: un-squared, then un-collapsed (`fix/pearls`)
+
+### Un-squared
+
+`pearlMultiplier` was applied to **both** `fishPerCast` and `sellMultiplier`.
+Income is fish times value, so it was carried squared. It now applies once, on
+`sellMultiplier`.
+
+`sellMultiplier` survives rather than `fishPerCast` because `fishPerCast` is not
+only income: it fills the bucket, it feeds `totalFish`, and it drives Fishdex
+discovery. A Pearl bonus there made the bucket meaningless and the Fishdex
+trivial on every run after the first — neither of which is what the bonus is for.
+Pacing was measured indifferent (≤1s across ten runs), so the side effects are
+the whole basis for the choice.
+
+### Then the collapse, which is a shape problem
+
+Un-squaring is not the fix, and neither is any exponent. **Lifetime coins grow
+roughly twenty orders of magnitude per run, so the Pearl pile grows
+super-exponentially with run number — and every power of a super-exponential is
+also a super-exponential.** `p^0.9 · 0.5 + 1` reached `1.07e26` by run six,
+`1.1e52` on income.
+
+**The bonus is now logarithmic: `1 + 2 · ln(1 + p)`.** A logarithm is the only
+shape that survives an input like that. The same six runs read
+
+| Pearls | 1 | 4 | 125 | 30,740 | 1.2e11 | 2.2e21 | 1.8e29 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Old (squared) | 2.3 | 7.5 | 1,568 | 3.0e7 | 2.2e19 | 6.5e37 | 1.1e52 |
+| New | 2.4 | 4.2 | 10.7 | 21.7 | 52.0 | 99.3 | 135.7 |
+
+`PEARL_MULTIPLIER_SCALE` goes 0.5 → **2**, because the log is so much flatter
+that it has to carry the *early* prestiges, which is where the reward is felt.
+`PEARL_MULTIPLIER_EXPONENT` is deleted.
+
+### The Standing Charter stops short of the ladder
+
+`pearl_headstart` maxed at **7 levels against 9 sources**, so a maxed run opened
+with everything but the Ocean — and with the Pearl bonus on top, that was enough
+lifetime coins to prestige on the first tick. There was no run left to play.
+
+**maxLevel 7 → 4**, `costGrowth` 5.4 → 6.5. Four of nine open, five still to buy,
+and **every source that needs a boat is in the five**. Whatever is banked, there
+is always a run.
+
+### `PEARL_EXPONENT` 0.42 → 0.30
+
+Not a fix on its own — see above — but it keeps the pile in a range where a
+geometric price list can still reach it. At 0.42 the pile grew about 1e8 per
+run; at 0.30 about 1e6.
+
+### The sink: Night Watch (R54)
+
+Every other prestige upgrade is capped, and by the fourth prestige the pile was
+1e11 against a board costing 2e10 to max — **99.997% of it had nowhere to go, and
+`pearlMultiplier` read that unspent pile.**
+
+`pearl_nightwatch` buys an hour of offline progress a level, eight hours to
+twenty-four, at 3.4× a level. It is the one thing a player who is away cannot
+otherwise buy, and it is capped at a full day because past that the number stops
+meaning anything to a human. `offlineSeconds(state)` replaces
+`MAX_OFFLINE_SECONDS` everywhere a player's actual window is meant.
+
+With the board re-costed the pile is scarce again: at run twelve it is 1.7e7
+against a board of 2e10.
+
+### The ladder, re-measured (seed 7)
+
+| Run | Before | After |
+| --- | --- | --- |
+| 1 | 3h18m09s | **3h18m09s** |
+| 2 | 20m20s | **36m30s** |
+| 3 | 2m48s | **8m26s** |
+| 4 | 1m35s | **4m33s** |
+| 5 | 48s | **2m02s** |
+| 6 | 46s | **1m56s** |
+| 7–12 | — | 1m51s, 1m47s, 1m44s, 1m42s, 1m39s, 1m38s |
+
+**It converges instead of collapsing.** Runs settle at about a hundred seconds
+and drift down by two seconds a run, while lifetime coins keep climbing —
+1e16 at run 1 to 1.3e38 at run 12 — and the Pearl pile keeps growing. A run is
+always a run. Making a hundred seconds feel like more than that is what the
+paradigm shifts are for, not what the Pearl curve is for.
+
+Run 1 is untouched, as it must be: no Pearls exist yet.

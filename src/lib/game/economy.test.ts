@@ -14,6 +14,8 @@ import {
 	computeModifiers,
 	createInitialState,
 	deckhandBulkCost,
+	pearlMultiplier,
+	pearlsFor,
 	prestigeUpgradeCost,
 	totalIncomePerSecond,
 	upgradeCost
@@ -47,11 +49,22 @@ describe('the upgrade tree', () => {
 			expect(top.toJSON().length).toBeGreaterThan(0);
 		}
 
-		// And a well-fed late prestige run walks straight past the double limit.
+		// And the quantities the game carries walk straight past the double
+		// limit. Every multiplier on the board is capped now — it is the piles
+		// themselves that get large, and a `number` turns each of them into
+		// `Infinity`, which is how a save file gets poisoned.
 		const state = createInitialState();
 		state.pearls = D('1e400');
+		state.lifetimeCoins = D('1e900');
 		state.prestigeUpgrades.pearl_yield = D(PRESTIGE_UPGRADES.pearl_yield.maxLevel);
-		expect(computeModifiers(state).sellMultiplier.gt('1e308')).toBe(true);
+
+		const modifiers = computeModifiers(state);
+		expect(modifiers.sellMultiplier.isFinite()).toBe(true);
+		expect(modifiers.sellMultiplier.gt(1)).toBe(true);
+		// The Pearl bonus is a logarithm of a 400-digit number and still lands
+		// on something a human can read.
+		expect(pearlMultiplier(state.pearls).gt(1_000)).toBe(true);
+		expect(pearlsFor(state.lifetimeCoins).gt('1e250')).toBe(true);
 	});
 
 	it('never lets a cast drop below the floor, however much rod is bought', () => {

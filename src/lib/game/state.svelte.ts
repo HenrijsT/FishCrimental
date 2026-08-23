@@ -5,7 +5,6 @@ import type { FishingSources } from '$lib/fishing_sources';
 import type { Fish } from '$lib/fishes/fish';
 import {
 	AUTOSAVE_MS,
-	MAX_OFFLINE_SECONDS,
 	OFFLINE_FUEL_SHARE,
 	OFFLINE_HOLD_MULTIPLIER,
 	OFFLINE_EFFICIENCY,
@@ -34,6 +33,7 @@ import {
 	buyMapUpgrade,
 	mapCost,
 	holdRoom,
+	offlineSeconds,
 	inTown,
 	runTrader,
 	traderProgress,
@@ -383,7 +383,7 @@ export class Game {
 		const seconds = (Date.now() - state.lastUpdate) / 1000;
 		if (!state.settings.offlineProgress || seconds < 30) return null;
 
-		const capped = Math.min(seconds, MAX_OFFLINE_SECONDS);
+		const capped = Math.min(seconds, offlineSeconds(state));
 
 		const coinsBefore = state.coins;
 
@@ -420,6 +420,7 @@ export class Game {
 			fish: step.fish,
 			value: step.value,
 			fuelSpent,
+			offlineCap: offlineSeconds(state),
 			fellBack: step.fellBack,
 			// What is waiting to be sold, all of it, not just tonight's.
 			holdAfter: holdCount(state),

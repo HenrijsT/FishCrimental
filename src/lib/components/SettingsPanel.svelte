@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MAX_OFFLINE_SECONDS } from '$lib/game/config';
+	import { offlineSeconds } from '$lib/game/engine';
 	import { game } from '$lib/game/state.svelte';
 	import { formatDuration } from '$lib/format';
 	import Num from './Num.svelte';
@@ -42,8 +42,8 @@
 					<strong>Offline progress</strong>
 					<span class="muted">
 						The crew keep fishing while the tab is closed, up to {formatDuration(
-							MAX_OFFLINE_SECONDS
-						)}.
+							offlineSeconds(g)
+						)}. Nothing else happens — nobody sells, and no merchant calls.
 					</span>
 				</span>
 			</label>

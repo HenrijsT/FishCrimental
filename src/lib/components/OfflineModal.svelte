@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { game } from '$lib/game/state.svelte';
-	import { MAX_OFFLINE_SECONDS } from '$lib/game/config';
 	import { formatDuration } from '$lib/format';
 	import Modal from './Modal.svelte';
 	import Num from './Num.svelte';
@@ -44,10 +43,10 @@
 				earning — just not open-water money. Fuel up at the harbour.
 			</p>
 		{/if}
-		{#if report.seconds > MAX_OFFLINE_SECONDS}
+		{#if report.seconds > report.offlineCap}
 			<p class="faint small">
 				You were gone {formatDuration(report.seconds)}, but the crew only get paid for the first
-				{formatDuration(MAX_OFFLINE_SECONDS)}.
+				{formatDuration(report.offlineCap)}.
 			</p>
 		{/if}
 	</Modal>
