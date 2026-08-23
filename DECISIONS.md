@@ -2733,3 +2733,19 @@ than the headline suggests:
 `src/lib/game/ladder.probe.test.ts` prints this ladder. It asserts nothing —
 it is a measuring stick for a human — and is off unless `LADDER=1` is set,
 because a full chain is ninety seconds of CPU.
+
+## Stage 1 — One front end (`chore/one-frontend`)
+
+R64. `/logbook` is deleted: `src/routes/logbook/`, `src/lib/logbook/`,
+`src/logbook.css`, the "Open the Logbook" link and its styles in
+`SettingsPanel.svelte`, and the second URL in `lighthouserc.cjs`. 1,283 lines
+gone.
+
+Done early and on purpose. Every stage after this one adds UI — a Sell button, a
+price board, ponds, minigames, Setback notices, a Help surface — and each of them
+would otherwise have had to be built twice, in two visual languages, or
+knowingly shipped to only one of the two front ends.
+
+`src/base.css` stays. It is the layout reset that `+layout.svelte` imports, and
+keeping the layout free of any opinion about how the game looks is worth doing on
+its own merits, not only because there were once two themes.

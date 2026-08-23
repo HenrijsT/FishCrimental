@@ -1,6 +1,6 @@
 <script lang="ts">
-	// The panel theme belongs to this route, not to the layout: /logbook is a
-	// different front-end onto the same game and must not inherit it.
+	// The theme belongs to this route, not to the layout. `src/base.css` is the
+	// layout reset every document gets; `app.css` is what this game looks like.
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { game } from '$lib/game/state.svelte';
