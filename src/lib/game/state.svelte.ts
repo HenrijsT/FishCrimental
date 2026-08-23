@@ -5,19 +5,20 @@ import type { FishingSources } from '$lib/fishing_sources';
 import type { Fish } from '$lib/fishes/fish';
 import {
 	AUTOSAVE_MS,
+	BOAT_UPGRADE_IDS,
+	LICENCE_IDS,
+	OFFLINE_EFFICIENCY,
 	OFFLINE_FUEL_SHARE,
 	OFFLINE_HOLD_MULTIPLIER,
-	OFFLINE_EFFICIENCY,
+	POACH_GRACE_SECONDS,
 	SAVE_KEY,
 	SOURCE_CONFIG,
 	TICK_MS,
 	TRADER_RATE,
-	BOAT_UPGRADE_IDS,
-	LICENCE_IDS,
-	UPGRADE_IDS,
 	type BoatUpgradeId,
 	type LicenceId,
-	type UpgradeId
+	type UpgradeId,
+	UPGRADE_IDS
 } from './config';
 import {
 	accumulate,
@@ -394,9 +395,14 @@ export class Game {
 			// fishing. `init()` did this and `resume()` did not, so the two entry
 			// points settled the same gap differently for no stated reason.
 			settleMarket(this.state, now);
-		}
 
-		this.state.lastUpdate = now;
+			// Only the settled gap is consumed here. A shorter one is left on the
+			// clock for `tick()` to accumulate — it used to be stamped away below,
+			// unconditionally, so every absence under the threshold was simply
+			// deleted. A phone that suspends the tab for ninety seconds hits that
+			// path on every single wake.
+			this.state.lastUpdate = now;
+		}
 	}
 
 	save(): boolean {
@@ -489,7 +495,22 @@ export class Game {
 		// The lockout is dated from when the player left rather than from when
 		// they got back: the warden turned up hours ago, and serving the minute
 		// on return would be serving it twice.
-		const evicted = state.poaching ? bust(state, modifiers, state.lastUpdate) : null;
+		//
+		// **The grace period is spent first.** This used to bust on the mere
+		// presence of `state.poaching`, without ever reading `poachElapsed` — so
+		// closing the tab thirty-one seconds into a ninety-second grace came back
+		// to a fine, a permanent offence and a lockout, with fifty-nine seconds
+		// still on the clock. `runPolice` has always honoured the grace online;
+		// the settle simply never did. The wall-clock gap is used rather than the
+		// capped window, because the warden's rounds do not stop after eight
+		// hours.
+		let evicted: ReturnType<typeof bust> = null;
+		if (state.poaching) {
+			state.poachElapsed += seconds;
+			if (state.poachElapsed >= POACH_GRACE_SECONDS) {
+				evicted = bust(state, modifiers, state.lastUpdate);
+			}
+		}
 
 		const coinsBefore = state.coins;
 

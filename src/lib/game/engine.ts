@@ -287,10 +287,28 @@ export function upgradeStockedAt(state: GameState, id: UpgradeId): FishingSource
  */
 export function rodClampLevel(state: GameState): number | null {
 	const tides = D(PRESTIGE_UPGRADES.pearl_speed.effect).pow(state.prestigeUpgrades.pearl_speed);
-	const fastest = Math.min(...SOURCE_ORDER.map((source) => SOURCE_CONFIG[source].castSeconds));
+
+	// Measured against the player's **deepest open** water, not the shallowest
+	// water in the game.
+	//
+	// Cast times are clamped per source, so the rod stops helping one source at a
+	// time — shallowest first. This used to take `Math.min` over every source,
+	// which is the Mud Pool at 0.95s, and so declared the rod inert as soon as
+	// the *first* water hit the floor. At that level the Ocean is still casting
+	// about eight times slower than the floor and a rod level is worth roughly
+	// 7.8x income; the panel meanwhile told the player it "changes nothing".
+	//
+	// The deepest open water is the one that pays, so it is the one that decides
+	// when the rod is genuinely finished.
+	const deepest = SOURCE_ORDER.filter((source) => state.unlocked[source]);
+	const slowest = Math.max(
+		...(deepest.length ? deepest : [SOURCE_ORDER[0]]).map(
+			(source) => SOURCE_CONFIG[source].castSeconds
+		)
+	);
 
 	for (let level = 0; level <= UPGRADES.rod.maxLevel; level++) {
-		const seconds = fastest * D(UPGRADES.rod.effect).pow(level).times(tides).toNumber();
+		const seconds = slowest * D(UPGRADES.rod.effect).pow(level).times(tides).toNumber();
 		if (seconds <= MIN_CAST_SECONDS) return level;
 	}
 	return null;
