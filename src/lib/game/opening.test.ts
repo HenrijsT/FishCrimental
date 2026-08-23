@@ -31,6 +31,7 @@ import {
 	holdCount,
 	holdRoom,
 	inTown,
+	listForSale,
 	rideToTown,
 	runTrader,
 	saleRate,
@@ -493,10 +494,12 @@ describe('a night offline still scales with the crew', () => {
 });
 
 describe('the trader', () => {
+	/** A player with ten fish listed on the quay and the merchant almost due. */
 	function ready(): GameState {
 		const state = createInitialState();
 		state.hold[FishType.Small] = D(10);
 		state.holdValue = D(1000);
+		listForSale(state);
 		state.nextTraderAt = 1_000_000;
 		return state;
 	}
@@ -510,19 +513,34 @@ describe('the trader', () => {
 		expect(state.nextTraderAt).toBe(5_000_000 + TRADER_PERIOD_SECONDS * 1000);
 	});
 
-	it('buys the whole hold, at his own price', () => {
+	it('settles what was listed for him, at his own price (R65)', () => {
 		const state = ready();
 		const result = runTrader(state, computeModifiers(state), 1_000_000);
 
 		expect(result.visits).toBe(1);
 		expect(result.earned.toNumber()).toBeCloseTo(1000 * TRADER_RATE, 6);
-		expect(state.holdValue.eq(0)).toBe(true);
+		expect(state.consignmentValue.eq(0)).toBe(true);
+	});
+
+	it('leaves an unlisted bucket completely alone (R65)', () => {
+		const state = createInitialState();
+		state.hold[FishType.Small] = D(10);
+		state.holdValue = D(1000);
+		state.nextTraderAt = 1_000_000;
+
+		const result = runTrader(state, computeModifiers(state), 1_000_000);
+
+		// He came, there was nothing set aside for him, and he went.
+		expect(result.visits).toBe(1);
+		expect(result.earned.toNumber()).toBe(0);
+		expect(state.holdValue.eq(1000)).toBe(true);
+		expect(state.hold[FishType.Small].eq(10)).toBe(true);
 	});
 
 	it('does not come early', () => {
 		const state = ready();
 		expect(runTrader(state, computeModifiers(state), 999_999).visits).toBe(0);
-		expect(state.holdValue.eq(1000)).toBe(true);
+		expect(state.consignmentValue.eq(1000)).toBe(true);
 	});
 
 	it('resolves floor(gap / period) visits after a long absence', () => {

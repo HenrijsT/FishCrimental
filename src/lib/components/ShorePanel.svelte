@@ -14,7 +14,8 @@
 
 	const g = $derived(game.state);
 	const worth = $derived(g.holdValue.times(game.modifiers.sellMultiplier));
-	const traderPays = $derived(worth.times(TRADER_RATE));
+	/** What is already on the quay, waiting for him — not the whole bucket. */
+	const traderPays = $derived(game.listedWorth.times(TRADER_RATE));
 
 	const canRide = $derived(canSell(g) && !game.inTown && g.holdValue.gt(0));
 
@@ -49,8 +50,15 @@
 			</div>
 			<CastBar progress={game.traderFill} label="Time until the next trader" active />
 			<p class="desc muted">
-				He takes the whole bucket at {Math.round(TRADER_RATE * 100)}% of what it is worth — right
-				now that is <Num value={traderPays} tone="coin" /> — and brings whatever he happens to be carrying.
+				He settles whatever you have <strong>listed</strong> for him, at {Math.round(
+					TRADER_RATE * 100
+				)}% of what it is worth
+				{#if game.listedSize.gt(0)}
+					— right now that is <Num value={traderPays} tone="coin" /> —
+				{:else}
+					— nothing is listed, so he will come and go —
+				{/if}
+				and brings whatever he happens to be carrying.
 			</p>
 			{#if game.lastTraderEarned}
 				<p class="last">Last trader paid <Num value={game.lastTraderEarned} tone="coin" />.</p>
@@ -63,7 +71,7 @@
 			<div class="text">
 				<h3 class="name">{g.hasAssistant ? 'Sell the catch' : 'Ride into town'}</h3>
 				<p class="desc muted">
-					Full price.
+					Full price, for the bucket and the quay together.
 					{#if g.hasAssistant}
 						The Assistant runs it in, so you never leave the water.
 					{:else}
@@ -87,8 +95,8 @@
 			<div class="text">
 				<h3 class="name">A bicycle</h3>
 				<p class="desc muted">
-					Sell in town at full price instead of taking what the trader offers. The ride keeps you
-					off the water for {TOWN_TRIP_SECONDS}s.
+					Take the catch in yourself at full price instead of listing it for the merchant. The ride
+					keeps you off the water for {TOWN_TRIP_SECONDS}s.
 				</p>
 			</div>
 			<button

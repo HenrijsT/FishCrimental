@@ -32,6 +32,7 @@ import {
 	buyBicycle,
 	buyBoatUpgrade,
 	inTown,
+	listForSale,
 	rideToTown,
 	runTrader,
 	buyDeckhand,
@@ -193,16 +194,20 @@ export function simulateRun(options: SimulationOptions = {}): SimulationResult {
 		);
 		// Who buys, and when.
 		//
-		// With an Assistant the catch is sold as it lands. With a bicycle the
-		// player rides in whenever the last trip has finished. With neither
-		// there is no on-demand sale at all — the trader comes when he comes,
-		// and the bucket fills in the meantime. That waiting is the whole
-		// economic shape of the opening, so the simulation has to feel it too.
+		// With an Assistant the catch is sold as it lands, at full price. With a
+		// bicycle the player rides in whenever the last trip has finished.
+		//
+		// Otherwise they list it for the travelling merchant (R65) and he
+		// settles it when he arrives — which is also what a bicycle owner does
+		// while the trip is running, because a full bucket stops the crew and a
+		// listed fish at 55% beats a fish never caught. The waiting is the whole
+		// economic shape of the opening, so the simulation has to feel it.
 		if (state.hasAssistant) {
 			sellHold(state, modifiers);
 		} else if (state.hasBicycle && !inTown(state, clock())) {
 			rideToTown(state, modifiers, clock());
 		} else {
+			listForSale(state);
 			runTrader(state, modifiers, clock());
 		}
 

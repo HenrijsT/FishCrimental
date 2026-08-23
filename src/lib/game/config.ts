@@ -276,8 +276,15 @@ export const TOWN_RATE = 1;
 /** Coins for the bicycle, bought from the trader. */
 export const BICYCLE_COST = 900;
 
-/** How long a trip into town keeps you off the water. */
-export const TOWN_TRIP_SECONDS = 75;
+/**
+ * How long a trip into town keeps you off the water.
+ *
+ * 75 seconds was most of two trader periods spent looking at a disabled cast
+ * button, and the ride is a *reward* — it is the full price. R66 cuts it to 40,
+ * which is still long enough that the merchant is a real alternative and short
+ * enough that taking the better price does not feel like a punishment.
+ */
+export const TOWN_TRIP_SECONDS = 40;
 
 /**
  * The Assistant minds the shop: no trip, no cooldown, full price — and no
@@ -521,14 +528,14 @@ export const SAVE_KEY = 'fishcrimental.save';
  */
 export const SAVE_BACKUP_KEY = `${SAVE_KEY}.bak`;
 /**
- * 5: the mud pool became `SOURCE_ORDER[0]`.
+ * 6: the fifth pass.
  *
- * No migration is required — `readUnlocked` reads each source against
- * `createInitialState().unlocked`, so the mud pool defaults to open and the
- * Pond keeps whatever it had. The bump exists so an OLDER build refuses this
- * save outright instead of silently dropping a source key it does not know.
+ * **One bump for the whole pass**, and one `MIGRATIONS[5]`. Several stages
+ * wanted a bump of their own; they share this one. What it carries is the
+ * merchant's consignment (R65) — a second fish ledger that an older build would
+ * silently drop, taking fish the player had already listed with it.
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const AUTOSAVE_MS = 10_000;
 
 // ---------------------------------------------------------------------------
